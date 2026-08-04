@@ -728,17 +728,17 @@ fn registry_v4_case(case: &VectorCase<'_>) -> Result<(), String> {
     let contracts = ContractRegistry::v4();
     let v4 = ErrorCodeRegistry::v4();
     let v3 = ErrorCodeRegistry::v3();
-    let current = RegistryManifest::current();
-    let restored = RegistryManifest::from_value(&current.to_value()).map_err(debug)?;
+    let manifest = RegistryManifest::v4();
+    let restored = RegistryManifest::from_value(&manifest.to_value()).map_err(debug)?;
     ensure(
         contracts.contracts().len() == expected_usize(case, "contract_count")?
             && v4.codes().len() == expected_usize(case, "error_code_count")?
             && v3.codes().len() == expected_usize(case, "v3_error_code_count")?
             && v4.contains(expected_string(case, "new_code")?)
             && !v3.contains(expected_string(case, "new_code")?)
-            && current.semantic_model().version() == 4
-            && current.is_current()
-            && restored == current,
+            && manifest.semantic_model().version() == 4
+            && !manifest.is_current()
+            && restored == manifest,
     )
 }
 
