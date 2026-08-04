@@ -3,14 +3,17 @@
 use crate::{
     CancellationRequest, CapabilityDeclaration, ChangeSetMessage, Completion, ContractId,
     ContractRegistry, ConversionReportMessage, DiagnosticMessage, EditPlanMessage, ExecutionPolicy,
-    FormatOperationRegistryMessage, MaterializationProvenanceMapMessage,
-    MaterializationReportMessage, MaterializationRequestMessage, MaterializationResultMessage,
+    FormatOperationRegistryMessage, GraphProjectionResultMessage, GraphProvenanceMapMessage,
+    GraphQueryResultMessage, MaterializationProvenanceMapMessage, MaterializationReportMessage,
+    MaterializationRequestMessage, MaterializationResultMessage, PortableGraphMessage,
     ProfileDescriptor, ProjectionReportMessage, ProjectionRequestMessage, ProjectionResultMessage,
     ProtocolError, ProtocolErrorKind, ProvenanceMapMessage, QueryResultMessage, RegistryManifest,
-    SourcePatchMessage, SourceSnapshotMessage, validate_error_code_manifest_value,
+    SourcePatchMessage, SourceSnapshotMessage, YamlQueryResultMessage,
+    validate_error_code_manifest_value,
 };
 use consema_core::{PortableValue, QueryDefinition};
 use consema_document::{SourceLimits, SourcePatchLimits};
+use consema_graph::PgceLimits;
 
 pub(crate) fn validate_registered_payload(
     contract: &ContractId,
@@ -33,6 +36,11 @@ pub(crate) fn validate_registered_payload(
         "core.format-operation-registry" => {
             FormatOperationRegistryMessage::from_value(payload).map(drop)
         }
+        "core.graph-projection-result" => {
+            GraphProjectionResultMessage::from_value(payload).map(drop)
+        }
+        "core.graph-provenance-map" => GraphProvenanceMapMessage::from_value(payload).map(drop),
+        "core.graph-query-result" => GraphQueryResultMessage::from_value(payload).map(drop),
         "core.materialization-provenance-map" => {
             MaterializationProvenanceMapMessage::from_value(payload).map(drop)
         }
@@ -46,6 +54,9 @@ pub(crate) fn validate_registered_payload(
             MaterializationResultMessage::from_value(payload).map(drop)
         }
         "core.profile-descriptor" => ProfileDescriptor::from_value(payload).map(drop),
+        "core.portable-graph" => {
+            PortableGraphMessage::from_value(payload, PgceLimits::default()).map(drop)
+        }
         "core.projection-report" => ProjectionReportMessage::from_value(payload).map(drop),
         "core.projection-request" => ProjectionRequestMessage::from_value(payload).map(drop),
         "core.projection-result" => ProjectionResultMessage::from_value(payload).map(drop),
@@ -67,6 +78,7 @@ pub(crate) fn validate_registered_payload(
         "core.source-snapshot" => {
             SourceSnapshotMessage::from_value(payload, SourceLimits::default()).map(drop)
         }
+        "core.yaml-query-result" => YamlQueryResultMessage::from_value(payload).map(drop),
         _ => Err(ProtocolError::new(
             ProtocolErrorKind::UnknownContract,
             "$.contract",

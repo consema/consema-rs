@@ -689,6 +689,279 @@ const fn build_v4_codes() -> [ErrorCodeDescriptor; 92] {
     output
 }
 
+const NEW_CODES_V5: &[ErrorCodeDescriptor] = &[
+    code!(
+        "core.graph.invalid@1",
+        Semantic,
+        "0.7.0",
+        "PortableGraph construction invariants were violated"
+    ),
+    code!(
+        "core.graph.resource-limit@1",
+        Resource,
+        "0.7.0",
+        "PortableGraph construction or traversal limit was reached"
+    ),
+    code!(
+        "core.pgce.invalid@1",
+        Encoding,
+        "0.7.0",
+        "PGCE input is structurally invalid"
+    ),
+    code!(
+        "core.pgce.non-canonical@1",
+        Encoding,
+        "0.7.0",
+        "PGCE input is valid but not canonical"
+    ),
+    code!(
+        "core.pgce.resource-limit@1",
+        Resource,
+        "0.7.0",
+        "PGCE encode or decode limit was reached"
+    ),
+    code!(
+        "core.pgce.unsupported-version@1",
+        Encoding,
+        "0.7.0",
+        "PGCE wire version is unsupported"
+    ),
+    code!(
+        "yaml.alias.name-mismatch@1",
+        Semantic,
+        "0.7.0",
+        "YAML alias name does not match its resolved anchor"
+    ),
+    code!(
+        "yaml.alias.name-unavailable@1",
+        Semantic,
+        "0.7.0",
+        "YAML alias event lacks a usable name"
+    ),
+    code!(
+        "yaml.anchor.name-unavailable@1",
+        Semantic,
+        "0.7.0",
+        "YAML anchor event lacks a usable name"
+    ),
+    code!(
+        "yaml.anchor.unknown@1",
+        Semantic,
+        "0.7.0",
+        "YAML alias refers to an undefined anchor"
+    ),
+    code!(
+        "yaml.edit.anchor-dependency@1",
+        Edit,
+        "0.7.0",
+        "YAML edit would leave a live alias without its anchor"
+    ),
+    code!(
+        "yaml.edit.anchor-not-visible@1",
+        Edit,
+        "0.7.0",
+        "YAML alias insertion target is not the visible anchor definition"
+    ),
+    code!(
+        "yaml.edit.canonical-fallback@1",
+        Edit,
+        "0.7.0",
+        "YAML edit used an authorized canonical scalar fallback"
+    ),
+    code!(
+        "yaml.edit.invalid-anchor-name@1",
+        Edit,
+        "0.7.0",
+        "YAML anchor edit name is invalid"
+    ),
+    code!(
+        "yaml.edit.invalid-placement@1",
+        Edit,
+        "0.7.0",
+        "YAML structural edit placement is invalid"
+    ),
+    code!(
+        "yaml.edit.structural-container-conflict@1",
+        Edit,
+        "0.7.0",
+        "Multiple structural edits target the same base YAML container"
+    ),
+    code!(
+        "yaml.mapping.missing-value@1",
+        Semantic,
+        "0.7.0",
+        "YAML mapping event stream lacks an association value"
+    ),
+    code!(
+        "yaml.materialization.cross-document-sharing@1",
+        Materialization,
+        "0.7.0",
+        "YAML cannot preserve graph sharing across document roots"
+    ),
+    code!(
+        "yaml.materialization.round-trip-mismatch@1",
+        Materialization,
+        "0.7.0",
+        "Generated YAML did not reproduce the promised input value"
+    ),
+    code!(
+        "yaml.materialization.tag-kind-mismatch@1",
+        Materialization,
+        "0.7.0",
+        "YAML tag is incompatible with the graph node kind"
+    ),
+    code!(
+        "yaml.materialization.unsupported-tag@1",
+        Materialization,
+        "0.7.0",
+        "YAML materializer has no published constructor for a tag"
+    ),
+    code!(
+        "yaml.native.invalid-source-span@1",
+        Semantic,
+        "0.7.0",
+        "YAML native event span is outside the source snapshot"
+    ),
+    code!(
+        "yaml.native.trailing-events@1",
+        Semantic,
+        "0.7.0",
+        "YAML native composition left trailing structural events"
+    ),
+    code!(
+        "yaml.native.trailing-named-occurrence@1",
+        Semantic,
+        "0.7.0",
+        "YAML native composition left an unmatched anchor or alias occurrence"
+    ),
+    code!(
+        "yaml.native.unexpected-end@1",
+        Semantic,
+        "0.7.0",
+        "YAML native event stream ended unexpectedly"
+    ),
+    code!(
+        "yaml.native.unexpected-event@1",
+        Semantic,
+        "0.7.0",
+        "YAML native event order is invalid"
+    ),
+    code!(
+        "yaml.parse.syntax@1",
+        Syntax,
+        "0.7.0",
+        "YAML source does not satisfy the selected grammar"
+    ),
+    code!(
+        "yaml.profile.version-directive@1",
+        Conformance,
+        "0.7.0",
+        "YAML version directive conflicts with the selected profile"
+    ),
+    code!(
+        "yaml.projection.cycle@1",
+        Projection,
+        "0.7.0",
+        "YAML representation cycle cannot enter a PortableValue tree"
+    ),
+    code!(
+        "yaml.projection.document-cardinality@1",
+        Projection,
+        "0.7.0",
+        "YAML stream cardinality does not satisfy a single-value projection"
+    ),
+    code!(
+        "yaml.projection.graph-invalid@1",
+        Projection,
+        "0.7.0",
+        "YAML representation graph could not form a PortableGraph"
+    ),
+    code!(
+        "yaml.projection.invalid-canonical-scalar@1",
+        Projection,
+        "0.7.0",
+        "YAML canonical scalar cannot form its promised PortableValue kind"
+    ),
+    code!(
+        "yaml.projection.mapping-not-object@1",
+        Projection,
+        "0.7.0",
+        "YAML mapping does not satisfy the requested Object policy"
+    ),
+    code!(
+        "yaml.projection.provenance-limit@1",
+        Resource,
+        "0.7.0",
+        "YAML graph projection provenance limit was reached"
+    ),
+    code!(
+        "yaml.projection.resource-limit@1",
+        Resource,
+        "0.7.0",
+        "YAML value or graph projection limit was reached"
+    ),
+    code!(
+        "yaml.projection.sharing@1",
+        Projection,
+        "0.7.0",
+        "YAML shared identity requires explicit tree-duplication policy"
+    ),
+    code!(
+        "yaml.projection.unrepresentable-timestamp@1",
+        Projection,
+        "0.7.0",
+        "YAML timestamp is outside PortableValue temporal categories"
+    ),
+    code!(
+        "yaml.projection.unsupported-tag@1",
+        Projection,
+        "0.7.0",
+        "YAML tag has no published target projection semantics"
+    ),
+    code!(
+        "yaml.scalar.invalid-explicit-tag@1",
+        Semantic,
+        "0.7.0",
+        "YAML scalar content is invalid for its explicit tag"
+    ),
+    code!(
+        "yaml.tag.kind-mismatch@1",
+        Semantic,
+        "0.7.0",
+        "YAML tag is incompatible with the representation node kind"
+    ),
+];
+
+const ERROR_CODES_V5: [ErrorCodeDescriptor; 132] = build_v5_codes();
+
+const fn build_v5_codes() -> [ErrorCodeDescriptor; 132] {
+    let mut output = [ERROR_CODES_V4[0]; 132];
+    let mut old = 0;
+    let mut new = 0;
+    let mut target = 0;
+    while old < ERROR_CODES_V4.len() && new < NEW_CODES_V5.len() {
+        if const_str_less(ERROR_CODES_V4[old].code, NEW_CODES_V5[new].code) {
+            output[target] = ERROR_CODES_V4[old];
+            old += 1;
+        } else {
+            output[target] = NEW_CODES_V5[new];
+            new += 1;
+        }
+        target += 1;
+    }
+    while old < ERROR_CODES_V4.len() {
+        output[target] = ERROR_CODES_V4[old];
+        old += 1;
+        target += 1;
+    }
+    while new < NEW_CODES_V5.len() {
+        output[target] = NEW_CODES_V5[new];
+        new += 1;
+        target += 1;
+    }
+    output
+}
+
 const fn const_str_less(left: &str, right: &str) -> bool {
     let left = left.as_bytes();
     let right = right.as_bytes();
@@ -717,6 +990,7 @@ enum RegistryVersion {
     V2,
     V3,
     V4,
+    V5,
 }
 
 impl Default for ErrorCodeRegistry {
@@ -758,6 +1032,14 @@ impl ErrorCodeRegistry {
         }
     }
 
+    /// Consema 0.7 semantic-model v5 error registry.
+    #[must_use]
+    pub const fn v5() -> Self {
+        Self {
+            version: RegistryVersion::V5,
+        }
+    }
+
     /// Sorted immutable descriptors.
     #[must_use]
     pub const fn codes(self) -> &'static [ErrorCodeDescriptor] {
@@ -766,6 +1048,7 @@ impl ErrorCodeRegistry {
             RegistryVersion::V2 => &ERROR_CODES_V2,
             RegistryVersion::V3 => &ERROR_CODES_V3,
             RegistryVersion::V4 => &ERROR_CODES_V4,
+            RegistryVersion::V5 => &ERROR_CODES_V5,
         }
     }
 
@@ -843,6 +1126,12 @@ pub fn error_code_manifest_value_v3() -> PortableValue {
 #[must_use]
 pub fn error_code_manifest_value_v4() -> PortableValue {
     error_code_manifest_value_for(ErrorCodeRegistry::v4())
+}
+
+/// Encodes the semantic-model v5 `core.error-code-registry@1` payload.
+#[must_use]
+pub fn error_code_manifest_value_v5() -> PortableValue {
+    error_code_manifest_value_for(ErrorCodeRegistry::v5())
 }
 
 fn error_code_manifest_value_for(registry: ErrorCodeRegistry) -> PortableValue {
@@ -978,6 +1267,7 @@ mod tests {
             ErrorCodeRegistry::v2(),
             ErrorCodeRegistry::v3(),
             ErrorCodeRegistry::v4(),
+            ErrorCodeRegistry::v5(),
         ] {
             assert!(
                 registry
@@ -990,6 +1280,7 @@ mod tests {
         assert_eq!(ErrorCodeRegistry::v2().codes().len(), 62);
         assert_eq!(ErrorCodeRegistry::v3().codes().len(), 90);
         assert_eq!(ErrorCodeRegistry::v4().codes().len(), 92);
+        assert_eq!(ErrorCodeRegistry::v5().codes().len(), 132);
         assert!(!ErrorCodeRegistry::v1().contains("core.source.patch-base-mismatch@1"));
         assert!(ErrorCodeRegistry::v2().contains("core.source.patch-base-mismatch@1"));
         assert!(!ErrorCodeRegistry::v2().contains("core.materialization.unrepresentable@1"));
@@ -997,6 +1288,9 @@ mod tests {
         assert!(!ErrorCodeRegistry::v3().contains("json5.syntax.invalid-identifier@1"));
         assert!(ErrorCodeRegistry::v4().contains("json5.syntax.invalid-identifier@1"));
         assert!(ErrorCodeRegistry::v4().contains("json5.string.unescaped-line-separator@1"));
+        assert!(!ErrorCodeRegistry::v4().contains("yaml.parse.syntax@1"));
+        assert!(ErrorCodeRegistry::v5().contains("yaml.parse.syntax@1"));
+        assert!(ErrorCodeRegistry::v5().contains("core.pgce.non-canonical@1"));
         let protocol_kinds = [
             ProtocolErrorKind::InvalidJson,
             ProtocolErrorKind::NonCanonicalJson,

@@ -139,6 +139,42 @@ const CONTRACTS_V3: &[ContractDescriptor] = &[
     descriptor("core.source-snapshot", ContractStability::Stable),
 ];
 
+const CONTRACTS_V5: &[ContractDescriptor] = &[
+    descriptor("core.cancellation-request", ContractStability::Stable),
+    descriptor("core.capability-declaration", ContractStability::Stable),
+    descriptor("core.change-set", ContractStability::Stable),
+    descriptor("core.completion", ContractStability::Stable),
+    descriptor("core.conversion-report", ContractStability::Stable),
+    descriptor("core.diagnostic", ContractStability::Stable),
+    descriptor("core.edit-plan", ContractStability::Stable),
+    descriptor("core.error-code-registry", ContractStability::Stable),
+    descriptor("core.execution-policy", ContractStability::Stable),
+    descriptor("core.format-operation-registry", ContractStability::Stable),
+    descriptor("core.graph-projection-result", ContractStability::Stable),
+    descriptor("core.graph-provenance-map", ContractStability::Stable),
+    descriptor("core.graph-query-result", ContractStability::Stable),
+    descriptor(
+        "core.materialization-provenance-map",
+        ContractStability::Stable,
+    ),
+    descriptor("core.materialization-report", ContractStability::Stable),
+    descriptor("core.materialization-request", ContractStability::Stable),
+    descriptor("core.materialization-result", ContractStability::Stable),
+    descriptor("core.portable-graph", ContractStability::Stable),
+    descriptor("core.profile-descriptor", ContractStability::Stable),
+    descriptor("core.projection-report", ContractStability::Stable),
+    descriptor("core.projection-request", ContractStability::Stable),
+    descriptor("core.projection-result", ContractStability::Stable),
+    descriptor("core.protocol-message", ContractStability::Transport),
+    descriptor("core.provenance-map", ContractStability::Stable),
+    descriptor("core.query-definition", ContractStability::Stable),
+    descriptor("core.query-result", ContractStability::Stable),
+    descriptor("core.registry-manifest", ContractStability::Stable),
+    descriptor("core.source-patch", ContractStability::Stable),
+    descriptor("core.source-snapshot", ContractStability::Stable),
+    descriptor("core.yaml-query-result", ContractStability::Stable),
+];
+
 const fn descriptor(id: &'static str, stability: ContractStability) -> ContractDescriptor {
     ContractDescriptor {
         id,
@@ -159,6 +195,7 @@ enum RegistryVersion {
     V2,
     V3,
     V4,
+    V5,
 }
 
 impl Default for ContractRegistry {
@@ -200,6 +237,14 @@ impl ContractRegistry {
         }
     }
 
+    /// Consema 0.7 semantic-model v5 registry.
+    #[must_use]
+    pub const fn v5() -> Self {
+        Self {
+            version: RegistryVersion::V5,
+        }
+    }
+
     /// Sorted registered contracts.
     #[must_use]
     pub const fn contracts(self) -> &'static [ContractDescriptor] {
@@ -207,6 +252,7 @@ impl ContractRegistry {
             RegistryVersion::V1 => CONTRACTS_V1,
             RegistryVersion::V2 => CONTRACTS_V2,
             RegistryVersion::V3 | RegistryVersion::V4 => CONTRACTS_V3,
+            RegistryVersion::V5 => CONTRACTS_V5,
         }
     }
 
@@ -232,6 +278,7 @@ impl ContractRegistry {
             RegistryVersion::V2 => ErrorCodeRegistry::v2(),
             RegistryVersion::V3 => ErrorCodeRegistry::v3(),
             RegistryVersion::V4 => ErrorCodeRegistry::v4(),
+            RegistryVersion::V5 => ErrorCodeRegistry::v5(),
         }
     }
 }
@@ -407,6 +454,7 @@ mod tests {
         MaterializationRequest, MaterializationStyleId, NewlinePolicy, ProfileId, SourceLimits,
         SourcePatch, SourcePatchLimits, SourceSnapshot,
     };
+    use consema_graph::{GraphBuilder, GraphLimits, PgceLimits};
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
@@ -502,6 +550,7 @@ mod tests {
             ContractRegistry::v2(),
             ContractRegistry::v3(),
             ContractRegistry::v4(),
+            ContractRegistry::v5(),
         ] {
             assert!(
                 registry
@@ -514,6 +563,7 @@ mod tests {
         assert_eq!(ContractRegistry::v2().contracts().len(), 18);
         assert_eq!(ContractRegistry::v3().contracts().len(), 25);
         assert_eq!(ContractRegistry::v4().contracts().len(), 25);
+        assert_eq!(ContractRegistry::v5().contracts().len(), 30);
         assert_eq!(
             ContractRegistry::v4().contracts(),
             ContractRegistry::v3().contracts()
@@ -521,6 +571,12 @@ mod tests {
         assert!(
             !ContractRegistry::v1()
                 .recognizes(&ContractId::new("core.source-snapshot", 1).unwrap())
+        );
+        assert!(
+            !ContractRegistry::v4().recognizes(&ContractId::new("core.portable-graph", 1).unwrap())
+        );
+        assert!(
+            ContractRegistry::v5().recognizes(&ContractId::new("core.portable-graph", 1).unwrap())
         );
         assert!(
             ContractRegistry::v2().recognizes(&ContractId::new("core.source-snapshot", 1).unwrap())
@@ -681,6 +737,76 @@ mod tests {
                     &message.to_pvce(limits).unwrap(),
                     limits,
                     ContractRegistry::v3(),
+                )
+                .unwrap(),
+                message
+            );
+        }
+    }
+
+    #[test]
+    fn v5_envelopes_every_new_contract_without_changing_v4() {
+        let graph = crate::PortableGraphMessage::from_graph(
+            GraphBuilder::new(GraphLimits::default()).build().unwrap(),
+            PgceLimits::default(),
+        )
+        .unwrap();
+        let graph_query = crate::GraphQueryResultMessage::new(
+            consema_core::QueryDomain::portable_graph_v1(),
+            consema_core::MatchRole::GraphNode,
+            graph.clone(),
+            Vec::new(),
+            crate::Completion::new(crate::CompletionStatus::Success, 0, 0, None, None).unwrap(),
+            Vec::new(),
+        )
+        .unwrap();
+        let provenance = crate::GraphProvenanceMapMessage::default();
+        let projection = crate::GraphProjectionResultMessage::new(
+            crate::Completion::new(crate::CompletionStatus::Success, 1, 1, None, None).unwrap(),
+            Some(graph.clone()),
+            provenance.clone(),
+            Vec::new(),
+        )
+        .unwrap();
+        let yaml_query = crate::YamlQueryResultMessage::new(
+            consema_core::QueryDomain::yaml_native_v1(),
+            consema_core::MatchRole::YamlStream,
+            Vec::new(),
+            crate::Completion::new(crate::CompletionStatus::Success, 0, 0, None, None).unwrap(),
+            Vec::new(),
+        )
+        .unwrap();
+        let payloads = [
+            ("core.graph-projection-result", projection.to_value()),
+            ("core.graph-provenance-map", provenance.to_value()),
+            ("core.graph-query-result", graph_query.to_value()),
+            ("core.portable-graph", graph.to_value()),
+            ("core.yaml-query-result", yaml_query.to_value()),
+        ];
+        let limits = ProtocolLimits::default();
+        for (id, payload) in payloads {
+            let contract = ContractId::new(id, 1).unwrap();
+            assert_eq!(
+                ProtocolMessage::new(contract.clone(), payload.clone(), ContractRegistry::v4())
+                    .unwrap_err()
+                    .kind(),
+                ProtocolErrorKind::UnknownContract
+            );
+            let message = ProtocolMessage::new(contract, payload, ContractRegistry::v5()).unwrap();
+            assert_eq!(
+                ProtocolMessage::from_json(
+                    &message.to_json(limits).unwrap(),
+                    limits,
+                    ContractRegistry::v5(),
+                )
+                .unwrap(),
+                message
+            );
+            assert_eq!(
+                ProtocolMessage::from_pvce(
+                    &message.to_pvce(limits).unwrap(),
+                    limits,
+                    ContractRegistry::v5(),
                 )
                 .unwrap(),
                 message
