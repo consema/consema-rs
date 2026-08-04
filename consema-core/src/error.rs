@@ -67,3 +67,16 @@ pub struct OperationFailure {
     /// Ordered structured diagnostics.
     pub diagnostics: Vec<Diagnostic>,
 }
+
+/// Stable operation/failure/diagnostic facts exposed by every public failure.
+///
+/// Detailed error enums remain the primary API; this projection guarantees
+/// language-neutral control-flow facts without depending on display text.
+pub trait StableFailure {
+    /// Operation that failed.
+    fn operation_kind(&self) -> OperationKind;
+    /// Stable failure category.
+    fn failure_kind(&self) -> FailureKind;
+    /// Stable namespaced diagnostic code.
+    fn diagnostic_code(&self) -> &str;
+}

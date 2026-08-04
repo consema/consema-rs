@@ -1254,6 +1254,56 @@ pub enum QueryFailure {
     TargetUnavailable,
 }
 
+impl crate::StableFailure for QueryFailure {
+    fn operation_kind(&self) -> crate::OperationKind {
+        match self {
+            Self::DomainMismatch(_)
+            | Self::UnknownOperator { .. }
+            | Self::WrongArgumentType { .. }
+            | Self::InvalidArgument { .. }
+            | Self::InvalidOperatorComposition { .. } => crate::OperationKind::QueryValidation,
+            Self::MissingRequiredCapability(_)
+            | Self::RequiredTypeMismatch { .. }
+            | Self::CardinalityViolation { .. }
+            | Self::ResourceLimitExceeded
+            | Self::Cancelled
+            | Self::TargetUnavailable => crate::OperationKind::QueryExecution,
+        }
+    }
+
+    fn failure_kind(&self) -> crate::FailureKind {
+        match self {
+            Self::DomainMismatch(_)
+            | Self::UnknownOperator { .. }
+            | Self::WrongArgumentType { .. }
+            | Self::InvalidArgument { .. }
+            | Self::InvalidOperatorComposition { .. }
+            | Self::RequiredTypeMismatch { .. }
+            | Self::CardinalityViolation { .. }
+            | Self::TargetUnavailable => crate::FailureKind::InvalidInput,
+            Self::MissingRequiredCapability(_) => crate::FailureKind::Unsupported,
+            Self::ResourceLimitExceeded => crate::FailureKind::ResourceLimited,
+            Self::Cancelled => crate::FailureKind::Cancelled,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        match self {
+            Self::DomainMismatch(_) => "core.query.domain-mismatch@1",
+            Self::UnknownOperator { .. } => "core.query.unknown-operator@1",
+            Self::WrongArgumentType { .. } => "core.query.wrong-argument-type@1",
+            Self::InvalidArgument { .. } => "core.query.invalid-argument@1",
+            Self::InvalidOperatorComposition { .. } => "core.query.invalid-composition@1",
+            Self::MissingRequiredCapability(_) => "core.query.missing-capability@1",
+            Self::RequiredTypeMismatch { .. } => "core.query.required-type-mismatch@1",
+            Self::CardinalityViolation { .. } => "core.query.cardinality-violation@1",
+            Self::ResourceLimitExceeded => "core.query.resource-limit@1",
+            Self::Cancelled => "core.query.cancelled@1",
+            Self::TargetUnavailable => "core.query.target-unavailable@1",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1263,6 +1313,27 @@ mod tests {
         let mut capabilities = CapabilitySet::new();
         capabilities.insert(CapabilityId::new("core.query.ordered-results", 1));
         capabilities
+    }
+
+    #[test]
+    fn stable_failure_metadata_is_language_neutral() {
+        use crate::{FailureKind, OperationKind, StableFailure};
+        assert_eq!(
+            QueryFailure::ResourceLimitExceeded.operation_kind(),
+            OperationKind::QueryExecution
+        );
+        assert_eq!(
+            QueryFailure::ResourceLimitExceeded.failure_kind(),
+            FailureKind::ResourceLimited
+        );
+        assert_eq!(
+            QueryFailure::DomainMismatch(QueryDomain::new("unknown", 1)).diagnostic_code(),
+            "core.query.domain-mismatch@1"
+        );
+        assert_eq!(
+            QueryFailure::Cancelled.failure_kind(),
+            FailureKind::Cancelled
+        );
     }
 
     #[test]

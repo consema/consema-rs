@@ -1027,6 +1027,86 @@ pub enum DecodeError {
     ExpectedCoreValue,
 }
 
+impl consema_core::StableFailure for DecodeError {
+    fn operation_kind(&self) -> consema_core::OperationKind {
+        consema_core::OperationKind::Decode
+    }
+
+    fn failure_kind(&self) -> consema_core::FailureKind {
+        match self {
+            Self::InvalidMagic
+            | Self::UnsupportedVersion(_)
+            | Self::UnexpectedEnd
+            | Self::TrailingBytes
+            | Self::TrailingPayload(_)
+            | Self::TrailingField
+            | Self::NonCanonicalVarint
+            | Self::VarintOverflow
+            | Self::LengthOverflow
+            | Self::UnknownCoreTag(_)
+            | Self::InvalidPayload(_)
+            | Self::InvalidIntegerSign(_)
+            | Self::NonCanonicalInteger
+            | Self::NonCanonicalDecimal
+            | Self::InvalidUtf8
+            | Self::ObjectKeyNotString
+            | Self::DuplicateObjectKey
+            | Self::InvalidTemporal
+            | Self::InvalidValue
+            | Self::NestedExtendedValue
+            | Self::ExpectedCoreValue => consema_core::FailureKind::InvalidInput,
+            Self::ResourceLimit(_) => consema_core::FailureKind::ResourceLimited,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        match self {
+            Self::InvalidMagic => "core.pvce.invalid-magic@1",
+            Self::UnsupportedVersion(_) => "core.pvce.unsupported-version@1",
+            Self::UnexpectedEnd => "core.pvce.unexpected-end@1",
+            Self::TrailingBytes => "core.pvce.trailing-bytes@1",
+            Self::TrailingPayload(_) => "core.pvce.trailing-payload@1",
+            Self::TrailingField => "core.pvce.trailing-field@1",
+            Self::NonCanonicalVarint => "core.pvce.non-canonical-varint@1",
+            Self::VarintOverflow => "core.pvce.varint-overflow@1",
+            Self::LengthOverflow => "core.pvce.length-overflow@1",
+            Self::ResourceLimit(_) => "core.pvce.resource-limit@1",
+            Self::UnknownCoreTag(_) => "core.pvce.unknown-tag@1",
+            Self::InvalidPayload(_) => "core.pvce.invalid-payload@1",
+            Self::InvalidIntegerSign(_) => "core.pvce.invalid-integer-sign@1",
+            Self::NonCanonicalInteger => "core.pvce.non-canonical-integer@1",
+            Self::NonCanonicalDecimal => "core.pvce.non-canonical-decimal@1",
+            Self::InvalidUtf8 => "core.pvce.invalid-utf8@1",
+            Self::ObjectKeyNotString => "core.pvce.object-key-not-string@1",
+            Self::DuplicateObjectKey => "core.pvce.duplicate-object-key@1",
+            Self::InvalidTemporal => "core.pvce.invalid-temporal@1",
+            Self::InvalidValue => "core.pvce.invalid-value@1",
+            Self::NestedExtendedValue => "core.pvce.nested-extended@1",
+            Self::ExpectedCoreValue => "core.pvce.expected-core@1",
+        }
+    }
+}
+
+impl consema_core::StableFailure for EncodeError {
+    fn operation_kind(&self) -> consema_core::OperationKind {
+        consema_core::OperationKind::Encode
+    }
+
+    fn failure_kind(&self) -> consema_core::FailureKind {
+        match self {
+            Self::ResourceLimit(_) => consema_core::FailureKind::ResourceLimited,
+            Self::LengthOverflow => consema_core::FailureKind::InvalidInput,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        match self {
+            Self::ResourceLimit(_) => "core.pvce.resource-limit@1",
+            Self::LengthOverflow => "core.pvce.length-overflow@1",
+        }
+    }
+}
+
 impl Display for DecodeError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(formatter, "{self:?}")

@@ -35,6 +35,90 @@ pub enum JsonProfile {
     JsoncBoundedV1,
 }
 
+/// Closed JSON/JSONC v1 lossless syntax-piece classification.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum JsonSyntaxKind {
+    /// Leading UTF-8 byte-order mark.
+    Bom,
+    /// JSON whitespace.
+    Whitespace,
+    /// `//` comment.
+    LineComment,
+    /// Closed `/* ... */` comment.
+    BlockComment,
+    /// `{`.
+    LeftBrace,
+    /// `}`.
+    RightBrace,
+    /// `[`.
+    LeftBracket,
+    /// `]`.
+    RightBracket,
+    /// `:`.
+    Colon,
+    /// `,`.
+    Comma,
+    /// Complete string token.
+    String,
+    /// Valid JSON number token.
+    Number,
+    /// `true`.
+    True,
+    /// `false`.
+    False,
+    /// `null`.
+    Null,
+    /// Bytes retained after bounded lexical recovery.
+    ErrorRegion,
+}
+
+impl JsonSyntaxKind {
+    /// Stable query and protocol name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Bom => "Bom",
+            Self::Whitespace => "Whitespace",
+            Self::LineComment => "LineComment",
+            Self::BlockComment => "BlockComment",
+            Self::LeftBrace => "LeftBrace",
+            Self::RightBrace => "RightBrace",
+            Self::LeftBracket => "LeftBracket",
+            Self::RightBracket => "RightBracket",
+            Self::Colon => "Colon",
+            Self::Comma => "Comma",
+            Self::String => "String",
+            Self::Number => "Number",
+            Self::True => "True",
+            Self::False => "False",
+            Self::Null => "Null",
+            Self::ErrorRegion => "ErrorRegion",
+        }
+    }
+
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "Bom" => Some(Self::Bom),
+            "Whitespace" => Some(Self::Whitespace),
+            "LineComment" => Some(Self::LineComment),
+            "BlockComment" => Some(Self::BlockComment),
+            "LeftBrace" => Some(Self::LeftBrace),
+            "RightBrace" => Some(Self::RightBrace),
+            "LeftBracket" => Some(Self::LeftBracket),
+            "RightBracket" => Some(Self::RightBracket),
+            "Colon" => Some(Self::Colon),
+            "Comma" => Some(Self::Comma),
+            "String" => Some(Self::String),
+            "Number" => Some(Self::Number),
+            "True" => Some(Self::True),
+            "False" => Some(Self::False),
+            "Null" => Some(Self::Null),
+            "ErrorRegion" => Some(Self::ErrorRegion),
+            _ => None,
+        }
+    }
+}
+
 impl JsonProfile {
     /// Immutable profile identifier.
     #[must_use]
@@ -68,6 +152,7 @@ pub struct Document {
     source: SourceSnapshot,
     profile: JsonProfile,
     structural_index: LosslessStructuralIndex,
+    syntax_kinds: Arc<[JsonSyntaxKind]>,
     formation_status: FormationStatus,
     diagnostics: Arc<[Diagnostic]>,
     entities: Arc<[Entity]>,
@@ -122,6 +207,12 @@ impl Document {
     #[must_use]
     pub const fn lossless_structural_index(&self) -> &LosslessStructuralIndex {
         &self.structural_index
+    }
+
+    /// Format-specific kind for every structural piece, in the same source order.
+    #[must_use]
+    pub fn lossless_syntax_kinds(&self) -> &[JsonSyntaxKind] {
+        &self.syntax_kinds
     }
 
     /// Root native semantic value. Recovered roots can report local semantic unavailability.
@@ -566,6 +657,41 @@ mod tests {
                 .diagnostics()
                 .iter()
                 .any(|item| item.code == "json.object.duplicate-member@1")
+        );
+    }
+
+    #[test]
+    fn jsonc_lossless_syntax_kinds_align_with_exact_coverage() {
+        let source = b"\xef\xbb\xbf // line\n{\"x\":true,/* block */\"y\":null}";
+        let document = parse(
+            source.as_slice(),
+            JsonProfile::JsoncBoundedV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let kinds = document.lossless_syntax_kinds();
+        assert_eq!(
+            kinds,
+            &[
+                JsonSyntaxKind::Bom,
+                JsonSyntaxKind::Whitespace,
+                JsonSyntaxKind::LineComment,
+                JsonSyntaxKind::Whitespace,
+                JsonSyntaxKind::LeftBrace,
+                JsonSyntaxKind::String,
+                JsonSyntaxKind::Colon,
+                JsonSyntaxKind::True,
+                JsonSyntaxKind::Comma,
+                JsonSyntaxKind::BlockComment,
+                JsonSyntaxKind::String,
+                JsonSyntaxKind::Colon,
+                JsonSyntaxKind::Null,
+                JsonSyntaxKind::RightBrace,
+            ]
+        );
+        assert_eq!(
+            kinds.len(),
+            document.lossless_structural_index().pieces().len()
         );
     }
 }

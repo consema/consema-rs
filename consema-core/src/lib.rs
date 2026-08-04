@@ -11,7 +11,7 @@ pub use capability::{CapabilityId, CapabilitySet, ImplementationSupport, Verific
 pub use diagnostic::{
     Diagnostic, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, RelatedLocation,
 };
-pub use error::{FailureKind, OperationFailure, OperationKind, OperationStatus};
+pub use error::{FailureKind, OperationFailure, OperationKind, OperationStatus, StableFailure};
 pub use location::{AssociationLocation, AssociationRole, ValuePath, ValuePathSegment};
 pub use query::{
     CancellationToken, ExecutableQuery, MatchRole, OperatorCall, OrderedQueryCursor, PortableMatch,

@@ -31,6 +31,74 @@ pub enum TomlProfile {
     Toml10V1,
 }
 
+/// Closed TOML v1 lossless syntax-piece classification.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum TomlSyntaxKind {
+    /// Horizontal whitespace.
+    Whitespace,
+    /// LF, CRLF, or invalid bare CR retained for formation diagnostics.
+    Newline,
+    /// `#` comment excluding its newline.
+    Comment,
+    /// Basic or literal string token, including multiline forms.
+    String,
+    /// Bare key or value fragment.
+    Bare,
+    /// `=`.
+    Equals,
+    /// `[`.
+    LeftBracket,
+    /// `]`.
+    RightBracket,
+    /// `{`.
+    LeftBrace,
+    /// `}`.
+    RightBrace,
+    /// `,`.
+    Comma,
+    /// `.`.
+    Dot,
+}
+
+impl TomlSyntaxKind {
+    /// Stable query and protocol name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Whitespace => "Whitespace",
+            Self::Newline => "Newline",
+            Self::Comment => "Comment",
+            Self::String => "String",
+            Self::Bare => "Bare",
+            Self::Equals => "Equals",
+            Self::LeftBracket => "LeftBracket",
+            Self::RightBracket => "RightBracket",
+            Self::LeftBrace => "LeftBrace",
+            Self::RightBrace => "RightBrace",
+            Self::Comma => "Comma",
+            Self::Dot => "Dot",
+        }
+    }
+
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "Whitespace" => Some(Self::Whitespace),
+            "Newline" => Some(Self::Newline),
+            "Comment" => Some(Self::Comment),
+            "String" => Some(Self::String),
+            "Bare" => Some(Self::Bare),
+            "Equals" => Some(Self::Equals),
+            "LeftBracket" => Some(Self::LeftBracket),
+            "RightBracket" => Some(Self::RightBracket),
+            "LeftBrace" => Some(Self::LeftBrace),
+            "RightBrace" => Some(Self::RightBrace),
+            "Comma" => Some(Self::Comma),
+            "Dot" => Some(Self::Dot),
+            _ => None,
+        }
+    }
+}
+
 impl TomlProfile {
     /// Immutable profile identifier.
     #[must_use]
@@ -57,6 +125,7 @@ pub struct Document {
     source: SourceSnapshot,
     profile: TomlProfile,
     structural_index: LosslessStructuralIndex,
+    syntax_kinds: Arc<[TomlSyntaxKind]>,
     diagnostics: Arc<[Diagnostic]>,
     entities: Arc<[Entity]>,
     root: usize,
@@ -110,6 +179,12 @@ impl Document {
     #[must_use]
     pub const fn lossless_structural_index(&self) -> &LosslessStructuralIndex {
         &self.structural_index
+    }
+
+    /// Format-specific kind for every structural piece, in the same source order.
+    #[must_use]
+    pub fn lossless_syntax_kinds(&self) -> &[TomlSyntaxKind] {
+        &self.syntax_kinds
     }
 
     /// Resource contract used to form this snapshot and any edit successor.
@@ -720,5 +795,41 @@ name = "two"
             first.item(entry.node_ref()),
             Err(TomlAccessError::WrongRole)
         ));
+    }
+
+    #[test]
+    fn toml_lossless_syntax_kinds_distinguish_newlines_and_punctuation() {
+        let source = b"a.b = \"x\" # c\r\nlist = [1, 2]\ninline = {x=1}\n";
+        let document = parse(
+            source.as_slice(),
+            TomlProfile::Toml10V1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let kinds = document.lossless_syntax_kinds();
+        assert_eq!(
+            &kinds[..10],
+            &[
+                TomlSyntaxKind::Bare,
+                TomlSyntaxKind::Dot,
+                TomlSyntaxKind::Bare,
+                TomlSyntaxKind::Whitespace,
+                TomlSyntaxKind::Equals,
+                TomlSyntaxKind::Whitespace,
+                TomlSyntaxKind::String,
+                TomlSyntaxKind::Whitespace,
+                TomlSyntaxKind::Comment,
+                TomlSyntaxKind::Newline,
+            ]
+        );
+        assert!(kinds.contains(&TomlSyntaxKind::LeftBracket));
+        assert!(kinds.contains(&TomlSyntaxKind::RightBracket));
+        assert!(kinds.contains(&TomlSyntaxKind::LeftBrace));
+        assert!(kinds.contains(&TomlSyntaxKind::RightBrace));
+        assert!(kinds.contains(&TomlSyntaxKind::Comma));
+        assert_eq!(
+            kinds.len(),
+            document.lossless_structural_index().pieces().len()
+        );
     }
 }

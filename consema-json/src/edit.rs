@@ -291,6 +291,44 @@ impl Document {
     }
 }
 
+impl consema_core::StableFailure for EditFailure {
+    fn operation_kind(&self) -> consema_core::OperationKind {
+        consema_core::OperationKind::Edit
+    }
+
+    fn failure_kind(&self) -> consema_core::FailureKind {
+        match self {
+            Self::WrongSnapshot => consema_core::FailureKind::TargetMismatch,
+            Self::WrongRole
+            | Self::IncompleteTarget
+            | Self::SemanticUnavailable
+            | Self::InvalidLiteral
+            | Self::ExactLiteralRequiresLiteralOperation => consema_core::FailureKind::InvalidInput,
+            Self::UnsupportedSemanticValue(_) => consema_core::FailureKind::Unsupported,
+            Self::RepresentationIncompatible => consema_core::FailureKind::NotApplicable,
+            Self::ConflictingEdits => consema_core::FailureKind::InvalidInput,
+            Self::NewDocumentFormationFailed => consema_core::FailureKind::Internal,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        match self {
+            Self::WrongSnapshot => "core.edit.wrong-snapshot@1",
+            Self::WrongRole => "core.edit.wrong-role@1",
+            Self::IncompleteTarget => "core.edit.incomplete-target@1",
+            Self::SemanticUnavailable => "core.edit.semantic-unavailable@1",
+            Self::UnsupportedSemanticValue(_) => "core.edit.unsupported-value@1",
+            Self::InvalidLiteral => "core.edit.invalid-literal@1",
+            Self::RepresentationIncompatible => "core.edit.representation-incompatible@1",
+            Self::ExactLiteralRequiresLiteralOperation => {
+                "core.edit.exact-literal-requires-literal@1"
+            }
+            Self::ConflictingEdits => "core.edit.conflicting-edits@1",
+            Self::NewDocumentFormationFailed => "core.edit.formation-failed@1",
+        }
+    }
+}
+
 struct PreparedEdit {
     target: NodeRef,
     old_span: consema_document::Span,

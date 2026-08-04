@@ -736,6 +736,28 @@ const fn projection_code(error: &ProjectionFailure) -> &'static str {
     }
 }
 
+impl consema_core::StableFailure for ProjectionFailure {
+    fn operation_kind(&self) -> consema_core::OperationKind {
+        consema_core::OperationKind::Projection
+    }
+
+    fn failure_kind(&self) -> consema_core::FailureKind {
+        match self {
+            Self::WrongSnapshotPolicy => consema_core::FailureKind::TargetMismatch,
+            Self::ConflictingPolicyRules
+            | Self::InvalidPolicyTarget
+            | Self::TargetNotApplicable
+            | Self::DuplicateKeys { .. }
+            | Self::SemanticUnavailable { .. } => consema_core::FailureKind::InvalidInput,
+            Self::ResourceLimit(_) => consema_core::FailureKind::ResourceLimited,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        projection_code(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
