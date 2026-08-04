@@ -154,6 +154,22 @@ pub enum NodeRole {
     YamlAnchorDefinition,
     /// One YAML lossless syntax piece.
     YamlSyntaxPiece,
+    /// Complete INI document.
+    IniDocument,
+    /// One physical INI source line.
+    IniPhysicalLine,
+    /// One logical INI record.
+    IniLogicalLine,
+    /// One ordinary INI section occurrence.
+    IniSection,
+    /// One Python ConfigParser default-section occurrence.
+    IniDefaultSection,
+    /// One INI entry occurrence.
+    IniEntry,
+    /// One recovered INI error line.
+    IniErrorLine,
+    /// One INI lossless syntax piece.
+    IniSyntaxPiece,
 }
 
 /// Opaque handle to one structural identity in exactly one snapshot.

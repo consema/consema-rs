@@ -1,4 +1,4 @@
-//! Consema public facade for core semantics, protocol, JSON, TOML, YAML, and PVCE.
+//! Consema public facade for core semantics, protocol, INI, JSON, TOML, YAML, and PVCE.
 
 mod conversion;
 
@@ -11,6 +11,7 @@ pub use conversion::{
 pub use consema_core as core;
 pub use consema_document as document;
 pub use consema_graph as graph;
+pub use consema_ini as ini;
 pub use consema_json as json;
 pub use consema_protocol as protocol;
 pub use consema_pvce as pvce;
@@ -237,9 +238,17 @@ mod tests {
             document::ParseLimits::default(),
         )
         .expect("YAML through facade");
+        let ini = ini::parse(
+            b"[section]\nvalue=1\n".as_slice(),
+            ini::IniProfile::PortableV1,
+            ini::IniEncodingSelection::ProfileDefault,
+            ini::IniParseLimits::default(),
+        )
+        .expect("INI through facade");
         assert_eq!(json.render(), b"{\"value\":1}");
         assert_eq!(toml.render(), b"value = 1");
         assert_eq!(yaml.render(), b"value: 1\n");
+        assert_eq!(ini.render(), b"[section]\nvalue=1\n");
     }
 
     #[test]
