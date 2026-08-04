@@ -196,6 +196,14 @@ impl EncodingFacts {
     pub const fn selected(self) -> SourceEncoding {
         self.selected
     }
+
+    pub(crate) const fn resolution_request(self) -> EncodingRequest {
+        EncodingRequest {
+            profile_default: self.profile_default,
+            declaration: self.declaration,
+            caller_override: self.caller_override,
+        }
+    }
 }
 
 /// Resource bounds applied while a source snapshot is constructed.

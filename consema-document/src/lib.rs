@@ -7,11 +7,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod source;
+mod source_patch;
 
 pub use source::{
     BomKind, ContentDigest, DecodedOffset, DecodedPosition, EncodingFacts, EncodingRequest,
     SourceEncoding, SourceError, SourceLimits, SourceSnapshot, UnsupportedBomKind,
 };
+pub use source_patch::{SourcePatch, SourcePatchError, SourcePatchLimits, SourceReplacement};
 
 static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(1);
 
