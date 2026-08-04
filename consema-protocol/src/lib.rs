@@ -26,6 +26,7 @@ mod registry_manifest;
 mod schema;
 mod source;
 mod value_transport;
+mod yaml_query;
 
 pub use contract::{
     ContractDescriptor, ContractId, ContractRegistry, ContractStability, ProtocolMessage,
@@ -70,6 +71,7 @@ pub use registry::{CapabilityDeclaration, ProfileDescriptor, ProfileReference};
 pub use registry_manifest::{ContractManifestEntry, ErrorCodeManifestEntry, RegistryManifest};
 pub use source::{SourcePatchMessage, SourceSnapshotMessage};
 pub use value_transport::{decode_json, decode_pvce, encode_json, encode_pvce};
+pub use yaml_query::{YamlMatchLocator, YamlQueryResultMessage};
 
 /// Canonical tagged JSON transport schema.
 pub const PORTABLE_VALUE_JSON_SCHEMA: &str = "core.portable-value-json@1";
