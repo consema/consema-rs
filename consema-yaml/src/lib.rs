@@ -15,12 +15,21 @@ use consema_document::{
 
 mod backend;
 mod native;
+mod projection;
 mod query;
 mod syntax;
 
 use backend::{BackendError, BackendEventKind, parse_events};
 pub use native::GraphProjectionError;
 use native::{NativeContent, NativeStream, node_ref};
+pub use projection::{
+    CompleteGraphProjection, CompleteValueProjection, Fidelity, GraphProjectedLocation,
+    GraphProjectionFailure, GraphProjectionLimits, GraphProjectionRequest, GraphProvenanceEntry,
+    GraphProvenanceMap, MappingPolicy, ProjectedLocation, ProjectionEvent, ProjectionEventKind,
+    ProjectionReport, ProvenanceEntry, ProvenanceMap, ProvenanceRelation, SharingPolicy,
+    SourceOrigin, TagPolicy, ValueProjectionFailure, ValueProjectionLimits, ValueProjectionRequest,
+    ValueProjectionResult,
+};
 pub use query::{
     YamlMatch, YamlSyntaxMatch, execute_yaml_query, execute_yaml_query_cursor,
     execute_yaml_syntax_query, execute_yaml_syntax_query_cursor,
@@ -394,8 +403,9 @@ impl Document {
 
     /// Projects all document roots to one exact PortableGraph.
     ///
-    /// Unknown/custom and non-portable standard tags fail instead of being
-    /// treated as application constructors or untyped strings.
+    /// Unknown/custom tags fail instead of being treated as application
+    /// constructors or untyped strings; frozen standard repository tags remain
+    /// exact tagged graph nodes.
     pub fn project_graph(&self) -> Result<consema_graph::PortableGraph, GraphProjectionError> {
         self.project_graph_bounded(consema_graph::GraphLimits::default())
     }

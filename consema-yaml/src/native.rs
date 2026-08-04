@@ -6,21 +6,23 @@ use consema_document::{
     DecodedOffset, DocumentAuthority, FatalFormationFailure, NodeRef, NodeRole, ParseLimits,
     SourceSnapshot, Span,
 };
-use consema_graph::{GraphBuildError, GraphBuilder, GraphLimits, GraphMappingEntry, PortableGraph};
+use consema_graph::{
+    GraphBuildError, GraphBuilder, GraphLimits, GraphMappingEntry, GraphNodeId, PortableGraph,
+};
 
 use crate::backend::{BackendEvent, BackendEventKind, BackendScalarStyle, BackendSpan, BackendTag};
 use crate::syntax::NamedOccurrence;
 use crate::{YamlProfile, YamlScalarKind, YamlScalarStyle};
 
-const TAG_NULL: &str = "tag:yaml.org,2002:null";
-const TAG_BOOL: &str = "tag:yaml.org,2002:bool";
-const TAG_INT: &str = "tag:yaml.org,2002:int";
-const TAG_FLOAT: &str = "tag:yaml.org,2002:float";
-const TAG_STR: &str = "tag:yaml.org,2002:str";
-const TAG_SEQ: &str = "tag:yaml.org,2002:seq";
-const TAG_MAP: &str = "tag:yaml.org,2002:map";
-const TAG_TIMESTAMP: &str = "tag:yaml.org,2002:timestamp";
-const TAG_BINARY: &str = "tag:yaml.org,2002:binary";
+pub(crate) const TAG_NULL: &str = "tag:yaml.org,2002:null";
+pub(crate) const TAG_BOOL: &str = "tag:yaml.org,2002:bool";
+pub(crate) const TAG_INT: &str = "tag:yaml.org,2002:int";
+pub(crate) const TAG_FLOAT: &str = "tag:yaml.org,2002:float";
+pub(crate) const TAG_STR: &str = "tag:yaml.org,2002:str";
+pub(crate) const TAG_SEQ: &str = "tag:yaml.org,2002:seq";
+pub(crate) const TAG_MAP: &str = "tag:yaml.org,2002:map";
+pub(crate) const TAG_TIMESTAMP: &str = "tag:yaml.org,2002:timestamp";
+pub(crate) const TAG_BINARY: &str = "tag:yaml.org,2002:binary";
 const TAG_MERGE: &str = "tag:yaml.org,2002:merge";
 const TAG_OMAP: &str = "tag:yaml.org,2002:omap";
 const TAG_PAIRS: &str = "tag:yaml.org,2002:pairs";
@@ -94,7 +96,7 @@ pub(crate) struct NativeAlias {
 /// Exact YAML-to-PortableGraph projection failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphProjectionError {
-    /// A custom or non-portable standard tag has no frozen graph canonicalization.
+    /// A custom tag has no frozen graph canonicalization.
     UnsupportedTag(String),
     /// Graph construction rejected a resource or topology fact.
     Graph(GraphBuildError),
@@ -139,6 +141,13 @@ impl NativeStream {
         &self,
         limits: GraphLimits,
     ) -> Result<PortableGraph, GraphProjectionError> {
+        self.project_graph_with_ids(limits).map(|(graph, _)| graph)
+    }
+
+    pub(crate) fn project_graph_with_ids(
+        &self,
+        limits: GraphLimits,
+    ) -> Result<(PortableGraph, Vec<GraphNodeId>), GraphProjectionError> {
         let mut builder = GraphBuilder::new(limits);
         let ids = (0..self.nodes.len())
             .map(|_| builder.reserve_node())
@@ -177,7 +186,8 @@ impl NativeStream {
         for document in self.documents.iter() {
             builder.push_root(ids[document.root])?;
         }
-        builder.build().map_err(Into::into)
+        let graph = builder.build()?;
+        Ok((graph, ids))
     }
 }
 
