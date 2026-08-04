@@ -359,24 +359,26 @@ fn materialize_target(
     request: &MaterializationRequest,
 ) -> Result<MaterializedTarget, ConversionFailure> {
     match request.target_profile().id() {
-        "json.strict" | "jsonc.bounded" => match json::materialize(value, request) {
-            document::MaterializationResult::Complete(CompleteMaterialization {
-                document,
-                fidelity,
-                report,
-                provenance,
-            }) => Ok(MaterializedTarget {
-                document: Document {
-                    inner: DocumentInner::Json(document),
-                },
-                fidelity,
-                report,
-                provenance,
-            }),
-            document::MaterializationResult::Failed(failure) => {
-                Err(materialization_failure(failure))
+        "json.strict" | "jsonc.bounded" | "json5.standard" => {
+            match json::materialize(value, request) {
+                document::MaterializationResult::Complete(CompleteMaterialization {
+                    document,
+                    fidelity,
+                    report,
+                    provenance,
+                }) => Ok(MaterializedTarget {
+                    document: Document {
+                        inner: DocumentInner::Json(document),
+                    },
+                    fidelity,
+                    report,
+                    provenance,
+                }),
+                document::MaterializationResult::Failed(failure) => {
+                    Err(materialization_failure(failure))
+                }
             }
-        },
+        }
         "toml.1.0" => match toml::materialize(value, request) {
             document::MaterializationResult::Complete(CompleteMaterialization {
                 document,
@@ -576,6 +578,14 @@ mod tests {
         .with_newline(NewlinePolicy::None)
     }
 
+    fn json5_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("json5.standard", 1),
+            MaterializationStyleId::new("json5.canonical-compact", 1),
+        )
+        .with_newline(NewlinePolicy::None)
+    }
+
     #[test]
     fn json_to_toml_keeps_both_stages_and_exact_target_closure() {
         let source = json::parse(
@@ -738,5 +748,69 @@ mod tests {
             report.materialization_report().events()[0].code,
             "core.materialization.mapping-transformed@1"
         );
+    }
+
+    #[test]
+    fn json_family_dialect_conversion_is_exact_or_explicitly_fails() {
+        let strict = json::parse(
+            br#"{"service":{"port":8080}}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let strict_projection =
+            ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+                .build()
+                .unwrap();
+        let ConversionResult::Complete(json5) =
+            convert_json(&strict, &strict_projection, &json5_request())
+        else {
+            panic!("strict JSON to JSON5 should complete")
+        };
+        assert_eq!(json5.document.render(), br#"{"service":{"port":8080}}"#);
+        assert_eq!(json5.report.overall_fidelity(), ConversionFidelity::Exact);
+        assert_eq!(
+            json5.report.source_profile(),
+            &ProfileId::new("json.strict", 1)
+        );
+        assert_eq!(
+            json5.report.target_profile(),
+            &ProfileId::new("json5.standard", 1)
+        );
+
+        let json5_source = json::parse(
+            b"{service:{port:8080,},}".as_slice(),
+            json::JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let json5_projection =
+            ProjectionRequestBuilder::new(json::ProjectionTarget::Json5BestExactCoreV1)
+                .build()
+                .unwrap();
+        let ConversionResult::Complete(strict) =
+            convert_json(&json5_source, &json5_projection, &json_request())
+        else {
+            panic!("finite JSON5 to strict JSON should complete")
+        };
+        assert_eq!(strict.document.render(), br#"{"service":{"port":8080}}"#);
+        assert_eq!(strict.report.overall_fidelity(), ConversionFidelity::Exact);
+
+        let non_finite = json::parse(
+            b"Infinity".as_slice(),
+            json::JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        assert!(matches!(
+            convert_json(&non_finite, &json5_projection, &json_request()),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::Unrepresentable {
+                    kind: core::PortableValueKind::BinaryFloat64,
+                    ..
+                },
+                ..
+            })
+        ));
     }
 }
