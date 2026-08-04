@@ -1,5 +1,6 @@
 //! Lossless `toml.1.0@1` documents and native semantics.
 
+mod edit;
 mod parser;
 mod projection;
 mod query;
@@ -12,6 +13,10 @@ use consema_document::{
 };
 use std::sync::Arc;
 
+pub use edit::{
+    EditCommit, EditFailure, EditTransaction, EditTransactionBuilder, RepresentationPolicy,
+    ScalarReplacement,
+};
 pub use projection::{
     CompleteProjection, FailedProjectionAttempt, Fidelity, ProjectedLocation, ProjectionFailure,
     ProjectionLimits, ProjectionReport, ProjectionRequest, ProjectionResult, ProjectionTarget,
