@@ -1,4 +1,11 @@
-//! Consema 0.3 public facade for core semantics, protocol, JSON, TOML and PVCE.
+//! Consema public facade for core semantics, protocol, JSON, TOML and PVCE.
+
+mod conversion;
+
+pub use conversion::{
+    CompleteConversion, ConversionFailure, ConversionFidelity, ConversionProjectionProvenance,
+    ConversionProjectionReport, ConversionReport, ConversionResult, convert_json, convert_toml,
+};
 
 pub use consema_core as core;
 pub use consema_document as document;
@@ -89,6 +96,15 @@ impl Document {
         match &self.inner {
             DocumentInner::Json(document) => document.snapshot_identity(),
             DocumentInner::Toml(document) => document.snapshot_identity(),
+        }
+    }
+
+    /// Exact source profile of the underlying format document.
+    #[must_use]
+    pub fn profile(&self) -> document::ProfileId {
+        match &self.inner {
+            DocumentInner::Json(document) => document.profile(),
+            DocumentInner::Toml(document) => document.profile(),
         }
     }
 
