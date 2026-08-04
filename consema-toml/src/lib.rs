@@ -1,6 +1,7 @@
 //! Lossless `toml.1.0@1` documents and native semantics.
 
 mod parser;
+mod projection;
 mod query;
 
 use consema_core::{BinaryFloat64, Diagnostic};
@@ -11,6 +12,11 @@ use consema_document::{
 };
 use std::sync::Arc;
 
+pub use projection::{
+    CompleteProjection, FailedProjectionAttempt, Fidelity, ProjectedLocation, ProjectionFailure,
+    ProjectionLimits, ProjectionReport, ProjectionRequest, ProjectionResult, ProjectionTarget,
+    ProvenanceEntry, ProvenanceMap, ProvenanceRelation, SourceOrigin,
+};
 pub use query::{TomlMatch, execute_toml_query, execute_toml_query_cursor};
 
 /// Frozen TOML language profile.
