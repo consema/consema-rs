@@ -6,7 +6,7 @@ use crate::schema::{
 };
 use crate::{
     ContractId, DiagnosticMessage, ErrorCodeRegistry, ProtocolError, ProtocolErrorKind,
-    SourceSnapshotMessage,
+    SourceEncodingMessage, SourceSnapshotMessage,
 };
 use consema_core::{
     AssociationLocation, PortableValue, PortableValueKind, SequenceBuilder, ValuePath,
@@ -48,79 +48,141 @@ impl MaterializationRequestMessage {
                 "core.materialization-request@1 does not support Windows code pages",
             ));
         }
-        let limits = self.request.limits();
-        Ok(object(vec![
-            (
-                "schema",
-                PortableValue::string("core.materialization-request@1"),
-            ),
-            (
-                "target_profile",
-                profile_value(self.request.target_profile()),
-            ),
-            (
-                "style",
-                reference_value(self.request.style().id(), self.request.style().version()),
-            ),
-            (
-                "encoding",
-                PortableValue::string(self.request.encoding().as_str()),
-            ),
-            (
-                "newline",
-                PortableValue::string(newline_name(self.request.newline())),
-            ),
-            (
-                "mapping_policy",
-                PortableValue::string(mapping_policy_name(self.request.mapping_policy())),
-            ),
-            (
-                "representability",
-                PortableValue::string(representability_name(self.request.representability())),
-            ),
-            ("limits", limits_value(limits)?),
-        ]))
+        materialization_request_value(
+            &self.request,
+            "core.materialization-request@1",
+            PortableValue::string(self.request.encoding().as_str()),
+        )
     }
 
     /// Strictly decodes every request policy and bound.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
-        let fields = schema_fields(
+        materialization_request_from_value(
             value,
             "core.materialization-request@1",
-            &[
-                "schema",
-                "target_profile",
-                "style",
-                "encoding",
-                "newline",
-                "mapping_policy",
-                "representability",
-                "limits",
-            ],
-            "$",
-        )?;
-        let target_profile = parse_profile(fields[1], "$.target_profile")?;
-        let (style_id, style_version) = parse_reference(fields[2], "$.style")?;
-        let encoding = parse_encoding(string(fields[3], "$.encoding")?, "$.encoding")?;
-        let newline = parse_newline(string(fields[4], "$.newline")?, "$.newline")?;
-        let mapping_policy =
-            parse_mapping_policy(string(fields[5], "$.mapping_policy")?, "$.mapping_policy")?;
-        if string(fields[6], "$.representability")? != "ExactOnly" {
-            return Err(crate::schema::invalid(
-                "$.representability",
-                "v1 requires ExactOnly",
-            ));
-        }
-        let request = MaterializationRequest::new(
-            target_profile,
-            MaterializationStyleId::new(style_id, style_version),
+            parse_materialization_encoding_v1,
         )
-        .with_encoding(encoding)
-        .with_newline(newline)
-        .with_mapping_policy(mapping_policy)
-        .with_limits(parse_limits(fields[7], "$.limits")?);
-        Ok(Self { request })
+        .map(|request| Self { request })
     }
+}
+
+/// Transferable `core.materialization-request@2`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MaterializationRequestMessageV2 {
+    request: MaterializationRequest,
+}
+
+impl MaterializationRequestMessageV2 {
+    /// Copies one validated common request.
+    #[must_use]
+    pub fn from_request(request: &MaterializationRequest) -> Self {
+        Self {
+            request: request.clone(),
+        }
+    }
+
+    /// Exact common request.
+    #[must_use]
+    pub const fn request(&self) -> &MaterializationRequest {
+        &self.request
+    }
+
+    /// Encodes the exact materialization-request v2 schema.
+    pub fn to_value(&self) -> Result<PortableValue, ProtocolError> {
+        materialization_request_value(
+            &self.request,
+            "core.materialization-request@2",
+            SourceEncodingMessage::from_encoding(self.request.encoding()).to_value(),
+        )
+    }
+
+    /// Strictly decodes every v2 request policy and bound.
+    pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        materialization_request_from_value(
+            value,
+            "core.materialization-request@2",
+            crate::source::source_encoding_from_value,
+        )
+        .map(|request| Self { request })
+    }
+}
+
+fn materialization_request_value(
+    request: &MaterializationRequest,
+    schema: &'static str,
+    encoding: PortableValue,
+) -> Result<PortableValue, ProtocolError> {
+    Ok(object(vec![
+        ("schema", PortableValue::string(schema)),
+        ("target_profile", profile_value(request.target_profile())),
+        (
+            "style",
+            reference_value(request.style().id(), request.style().version()),
+        ),
+        ("encoding", encoding),
+        (
+            "newline",
+            PortableValue::string(newline_name(request.newline())),
+        ),
+        (
+            "mapping_policy",
+            PortableValue::string(mapping_policy_name(request.mapping_policy())),
+        ),
+        (
+            "representability",
+            PortableValue::string(representability_name(request.representability())),
+        ),
+        ("limits", limits_value(request.limits())?),
+    ]))
+}
+
+fn materialization_request_from_value(
+    value: &PortableValue,
+    schema: &'static str,
+    parse_encoding: fn(&PortableValue, &str) -> Result<SourceEncoding, ProtocolError>,
+) -> Result<MaterializationRequest, ProtocolError> {
+    let fields = schema_fields(
+        value,
+        schema,
+        &[
+            "schema",
+            "target_profile",
+            "style",
+            "encoding",
+            "newline",
+            "mapping_policy",
+            "representability",
+            "limits",
+        ],
+        "$",
+    )?;
+    let target_profile = parse_profile(fields[1], "$.target_profile")?;
+    let (style_id, style_version) = parse_reference(fields[2], "$.style")?;
+    let encoding = parse_encoding(fields[3], "$.encoding")?;
+    let newline = parse_newline(string(fields[4], "$.newline")?, "$.newline")?;
+    let mapping_policy =
+        parse_mapping_policy(string(fields[5], "$.mapping_policy")?, "$.mapping_policy")?;
+    if string(fields[6], "$.representability")? != "ExactOnly" {
+        return Err(crate::schema::invalid(
+            "$.representability",
+            "requires ExactOnly",
+        ));
+    }
+    Ok(MaterializationRequest::new(
+        target_profile,
+        MaterializationStyleId::new(style_id, style_version),
+    )
+    .with_encoding(encoding)
+    .with_newline(newline)
+    .with_mapping_policy(mapping_policy)
+    .with_limits(parse_limits(fields[7], "$.limits")?))
+}
+
+fn parse_materialization_encoding_v1(
+    value: &PortableValue,
+    path: &str,
+) -> Result<SourceEncoding, ProtocolError> {
+    parse_encoding(string(value, path)?, path)
 }
 
 /// Ordered `core.materialization-report@1` diagnostics.
@@ -1248,6 +1310,7 @@ fn parse_output(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ProtocolLimits, decode_json, decode_pvce, encode_json, encode_pvce};
     use consema_document::SourceSnapshot;
 
     #[test]
@@ -1285,6 +1348,46 @@ mod tests {
             .to_value()
             .unwrap_err();
         assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
+    }
+
+    #[test]
+    fn materialization_request_v2_round_trips_windows_code_page() {
+        let request = MaterializationRequest::new(
+            ProfileId::new("ini.windows", 1),
+            MaterializationStyleId::new("ini.preserve", 1),
+        )
+        .with_encoding(SourceEncoding::WindowsCodePage(
+            consema_document::WindowsCodePage::from_number(936).unwrap(),
+        ))
+        .with_newline(NewlinePolicy::CrLf)
+        .with_mapping_policy(MappingPolicy::UniqueStringEntriesToObject)
+        .with_limits(MaterializationLimits {
+            max_input_nodes: 21,
+            max_output_bytes: 22,
+            max_depth: 23,
+            max_report_entries: 24,
+            max_provenance_entries: 25,
+        });
+        let value = MaterializationRequestMessageV2::from_request(&request)
+            .to_value()
+            .unwrap();
+        for transported in [
+            decode_json(
+                &encode_json(&value, ProtocolLimits::default()).unwrap(),
+                ProtocolLimits::default(),
+            )
+            .unwrap(),
+            decode_pvce(
+                &encode_pvce(&value, ProtocolLimits::default()).unwrap(),
+                ProtocolLimits::default(),
+            )
+            .unwrap(),
+        ] {
+            let decoded = MaterializationRequestMessageV2::from_value(&transported).unwrap();
+            assert_eq!(decoded.request(), &request);
+            assert_eq!(decoded.to_value().unwrap(), value);
+        }
+        assert!(MaterializationRequestMessage::from_value(&value).is_err());
     }
 
     #[test]

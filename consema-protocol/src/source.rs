@@ -513,7 +513,7 @@ fn source_encoding_value(encoding: SourceEncoding) -> PortableValue {
     ])
 }
 
-fn source_encoding_from_value(
+pub(crate) fn source_encoding_from_value(
     value: &PortableValue,
     path: &str,
 ) -> Result<SourceEncoding, ProtocolError> {

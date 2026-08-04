@@ -52,8 +52,8 @@ pub use materialization::{
     MaterializationFailureMessage, MaterializationInputLocationMessage,
     MaterializationOutcomeMessage, MaterializationProvenanceEntryMessage,
     MaterializationProvenanceMapMessage, MaterializationRelationMessage,
-    MaterializationReportMessage, MaterializationRequestMessage, MaterializationResultMessage,
-    MaterializedOriginMessage,
+    MaterializationReportMessage, MaterializationRequestMessage, MaterializationRequestMessageV2,
+    MaterializationResultMessage, MaterializedOriginMessage,
 };
 pub use operation::{EditOperationSummaryMessage, EditPlanMessage, FormatOperationRegistryMessage};
 pub use portable_graph::PortableGraphMessage;
