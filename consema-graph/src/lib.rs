@@ -15,7 +15,7 @@ mod query;
 
 pub use pgce::{
     PGCE_MAGIC, PGCE_VERSION, PgceDecodeError, PgceEncodeError, PgceLimits, decode_pgce,
-    encode_pgce, encode_pgce_bounded,
+    encode_pgce, encode_pgce_bounded, pgce_decode_error_code, pgce_encode_error_code,
 };
 pub use query::GraphMatch;
 
@@ -224,6 +224,22 @@ impl Display for GraphBuildError {
 }
 
 impl std::error::Error for GraphBuildError {}
+
+/// Stable semantic-model v5 diagnostic code for graph construction.
+#[must_use]
+pub const fn graph_build_error_code(error: &GraphBuildError) -> &'static str {
+    match error {
+        GraphBuildError::ResourceLimit { .. } | GraphBuildError::SizeOverflow => {
+            "core.graph.resource-limit@1"
+        }
+        GraphBuildError::UnknownNode(_)
+        | GraphBuildError::WrongGraph
+        | GraphBuildError::DuplicateDefinition(_)
+        | GraphBuildError::UndefinedNode(_)
+        | GraphBuildError::UnreachableNode(_)
+        | GraphBuildError::InvalidTag => "core.graph.invalid@1",
+    }
+}
 
 /// Mutable reservation/definition lifecycle for one immutable graph.
 #[derive(Debug)]
@@ -871,5 +887,26 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn graph_build_failures_have_stable_v5_codes() {
+        let mut limited = GraphBuilder::new(GraphLimits {
+            max_nodes: 0,
+            ..GraphLimits::default()
+        });
+        let resource = limited.reserve_node().unwrap_err();
+        assert_eq!(
+            graph_build_error_code(&resource),
+            "core.graph.resource-limit@1"
+        );
+        assert_eq!(
+            graph_build_error_code(&GraphBuildError::InvalidTag),
+            "core.graph.invalid@1"
+        );
+        assert_eq!(
+            graph_build_error_code(&GraphBuildError::SizeOverflow),
+            "core.graph.resource-limit@1"
+        );
     }
 }

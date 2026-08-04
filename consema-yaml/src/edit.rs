@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use consema_core::{
-    Diagnostic, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, PortableValue,
-    PortableValueKind,
+    Diagnostic, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, FailureKind,
+    OperationKind, PortableValue, PortableValueKind, StableFailure,
 };
 pub use consema_document::AssociationPlacement;
 use consema_document::{
@@ -311,6 +311,70 @@ pub enum EditFailure {
     ResourceLimit(&'static str),
     /// Replacement bytes did not form the promised YAML document and topology.
     NewDocumentFormationFailed,
+}
+
+/// Stable semantic-model v5 diagnostic code for YAML editing.
+#[must_use]
+pub const fn edit_failure_code(error: &EditFailure) -> &'static str {
+    match error {
+        EditFailure::WrongSnapshot => "core.edit.wrong-snapshot@1",
+        EditFailure::WrongRole => "core.edit.wrong-role@1",
+        EditFailure::TargetNotFound => "core.edit.target-not-found@1",
+        EditFailure::IncompleteTarget => "core.edit.incomplete-target@1",
+        EditFailure::UnsupportedSemanticValue(_) | EditFailure::UnsupportedInsertedValue(_) => {
+            "core.edit.unsupported-value@1"
+        }
+        EditFailure::InvalidLiteral => "core.edit.invalid-literal@1",
+        EditFailure::RepresentationIncompatible => "core.edit.representation-incompatible@1",
+        EditFailure::ExactLiteralRequiresLiteralOperation => {
+            "core.edit.exact-literal-requires-literal@1"
+        }
+        EditFailure::InvalidAnchorName => "yaml.edit.invalid-anchor-name@1",
+        EditFailure::InvalidPlacement => "yaml.edit.invalid-placement@1",
+        EditFailure::AnchorNotVisible => "yaml.edit.anchor-not-visible@1",
+        EditFailure::AnchorDependency => "yaml.edit.anchor-dependency@1",
+        EditFailure::StructuralContainerConflict => "yaml.edit.structural-container-conflict@1",
+        EditFailure::DuplicateTarget
+        | EditFailure::OverlappingOwnership
+        | EditFailure::AncestorDescendantConflict => "core.edit.conflicting-edits@1",
+        EditFailure::ResourceLimit(_) => "core.edit.resource-limit@1",
+        EditFailure::NewDocumentFormationFailed => "core.edit.formation-failed@1",
+    }
+}
+
+impl StableFailure for EditFailure {
+    fn operation_kind(&self) -> OperationKind {
+        OperationKind::Edit
+    }
+
+    fn failure_kind(&self) -> FailureKind {
+        match self {
+            Self::WrongSnapshot | Self::WrongRole | Self::TargetNotFound => {
+                FailureKind::TargetMismatch
+            }
+            Self::UnsupportedSemanticValue(_) | Self::UnsupportedInsertedValue(_) => {
+                FailureKind::Unsupported
+            }
+            Self::ResourceLimit(_) => FailureKind::ResourceLimited,
+            Self::IncompleteTarget
+            | Self::InvalidLiteral
+            | Self::RepresentationIncompatible
+            | Self::ExactLiteralRequiresLiteralOperation
+            | Self::InvalidAnchorName
+            | Self::InvalidPlacement
+            | Self::AnchorNotVisible
+            | Self::AnchorDependency
+            | Self::StructuralContainerConflict
+            | Self::DuplicateTarget
+            | Self::OverlappingOwnership
+            | Self::AncestorDescendantConflict
+            | Self::NewDocumentFormationFailed => FailureKind::InvalidInput,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        edit_failure_code(self)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -3148,5 +3212,79 @@ mod tests {
             commit.document.commit(&ambiguous.build()).unwrap_err(),
             EditFailure::StructuralContainerConflict
         );
+    }
+
+    #[test]
+    fn edit_failures_publish_stable_v5_codes() {
+        let cases = [
+            (EditFailure::WrongSnapshot, "core.edit.wrong-snapshot@1"),
+            (EditFailure::WrongRole, "core.edit.wrong-role@1"),
+            (EditFailure::TargetNotFound, "core.edit.target-not-found@1"),
+            (
+                EditFailure::IncompleteTarget,
+                "core.edit.incomplete-target@1",
+            ),
+            (
+                EditFailure::UnsupportedSemanticValue(PortableValueKind::Object),
+                "core.edit.unsupported-value@1",
+            ),
+            (EditFailure::InvalidLiteral, "core.edit.invalid-literal@1"),
+            (
+                EditFailure::RepresentationIncompatible,
+                "core.edit.representation-incompatible@1",
+            ),
+            (
+                EditFailure::ExactLiteralRequiresLiteralOperation,
+                "core.edit.exact-literal-requires-literal@1",
+            ),
+            (
+                EditFailure::InvalidAnchorName,
+                "yaml.edit.invalid-anchor-name@1",
+            ),
+            (
+                EditFailure::InvalidPlacement,
+                "yaml.edit.invalid-placement@1",
+            ),
+            (
+                EditFailure::AnchorNotVisible,
+                "yaml.edit.anchor-not-visible@1",
+            ),
+            (
+                EditFailure::AnchorDependency,
+                "yaml.edit.anchor-dependency@1",
+            ),
+            (
+                EditFailure::UnsupportedInsertedValue(PortableValueKind::Object),
+                "core.edit.unsupported-value@1",
+            ),
+            (
+                EditFailure::StructuralContainerConflict,
+                "yaml.edit.structural-container-conflict@1",
+            ),
+            (
+                EditFailure::DuplicateTarget,
+                "core.edit.conflicting-edits@1",
+            ),
+            (
+                EditFailure::OverlappingOwnership,
+                "core.edit.conflicting-edits@1",
+            ),
+            (
+                EditFailure::AncestorDescendantConflict,
+                "core.edit.conflicting-edits@1",
+            ),
+            (
+                EditFailure::ResourceLimit("target-bytes"),
+                "core.edit.resource-limit@1",
+            ),
+            (
+                EditFailure::NewDocumentFormationFailed,
+                "core.edit.formation-failed@1",
+            ),
+        ];
+        for (failure, code) in cases {
+            assert_eq!(edit_failure_code(&failure), code);
+            assert_eq!(failure.diagnostic_code(), code);
+        }
     }
 }

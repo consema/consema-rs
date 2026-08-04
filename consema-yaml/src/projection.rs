@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use consema_core::{
     AssociationLocation, AssociationRole, BigInteger, BinaryFloat64, Date, Decimal,
-    EntryMappingBuilder, LocalDateTime, ObjectBuilder, OffsetDateTime, PortableValue,
-    SequenceBuilder, Time, ValuePath, ValuePathSegment,
+    EntryMappingBuilder, FailureKind, LocalDateTime, ObjectBuilder, OffsetDateTime, OperationKind,
+    PortableValue, SequenceBuilder, StableFailure, Time, ValuePath, ValuePathSegment,
 };
 use consema_document::{NodeRef, NodeRole, SnapshotIdentity, Span};
 use consema_graph::{GraphBuildError, GraphLimits, GraphNodeId, PortableGraph};
@@ -166,6 +166,38 @@ impl From<GraphProjectionError> for GraphProjectionFailure {
             GraphProjectionError::UnsupportedTag(tag) => Self::UnsupportedTag(tag),
             GraphProjectionError::Graph(error) => Self::Graph(error),
         }
+    }
+}
+
+/// Stable semantic-model v5 diagnostic code for exact graph projection.
+#[must_use]
+pub const fn graph_projection_failure_code(error: &GraphProjectionFailure) -> &'static str {
+    match error {
+        GraphProjectionFailure::UnsupportedTag(_) => "yaml.projection.unsupported-tag@1",
+        GraphProjectionFailure::Graph(
+            GraphBuildError::ResourceLimit { .. } | GraphBuildError::SizeOverflow,
+        ) => "yaml.projection.resource-limit@1",
+        GraphProjectionFailure::Graph(_) => "yaml.projection.graph-invalid@1",
+        GraphProjectionFailure::ProvenanceLimit => "yaml.projection.provenance-limit@1",
+    }
+}
+
+impl StableFailure for GraphProjectionFailure {
+    fn operation_kind(&self) -> OperationKind {
+        OperationKind::Projection
+    }
+
+    fn failure_kind(&self) -> FailureKind {
+        match self {
+            Self::UnsupportedTag(_) => FailureKind::Unsupported,
+            Self::Graph(GraphBuildError::ResourceLimit { .. } | GraphBuildError::SizeOverflow)
+            | Self::ProvenanceLimit => FailureKind::ResourceLimited,
+            Self::Graph(_) => FailureKind::InvalidInput,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        graph_projection_failure_code(self)
     }
 }
 
@@ -441,6 +473,50 @@ pub enum ValueProjectionFailure {
     },
     /// Declared resource limit was reached.
     ResourceLimit(&'static str),
+}
+
+/// Stable semantic-model v5 diagnostic code for YAML-to-tree projection.
+#[must_use]
+pub const fn value_projection_failure_code(error: &ValueProjectionFailure) -> &'static str {
+    match error {
+        ValueProjectionFailure::DocumentCardinality { .. } => {
+            "yaml.projection.document-cardinality@1"
+        }
+        ValueProjectionFailure::Cycle { .. } => "yaml.projection.cycle@1",
+        ValueProjectionFailure::Sharing { .. } => "yaml.projection.sharing@1",
+        ValueProjectionFailure::UnsupportedTag { .. } => "yaml.projection.unsupported-tag@1",
+        ValueProjectionFailure::MappingNotObject { .. } => "yaml.projection.mapping-not-object@1",
+        ValueProjectionFailure::InvalidCanonicalScalar { .. } => {
+            "yaml.projection.invalid-canonical-scalar@1"
+        }
+        ValueProjectionFailure::UnrepresentableTimestamp { .. } => {
+            "yaml.projection.unrepresentable-timestamp@1"
+        }
+        ValueProjectionFailure::ResourceLimit(_) => "yaml.projection.resource-limit@1",
+    }
+}
+
+impl StableFailure for ValueProjectionFailure {
+    fn operation_kind(&self) -> OperationKind {
+        OperationKind::Projection
+    }
+
+    fn failure_kind(&self) -> FailureKind {
+        match self {
+            Self::UnsupportedTag { .. } => FailureKind::Unsupported,
+            Self::ResourceLimit(_) => FailureKind::ResourceLimited,
+            Self::DocumentCardinality { .. }
+            | Self::Cycle { .. }
+            | Self::Sharing { .. }
+            | Self::MappingNotObject { .. }
+            | Self::InvalidCanonicalScalar { .. }
+            | Self::UnrepresentableTimestamp { .. } => FailureKind::NotApplicable,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        value_projection_failure_code(self)
+    }
 }
 
 /// Complete-or-failed PortableValue projection algebra.
@@ -1400,5 +1476,80 @@ mod tests {
             leap.project_value(ValueProjectionRequest::best_exact_v1()),
             ValueProjectionResult::Failed(ValueProjectionFailure::UnrepresentableTimestamp { .. })
         ));
+    }
+
+    #[test]
+    fn projection_failures_publish_stable_v5_codes() {
+        let document = parse(
+            b"value".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let node = document.document(0).unwrap().root().node_ref();
+        let cases = [
+            (
+                ValueProjectionFailure::DocumentCardinality { actual: 0 },
+                "yaml.projection.document-cardinality@1",
+            ),
+            (
+                ValueProjectionFailure::Cycle { node },
+                "yaml.projection.cycle@1",
+            ),
+            (
+                ValueProjectionFailure::Sharing { node },
+                "yaml.projection.sharing@1",
+            ),
+            (
+                ValueProjectionFailure::UnsupportedTag {
+                    node,
+                    tag: "!example".to_owned(),
+                },
+                "yaml.projection.unsupported-tag@1",
+            ),
+            (
+                ValueProjectionFailure::MappingNotObject { node },
+                "yaml.projection.mapping-not-object@1",
+            ),
+            (
+                ValueProjectionFailure::InvalidCanonicalScalar { node },
+                "yaml.projection.invalid-canonical-scalar@1",
+            ),
+            (
+                ValueProjectionFailure::UnrepresentableTimestamp { node },
+                "yaml.projection.unrepresentable-timestamp@1",
+            ),
+            (
+                ValueProjectionFailure::ResourceLimit("max_value_nodes"),
+                "yaml.projection.resource-limit@1",
+            ),
+        ];
+        for (failure, code) in cases {
+            assert_eq!(value_projection_failure_code(&failure), code);
+            assert_eq!(failure.diagnostic_code(), code);
+        }
+
+        let graph_cases = [
+            (
+                GraphProjectionFailure::UnsupportedTag("!example".to_owned()),
+                "yaml.projection.unsupported-tag@1",
+            ),
+            (
+                GraphProjectionFailure::Graph(GraphBuildError::InvalidTag),
+                "yaml.projection.graph-invalid@1",
+            ),
+            (
+                GraphProjectionFailure::Graph(GraphBuildError::SizeOverflow),
+                "yaml.projection.resource-limit@1",
+            ),
+            (
+                GraphProjectionFailure::ProvenanceLimit,
+                "yaml.projection.provenance-limit@1",
+            ),
+        ];
+        for (failure, code) in graph_cases {
+            assert_eq!(graph_projection_failure_code(&failure), code);
+            assert_eq!(failure.diagnostic_code(), code);
+        }
     }
 }

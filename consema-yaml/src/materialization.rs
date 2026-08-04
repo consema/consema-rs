@@ -151,6 +151,12 @@ impl StableFailure for GraphMaterializationFailure {
     }
 }
 
+/// Stable semantic-model v5 diagnostic code for graph-to-YAML materialization.
+#[must_use]
+pub fn graph_materialization_failure_code(error: &GraphMaterializationFailure) -> &str {
+    error.diagnostic_code()
+}
+
 /// Failed graph attempt without a Document or partial output bytes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FailedGraphMaterializationAttempt {

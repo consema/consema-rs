@@ -1,6 +1,8 @@
 use std::fmt::{self, Display, Formatter};
 use std::str;
 
+use consema_core::{FailureKind, OperationKind, StableFailure};
+
 use crate::{
     GraphBuildError, GraphBuilder, GraphLimits, GraphMappingEntry, GraphNodeContent, PortableGraph,
     canonical_order,
@@ -89,6 +91,26 @@ impl Display for PgceEncodeError {
 
 impl std::error::Error for PgceEncodeError {}
 
+/// Stable semantic-model v5 diagnostic code for PGCE encoding.
+#[must_use]
+pub const fn pgce_encode_error_code(_error: &PgceEncodeError) -> &'static str {
+    "core.pgce.resource-limit@1"
+}
+
+impl StableFailure for PgceEncodeError {
+    fn operation_kind(&self) -> OperationKind {
+        OperationKind::Encode
+    }
+
+    fn failure_kind(&self) -> FailureKind {
+        FailureKind::ResourceLimited
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        pgce_encode_error_code(self)
+    }
+}
+
 /// Stable strict PGCE decoding failure. No variant carries a partial graph.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PgceDecodeError {
@@ -136,6 +158,62 @@ impl Display for PgceDecodeError {
 }
 
 impl std::error::Error for PgceDecodeError {}
+
+/// Stable semantic-model v5 diagnostic code for strict PGCE decoding.
+#[must_use]
+pub const fn pgce_decode_error_code(error: &PgceDecodeError) -> &'static str {
+    match error {
+        PgceDecodeError::ResourceLimit { .. }
+        | PgceDecodeError::InvalidGraph(
+            GraphBuildError::ResourceLimit { .. } | GraphBuildError::SizeOverflow,
+        ) => "core.pgce.resource-limit@1",
+        PgceDecodeError::UnsupportedVersion(_) => "core.pgce.unsupported-version@1",
+        PgceDecodeError::NonMinimalVarint
+        | PgceDecodeError::NonCanonicalNodeOrder
+        | PgceDecodeError::NonCanonicalEncoding => "core.pgce.non-canonical@1",
+        PgceDecodeError::InvalidMagic
+        | PgceDecodeError::UnexpectedEof
+        | PgceDecodeError::VarintOverflow
+        | PgceDecodeError::UnknownNodeKind(_)
+        | PgceDecodeError::InvalidUtf8
+        | PgceDecodeError::InvalidTag
+        | PgceDecodeError::ReferenceOutOfRange(_)
+        | PgceDecodeError::TrailingBytes
+        | PgceDecodeError::InvalidGraph(_) => "core.pgce.invalid@1",
+    }
+}
+
+impl StableFailure for PgceDecodeError {
+    fn operation_kind(&self) -> OperationKind {
+        OperationKind::Decode
+    }
+
+    fn failure_kind(&self) -> FailureKind {
+        match self {
+            Self::ResourceLimit { .. }
+            | Self::InvalidGraph(
+                GraphBuildError::ResourceLimit { .. } | GraphBuildError::SizeOverflow,
+            ) => FailureKind::ResourceLimited,
+            Self::UnsupportedVersion(_) => FailureKind::Unsupported,
+            Self::InvalidMagic
+            | Self::UnexpectedEof
+            | Self::NonMinimalVarint
+            | Self::VarintOverflow
+            | Self::UnknownNodeKind(_)
+            | Self::InvalidUtf8
+            | Self::InvalidTag
+            | Self::ReferenceOutOfRange(_)
+            | Self::NonCanonicalNodeOrder
+            | Self::TrailingBytes
+            | Self::InvalidGraph(_)
+            | Self::NonCanonicalEncoding => FailureKind::InvalidInput,
+        }
+    }
+
+    fn diagnostic_code(&self) -> &str {
+        pgce_decode_error_code(self)
+    }
+}
 
 /// Encodes one graph with the default bounded PGCE/1 policy.
 pub fn encode_pgce(graph: &PortableGraph) -> Result<Vec<u8>, PgceEncodeError> {
@@ -736,6 +814,34 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn pgce_failures_have_stable_v5_codes() {
+        assert_eq!(
+            pgce_decode_error_code(&PgceDecodeError::InvalidMagic),
+            "core.pgce.invalid@1"
+        );
+        assert_eq!(
+            pgce_decode_error_code(&PgceDecodeError::NonMinimalVarint),
+            "core.pgce.non-canonical@1"
+        );
+        assert_eq!(
+            pgce_decode_error_code(&PgceDecodeError::UnsupportedVersion(2)),
+            "core.pgce.unsupported-version@1"
+        );
+        assert_eq!(
+            pgce_decode_error_code(&PgceDecodeError::ResourceLimit {
+                name: "stream-bytes",
+                observed: 2,
+                limit: 1,
+            }),
+            "core.pgce.resource-limit@1"
+        );
+        assert_eq!(
+            pgce_encode_error_code(&PgceEncodeError::SizeOverflow),
+            "core.pgce.resource-limit@1"
+        );
     }
 
     fn hex_scalar() -> Vec<u8> {

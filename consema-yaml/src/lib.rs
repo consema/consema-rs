@@ -25,13 +25,13 @@ mod syntax;
 use backend::{BackendError, BackendEventKind, parse_events};
 pub use edit::{
     AssociationPlacement, EditCommit, EditFailure, EditOperation, EditTransaction,
-    EditTransactionBuilder, RepresentationPolicy, ScalarReplacement,
+    EditTransactionBuilder, RepresentationPolicy, ScalarReplacement, edit_failure_code,
 };
 pub use materialization::{
     CompleteGraphMaterialization, FailedGraphMaterializationAttempt, GraphMaterializationFailure,
     GraphMaterializationInputLocation, GraphMaterializationProvenanceEntry,
-    GraphMaterializationProvenanceMap, GraphMaterializationResult, materialize_graph,
-    materialize_value,
+    GraphMaterializationProvenanceMap, GraphMaterializationResult,
+    graph_materialization_failure_code, materialize_graph, materialize_value,
 };
 pub use native::GraphProjectionError;
 use native::{NativeContent, NativeStream, node_ref};
@@ -42,7 +42,7 @@ pub use projection::{
     GraphProvenanceMap, MappingPolicy, ProjectedLocation, ProjectionEvent, ProjectionEventKind,
     ProjectionReport, ProvenanceEntry, ProvenanceMap, ProvenanceRelation, SharingPolicy,
     SourceOrigin, TagPolicy, ValueProjectionFailure, ValueProjectionLimits, ValueProjectionRequest,
-    ValueProjectionResult,
+    ValueProjectionResult, graph_projection_failure_code, value_projection_failure_code,
 };
 pub use query::{
     YamlMatch, YamlSyntaxMatch, execute_yaml_query, execute_yaml_query_cursor,
