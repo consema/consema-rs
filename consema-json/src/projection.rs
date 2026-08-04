@@ -844,7 +844,7 @@ mod tests {
                     location.role(),
                     entry.origins.first().expect("origin").node.role(),
                 )),
-                _ => None,
+                ProjectedLocation::Value(_) => None,
             })
             .collect();
         assert_eq!(

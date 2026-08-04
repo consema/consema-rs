@@ -303,10 +303,10 @@ impl consema_core::StableFailure for EditFailure {
             | Self::IncompleteTarget
             | Self::SemanticUnavailable
             | Self::InvalidLiteral
-            | Self::ExactLiteralRequiresLiteralOperation => consema_core::FailureKind::InvalidInput,
+            | Self::ExactLiteralRequiresLiteralOperation
+            | Self::ConflictingEdits => consema_core::FailureKind::InvalidInput,
             Self::UnsupportedSemanticValue(_) => consema_core::FailureKind::Unsupported,
             Self::RepresentationIncompatible => consema_core::FailureKind::NotApplicable,
-            Self::ConflictingEdits => consema_core::FailureKind::InvalidInput,
             Self::NewDocumentFormationFailed => consema_core::FailureKind::Internal,
         }
     }
@@ -354,9 +354,10 @@ fn semantic_literal(
             preserved.ok_or(EditFailure::RepresentationIncompatible)
         }
         RepresentationPolicy::CanonicalForProfile => canonical_literal(value),
-        RepresentationPolicy::PreserveElseCanonical => match preserved {
-            Some(bytes) => Ok(bytes),
-            None => {
+        RepresentationPolicy::PreserveElseCanonical => {
+            if let Some(bytes) = preserved {
+                Ok(bytes)
+            } else {
                 let mut diagnostic = Diagnostic::new(
                     "json.edit.representation-fallback@1",
                     DiagnosticCategory::Edit,
@@ -370,7 +371,7 @@ fn semantic_literal(
                 diagnostics.push(diagnostic);
                 canonical_literal(value)
             }
-        },
+        }
         RepresentationPolicy::ExactLiteral => {
             unreachable!("ExactLiteral is rejected before matching")
         }
@@ -568,8 +569,8 @@ fn render_decimal_style(value: &PortableValue, style: &DecimalLexicalStyle) -> O
     };
     if let Some(scale) = style.fraction_scale {
         let shift = match exponent.to_i64() {
-            Some(shift) if shift >= 0 => (shift as usize).checked_add(scale)?,
-            Some(negative) => scale.checked_sub(negative.unsigned_abs() as usize)?,
+            Some(shift) if shift >= 0 => usize::try_from(shift).ok()?.checked_add(scale)?,
+            Some(negative) => scale.checked_sub(usize::try_from(negative.unsigned_abs()).ok()?)?,
             None => return None,
         };
         if shift > MAX_PRESERVED_FRACTION_DIGITS {
