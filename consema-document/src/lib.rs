@@ -170,6 +170,22 @@ pub enum NodeRole {
     IniErrorLine,
     /// One INI lossless syntax piece.
     IniSyntaxPiece,
+    /// Complete Java Properties document.
+    PropertiesDocument,
+    /// One Java Properties natural source line.
+    PropertiesNaturalLine,
+    /// One Java Properties logical line.
+    PropertiesLogicalLine,
+    /// One Java Properties property occurrence.
+    PropertiesProperty,
+    /// One Java Properties comment occurrence.
+    PropertiesComment,
+    /// One Java Properties escape occurrence.
+    PropertiesEscape,
+    /// One recovered Java Properties error line.
+    PropertiesErrorLine,
+    /// One Java Properties lossless syntax piece.
+    PropertiesSyntaxPiece,
 }
 
 /// Opaque handle to one structural identity in exactly one snapshot.
