@@ -1,7 +1,8 @@
 //! Transferable raw source snapshots and verifiable source patches.
 
 use crate::schema::{
-    boolean, exact_fields, integer_u64, object, schema_fields, sequence, string, unsigned_u64,
+    boolean, exact_fields, integer_u64, object, schema_fields, sequence, string, unsigned_u32,
+    unsigned_u64,
 };
 use crate::{ProtocolError, ProtocolErrorKind};
 use consema_core::{ObjectBuilder, PortableValue, SequenceBuilder};
@@ -12,6 +13,37 @@ use consema_document::{
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
+
+/// Transferable `core.source-encoding@1` value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SourceEncodingMessage {
+    encoding: SourceEncoding,
+}
+
+impl SourceEncodingMessage {
+    /// Wraps one normalized source encoding.
+    #[must_use]
+    pub const fn from_encoding(encoding: SourceEncoding) -> Self {
+        Self { encoding }
+    }
+
+    /// Normalized source encoding.
+    #[must_use]
+    pub const fn encoding(self) -> SourceEncoding {
+        self.encoding
+    }
+
+    /// Encodes the exact standalone source-encoding schema.
+    #[must_use]
+    pub fn to_value(self) -> PortableValue {
+        source_encoding_value(self.encoding)
+    }
+
+    /// Strictly decodes one canonical source-encoding value.
+    pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        source_encoding_from_value(value, "$").map(Self::from_encoding)
+    }
+}
 
 /// Transferable `core.source-snapshot@1` content fact.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -320,6 +352,72 @@ fn digest_from_value(value: &PortableValue, path: &str) -> Result<ContentDigest,
     Ok(ContentDigest::from_bytes(decoded))
 }
 
+fn source_encoding_value(encoding: SourceEncoding) -> PortableValue {
+    let (kind, windows_code_page) = match encoding {
+        SourceEncoding::Binary => ("Binary", PortableValue::null()),
+        SourceEncoding::Utf8 => ("Utf8", PortableValue::null()),
+        SourceEncoding::Utf16Le => ("Utf16Le", PortableValue::null()),
+        SourceEncoding::Utf16Be => ("Utf16Be", PortableValue::null()),
+        SourceEncoding::Latin1 => ("Latin1", PortableValue::null()),
+        SourceEncoding::WindowsCodePage(code_page) => (
+            "WindowsCodePage",
+            integer_u64(u64::from(code_page.number())),
+        ),
+    };
+    object(vec![
+        ("schema", PortableValue::string("core.source-encoding@1")),
+        ("kind", PortableValue::string(kind)),
+        ("windows_code_page", windows_code_page),
+    ])
+}
+
+fn source_encoding_from_value(
+    value: &PortableValue,
+    path: &str,
+) -> Result<SourceEncoding, ProtocolError> {
+    let fields = schema_fields(
+        value,
+        "core.source-encoding@1",
+        &["schema", "kind", "windows_code_page"],
+        path,
+    )?;
+    let kind = string(fields[1], &format!("{path}.kind"))?;
+    let code_page_path = format!("{path}.windows_code_page");
+    match kind {
+        "Binary" | "Utf8" | "Utf16Le" | "Utf16Be" | "Latin1" => {
+            if fields[2] != &PortableValue::null() {
+                return Err(crate::schema::invalid(
+                    &code_page_path,
+                    "non-Windows encoding requires null",
+                ));
+            }
+            Ok(match kind {
+                "Binary" => SourceEncoding::Binary,
+                "Utf8" => SourceEncoding::Utf8,
+                "Utf16Le" => SourceEncoding::Utf16Le,
+                "Utf16Be" => SourceEncoding::Utf16Be,
+                "Latin1" => SourceEncoding::Latin1,
+                _ => unreachable!("matched closed source encoding kind"),
+            })
+        }
+        "WindowsCodePage" => {
+            let number = unsigned_u32(fields[2], &code_page_path)?;
+            let number = u16::try_from(number).map_err(|_| {
+                crate::schema::invalid(&code_page_path, "unsupported Windows code page")
+            })?;
+            consema_document::WindowsCodePage::from_number(number)
+                .map(SourceEncoding::WindowsCodePage)
+                .ok_or_else(|| {
+                    crate::schema::invalid(&code_page_path, "unsupported Windows code page")
+                })
+        }
+        _ => Err(crate::schema::invalid(
+            &format!("{path}.kind"),
+            "unknown source encoding kind",
+        )),
+    }
+}
+
 fn encoding_value(facts: EncodingFacts) -> PortableValue {
     object(vec![
         (
@@ -507,6 +605,78 @@ fn patch_error(error: SourcePatchError) -> ProtocolError {
 mod tests {
     use super::*;
     use crate::{ProtocolLimits, decode_json, decode_pvce, encode_json, encode_pvce};
+
+    #[test]
+    fn source_encoding_contract_is_exact_and_canonical() {
+        let mut encodings = vec![
+            SourceEncoding::Binary,
+            SourceEncoding::Utf8,
+            SourceEncoding::Utf16Le,
+            SourceEncoding::Utf16Be,
+            SourceEncoding::Latin1,
+        ];
+        encodings.extend(
+            [
+                874, 932, 936, 949, 950, 1250, 1251, 1252, 1253, 1254, 1255, 1256, 1257, 1258,
+                65001,
+            ]
+            .into_iter()
+            .map(|number| {
+                SourceEncoding::WindowsCodePage(
+                    consema_document::WindowsCodePage::from_number(number).unwrap(),
+                )
+            }),
+        );
+        for encoding in encodings {
+            let value = SourceEncodingMessage::from_encoding(encoding).to_value();
+            for transported in [
+                decode_json(
+                    &encode_json(&value, ProtocolLimits::default()).unwrap(),
+                    ProtocolLimits::default(),
+                )
+                .unwrap(),
+                decode_pvce(
+                    &encode_pvce(&value, ProtocolLimits::default()).unwrap(),
+                    ProtocolLimits::default(),
+                )
+                .unwrap(),
+            ] {
+                let decoded = SourceEncodingMessage::from_value(&transported).unwrap();
+                assert_eq!(decoded.encoding(), encoding);
+                assert_eq!(decoded.to_value(), value);
+            }
+        }
+
+        for invalid in [
+            object(vec![
+                ("schema", PortableValue::string("core.source-encoding@1")),
+                ("kind", PortableValue::string("Utf8")),
+                ("windows_code_page", integer_u64(65001)),
+            ]),
+            object(vec![
+                ("schema", PortableValue::string("core.source-encoding@1")),
+                ("kind", PortableValue::string("WindowsCodePage")),
+                ("windows_code_page", PortableValue::null()),
+            ]),
+            object(vec![
+                ("schema", PortableValue::string("core.source-encoding@1")),
+                ("kind", PortableValue::string("WindowsCodePage")),
+                ("windows_code_page", integer_u64(437)),
+            ]),
+            object(vec![
+                ("schema", PortableValue::string("core.source-encoding@1")),
+                ("kind", PortableValue::string("WindowsCodePage")),
+                ("windows_code_page", integer_u64(u64::from(u32::MAX) + 1)),
+            ]),
+            object(vec![
+                ("schema", PortableValue::string("core.source-encoding@1")),
+                ("kind", PortableValue::string("GBK")),
+                ("windows_code_page", integer_u64(936)),
+            ]),
+        ] {
+            assert!(SourceEncodingMessage::from_value(&invalid).is_err());
+        }
+    }
 
     #[test]
     fn source_snapshot_round_trips_all_facts_through_both_transports() {

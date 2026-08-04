@@ -69,7 +69,7 @@ pub use query::{
 };
 pub use registry::{CapabilityDeclaration, ProfileDescriptor, ProfileReference};
 pub use registry_manifest::{ContractManifestEntry, ErrorCodeManifestEntry, RegistryManifest};
-pub use source::{SourcePatchMessage, SourceSnapshotMessage};
+pub use source::{SourceEncodingMessage, SourcePatchMessage, SourceSnapshotMessage};
 pub use value_transport::{decode_json, decode_pvce, encode_json, encode_pvce};
 pub use yaml_query::{YamlMatchLocator, YamlQueryResultMessage};
 
