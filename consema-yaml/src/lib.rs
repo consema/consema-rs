@@ -23,8 +23,8 @@ mod syntax;
 
 use backend::{BackendError, BackendEventKind, parse_events};
 pub use edit::{
-    EditCommit, EditFailure, EditOperation, EditTransaction, EditTransactionBuilder,
-    RepresentationPolicy, ScalarReplacement,
+    AssociationPlacement, EditCommit, EditFailure, EditOperation, EditTransaction,
+    EditTransactionBuilder, RepresentationPolicy, ScalarReplacement,
 };
 pub use materialization::{
     CompleteGraphMaterialization, FailedGraphMaterializationAttempt, GraphMaterializationFailure,
