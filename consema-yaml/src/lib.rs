@@ -14,12 +14,18 @@ use consema_document::{
 };
 
 mod backend;
+mod materialization;
 mod native;
 mod projection;
 mod query;
 mod syntax;
 
 use backend::{BackendError, BackendEventKind, parse_events};
+pub use materialization::{
+    CompleteGraphMaterialization, FailedGraphMaterializationAttempt, GraphMaterializationFailure,
+    GraphMaterializationInputLocation, GraphMaterializationProvenanceEntry,
+    GraphMaterializationProvenanceMap, GraphMaterializationResult, materialize_graph,
+};
 pub use native::GraphProjectionError;
 use native::{NativeContent, NativeStream, node_ref};
 pub use projection::{
@@ -267,9 +273,17 @@ pub fn parse(
     let text = source
         .decoded_text()
         .expect("YAML profiles always request decoded text");
-    validate_version_directives(text, profile)?;
-    let events = parse_events(text, limits.max_token_count, limits.max_nesting_depth)
-        .map_err(|error| backend_failure(error, &source))?;
+    let (backend_text, scalar_offset_base) = text
+        .strip_prefix('\u{feff}')
+        .map_or((text, 0), |without_bom| (without_bom, 1));
+    validate_version_directives(backend_text, profile)?;
+    let events = parse_events(
+        backend_text,
+        limits.max_token_count,
+        limits.max_nesting_depth,
+        scalar_offset_base,
+    )
+    .map_err(|error| backend_failure(error, &source))?;
     let document_count = events
         .iter()
         .filter(|event| matches!(event.kind, BackendEventKind::DocumentStart { .. }))

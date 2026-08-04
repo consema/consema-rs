@@ -23,12 +23,12 @@ pub(crate) const TAG_SEQ: &str = "tag:yaml.org,2002:seq";
 pub(crate) const TAG_MAP: &str = "tag:yaml.org,2002:map";
 pub(crate) const TAG_TIMESTAMP: &str = "tag:yaml.org,2002:timestamp";
 pub(crate) const TAG_BINARY: &str = "tag:yaml.org,2002:binary";
-const TAG_MERGE: &str = "tag:yaml.org,2002:merge";
-const TAG_OMAP: &str = "tag:yaml.org,2002:omap";
-const TAG_PAIRS: &str = "tag:yaml.org,2002:pairs";
-const TAG_SET: &str = "tag:yaml.org,2002:set";
-const TAG_VALUE: &str = "tag:yaml.org,2002:value";
-const TAG_YAML: &str = "tag:yaml.org,2002:yaml";
+pub(crate) const TAG_MERGE: &str = "tag:yaml.org,2002:merge";
+pub(crate) const TAG_OMAP: &str = "tag:yaml.org,2002:omap";
+pub(crate) const TAG_PAIRS: &str = "tag:yaml.org,2002:pairs";
+pub(crate) const TAG_SET: &str = "tag:yaml.org,2002:set";
+pub(crate) const TAG_VALUE: &str = "tag:yaml.org,2002:value";
+pub(crate) const TAG_YAML: &str = "tag:yaml.org,2002:yaml";
 
 #[derive(Clone, Debug)]
 pub(crate) struct NativeStream {

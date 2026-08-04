@@ -72,12 +72,13 @@ pub(crate) fn parse_events(
     text: &str,
     max_events: usize,
     max_depth: usize,
+    scalar_offset_base: usize,
 ) -> Result<Vec<BackendEvent>, BackendError> {
     let mut output = Vec::new();
     let mut depth = 0usize;
     for result in Parser::new_from_str(text).keep_tags(false) {
         let (event, span) = result.map_err(|error| BackendError::Syntax {
-            scalar_offset: error.marker().index(),
+            scalar_offset: error.marker().index().saturating_add(scalar_offset_base),
         })?;
         let kind = match event {
             Event::Nothing => continue,
@@ -135,8 +136,8 @@ pub(crate) fn parse_events(
         output.push(BackendEvent {
             kind,
             span: BackendSpan {
-                start_scalar: span.start.index(),
-                end_scalar: span.end.index(),
+                start_scalar: span.start.index().saturating_add(scalar_offset_base),
+                end_scalar: span.end.index().saturating_add(scalar_offset_base),
             },
         });
     }
@@ -181,7 +182,7 @@ mod tests {
     #[test]
     fn backend_preserves_styles_resolved_tags_anchors_aliases_and_documents() {
         let source = "%TAG !e! tag:example.com,2026:\n---\nroot: &node !e!thing [one, *node]\n---\nsecond: |\n  text\n";
-        let events = parse_events(source, 100, 10).unwrap();
+        let events = parse_events(source, 100, 10, 0).unwrap();
         assert_eq!(
             events
                 .iter()
@@ -214,7 +215,7 @@ mod tests {
     #[test]
     fn backend_spans_are_unicode_scalar_offsets_not_raw_bytes() {
         let source = "鍵: \"值\"";
-        let events = parse_events(source, 100, 10).unwrap();
+        let events = parse_events(source, 100, 10, 0).unwrap();
         let scalar = events
             .iter()
             .find(|event| {
@@ -238,7 +239,7 @@ mod tests {
     #[test]
     fn backend_limits_fail_without_partial_events() {
         assert_eq!(
-            parse_events("[[x]]", 100, 1).unwrap_err(),
+            parse_events("[[x]]", 100, 1, 0).unwrap_err(),
             BackendError::ResourceLimit {
                 name: "nesting-depth",
                 observed: 2,
@@ -246,7 +247,7 @@ mod tests {
             }
         );
         assert_eq!(
-            parse_events("x", 2, 10).unwrap_err(),
+            parse_events("x", 2, 10, 0).unwrap_err(),
             BackendError::ResourceLimit {
                 name: "syntax-events",
                 observed: 3,
