@@ -44,6 +44,18 @@ impl QueryDomain {
         Self::new("toml.native-semantic-query", 1)
     }
 
+    /// `json.lossless-syntax-query@1`.
+    #[must_use]
+    pub fn json_lossless_syntax_v1() -> Self {
+        Self::new("json.lossless-syntax-query", 1)
+    }
+
+    /// `toml.lossless-syntax-query@1`.
+    #[must_use]
+    pub fn toml_lossless_syntax_v1() -> Self {
+        Self::new("toml.lossless-syntax-query", 1)
+    }
+
     /// Domain namespace.
     #[must_use]
     pub fn id(&self) -> &str {
@@ -78,6 +90,10 @@ pub enum MatchRole {
     TomlEntry,
     /// TOML array or array-of-tables element.
     TomlArrayElement,
+    /// JSON lossless syntax piece.
+    JsonSyntaxPiece,
+    /// TOML lossless syntax piece.
+    TomlSyntaxPiece,
 }
 
 /// One versioned operator call with deterministic arguments.
@@ -268,6 +284,8 @@ impl QueryDefinition {
             ("core.portable-value-query", 1) => MatchRole::Value,
             ("json.native-semantic-query", 1) => MatchRole::JsonValue,
             ("toml.native-semantic-query", 1) => MatchRole::TomlItem,
+            ("json.lossless-syntax-query", 1) => MatchRole::JsonSyntaxPiece,
+            ("toml.lossless-syntax-query", 1) => MatchRole::TomlSyntaxPiece,
             _ => return Err(QueryFailure::DomainMismatch(self.domain.clone())),
         };
         let output_role = validate_expression(&self.domain, &self.expression, input_role)?;
@@ -572,40 +590,44 @@ impl ExecutableQuery {
         limits: QueryLimits,
         cancellation: &CancellationToken,
     ) -> Result<QueryExecution<PortableMatch>, QueryFailure> {
+        let mut cursor = self.build_portable_cursor(target, limits, cancellation)?;
+        let mut matches = Vec::new();
+        while let Some(item) = cursor.next_match() {
+            matches.push(item?);
+        }
+        Ok(QueryExecution::completed(matches))
+    }
+
+    /// Returns a lazy ordered pull cursor.
+    ///
+    /// Definition and capability errors still fail before the first match.
+    /// Mid-stream failures surface through [`PortableQueryCursor::next_match`]
+    /// with a `Failed` terminal; cancellation surfaces `Cancelled`.
+    pub fn execute_portable_cursor<'a>(
+        &self,
+        target: &PortableValue,
+        limits: QueryLimits,
+        cancellation: &'a CancellationToken,
+    ) -> Result<PortableQueryCursor<'a>, QueryFailure> {
+        self.build_portable_cursor(target, limits, cancellation)
+    }
+
+    fn build_portable_cursor<'a>(
+        &self,
+        target: &PortableValue,
+        limits: QueryLimits,
+        cancellation: &'a CancellationToken,
+    ) -> Result<PortableQueryCursor<'a>, QueryFailure> {
         if self.definition().domain != QueryDomain::portable_value_v1() {
             return Err(QueryFailure::DomainMismatch(
                 self.definition().domain.clone(),
             ));
         }
-        let mut context = PortableExecutionContext {
-            limits,
-            cancellation,
-            steps: 0,
-        };
-        // The root is the first standard result; it must not bypass result limits.
-        context.step(1)?;
         let root = PortableMatch::Value {
             path: ValuePath::root(),
             value: target.clone(),
         };
-        let matches = execute_expression(self.definition().expression(), &[root], &mut context)?;
-        let matches = apply_selection(matches, self.definition().selection())?;
-        Ok(QueryExecution {
-            matches,
-            terminal: QueryTerminalState::Completed,
-        })
-    }
-
-    /// Returns an ordered cursor. Validation and capability errors have already
-    /// happened before this method can expose its first item.
-    pub fn execute_portable_cursor(
-        &self,
-        target: &PortableValue,
-        limits: QueryLimits,
-        cancellation: &CancellationToken,
-    ) -> Result<OrderedQueryCursor<PortableMatch>, QueryFailure> {
-        let execution = self.execute_portable(target, limits, cancellation)?;
-        Ok(OrderedQueryCursor::new(execution.matches))
+        build_portable_cursor_pipeline(self.definition(), root, limits, cancellation)
     }
 }
 
@@ -717,6 +739,26 @@ fn validate_operator(
             ("toml.native-semantic-query", "toml.array-element-item") => {
                 (MatchRole::TomlArrayElement, MatchRole::TomlItem, &[])
             }
+            ("json.lossless-syntax-query", "json.syntax-kind-is") => (
+                MatchRole::JsonSyntaxPiece,
+                MatchRole::JsonSyntaxPiece,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("json.lossless-syntax-query", "json.syntax-text-equals") => (
+                MatchRole::JsonSyntaxPiece,
+                MatchRole::JsonSyntaxPiece,
+                &[("text", PortableValueKind::String)],
+            ),
+            ("toml.lossless-syntax-query", "toml.syntax-kind-is") => (
+                MatchRole::TomlSyntaxPiece,
+                MatchRole::TomlSyntaxPiece,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("toml.lossless-syntax-query", "toml.syntax-text-equals") => (
+                MatchRole::TomlSyntaxPiece,
+                MatchRole::TomlSyntaxPiece,
+                &[("text", PortableValueKind::String)],
+            ),
             (_, "core.take" | "core.distinct-by-identity") => (
                 input,
                 input,
@@ -773,7 +815,71 @@ fn validate_operator(
                 .expect("validated string"),
         )?;
     }
+    if operator.id() == "json.syntax-kind-is"
+        && !is_json_syntax_kind(
+            operator.arguments["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "toml.syntax-kind-is"
+        && !is_toml_syntax_kind(
+            operator.arguments["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
     Ok(output)
+}
+
+fn is_json_syntax_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Bom"
+            | "Whitespace"
+            | "LineComment"
+            | "BlockComment"
+            | "LeftBrace"
+            | "RightBrace"
+            | "LeftBracket"
+            | "RightBracket"
+            | "Colon"
+            | "Comma"
+            | "String"
+            | "Number"
+            | "True"
+            | "False"
+            | "Null"
+            | "ErrorRegion"
+    )
+}
+
+fn is_toml_syntax_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Whitespace"
+            | "Newline"
+            | "Comment"
+            | "String"
+            | "Bare"
+            | "Equals"
+            | "LeftBracket"
+            | "RightBracket"
+            | "LeftBrace"
+            | "RightBrace"
+            | "Comma"
+            | "Dot"
+    )
 }
 
 fn parse_kind(text: &str) -> Result<PortableValueKind, QueryFailure> {
@@ -853,63 +959,447 @@ enum PortableIdentity {
     Association(AssociationLocation),
 }
 
-struct PortableExecutionContext<'a> {
+struct LazyContext<'a> {
     limits: QueryLimits,
     cancellation: &'a CancellationToken,
     steps: usize,
 }
 
-impl PortableExecutionContext<'_> {
-    fn step(&mut self, produced: usize) -> Result<(), QueryFailure> {
+impl LazyContext<'_> {
+    fn step(&mut self) -> Result<(), QueryFailure> {
         if self.cancellation.is_cancelled() {
             return Err(QueryFailure::Cancelled);
         }
         self.steps = self.steps.saturating_add(1);
-        if self.steps > self.limits.max_steps || produced > self.limits.max_results {
+        if self.steps > self.limits.max_steps {
             return Err(QueryFailure::ResourceLimitExceeded);
         }
         Ok(())
     }
 }
 
-fn execute_expression(
-    expression: &QueryExpression,
-    input: &[PortableMatch],
-    context: &mut PortableExecutionContext<'_>,
-) -> Result<Vec<PortableMatch>, QueryFailure> {
-    match expression {
-        QueryExpression::Input => Ok(input.to_vec()),
-        QueryExpression::Apply {
-            input: expression_input,
-            operator,
-        } => {
-            let matches = execute_expression(expression_input, input, context)?;
-            apply_portable_operator(operator, matches, context)
-        }
-        QueryExpression::Concat(branches) => {
-            let mut output = Vec::new();
-            for branch in branches {
-                output.extend(execute_expression(branch, input, context)?);
-                context.step(output.len())?;
-            }
-            Ok(output)
-        }
-        QueryExpression::StructureOrderMerge(branches) => {
-            let mut output = Vec::new();
-            for branch in branches {
-                output.extend(execute_expression(branch, input, context)?);
-            }
-            output.sort_by_key(PortableMatch::identity);
-            context.step(output.len())?;
-            Ok(output)
+/// One pull step of the lazy ordered execution.
+trait Producer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure>;
+}
+
+struct InputProducer {
+    root: Option<PortableMatch>,
+}
+
+impl Producer for InputProducer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        context.step()?;
+        Ok(self.root.take())
+    }
+}
+
+struct VecProducer {
+    items: std::vec::IntoIter<PortableMatch>,
+}
+
+impl VecProducer {
+    fn new(items: Vec<PortableMatch>) -> Self {
+        Self {
+            items: items.into_iter(),
         }
     }
 }
 
-fn apply_portable_operator(
+impl Producer for VecProducer {
+    fn next(
+        &mut self,
+        _context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        Ok(self.items.next())
+    }
+}
+
+fn materialize(
+    producer: &mut Box<dyn Producer>,
+    context: &mut LazyContext<'_>,
+) -> Result<Vec<PortableMatch>, QueryFailure> {
+    let mut values = Vec::new();
+    while let Some(item) = producer.next(context)? {
+        values.push(item);
+        if values.len() > context.limits.max_results {
+            return Err(QueryFailure::ResourceLimitExceeded);
+        }
+    }
+    Ok(values)
+}
+
+fn build_producer(
+    expression: &QueryExpression,
+    input: Box<dyn Producer>,
+    context: &mut LazyContext<'_>,
+) -> Result<Box<dyn Producer>, QueryFailure> {
+    match expression {
+        QueryExpression::Input => Ok(input),
+        QueryExpression::Apply {
+            input: inner,
+            operator,
+        } => Ok(Box::new(ApplyProducer::new(
+            build_producer(inner, input, context)?,
+            operator.clone(),
+        ))),
+        QueryExpression::Concat(branches) | QueryExpression::StructureOrderMerge(branches) => {
+            let mut input = input;
+            let input_values = materialize(&mut input, context)?;
+            let cloned_inputs = input_values
+                .len()
+                .checked_mul(branches.len())
+                .ok_or(QueryFailure::ResourceLimitExceeded)?;
+            if cloned_inputs > context.limits.max_results {
+                return Err(QueryFailure::ResourceLimitExceeded);
+            }
+            let mut producers = Vec::with_capacity(branches.len());
+            for branch in branches {
+                context.step()?;
+                producers.push(build_producer(
+                    branch,
+                    Box::new(VecProducer::new(input_values.clone())),
+                    context,
+                )?);
+            }
+            if matches!(expression, QueryExpression::Concat(_)) {
+                Ok(Box::new(ConcatProducer::new(producers)))
+            } else {
+                Ok(Box::new(MergeProducer::new(producers)))
+            }
+        }
+    }
+}
+
+struct ApplyProducer {
+    input: Box<dyn Producer>,
+    operator: OperatorCall,
+    pending: Option<std::vec::IntoIter<PortableMatch>>,
+    seen: Option<HashSet<PortableIdentity>>,
+    remaining: Option<usize>,
+    results: usize,
+    done: bool,
+}
+
+impl ApplyProducer {
+    fn new(input: Box<dyn Producer>, operator: OperatorCall) -> Self {
+        Self {
+            input,
+            operator,
+            pending: None,
+            seen: None,
+            remaining: None,
+            results: 0,
+            done: false,
+        }
+    }
+
+    fn count(&mut self, context: &LazyContext<'_>) -> Result<(), QueryFailure> {
+        self.results = self.results.saturating_add(1);
+        if self.results > context.limits.max_results {
+            return Err(QueryFailure::ResourceLimitExceeded);
+        }
+        Ok(())
+    }
+}
+
+impl Producer for ApplyProducer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        loop {
+            if self.done {
+                return Ok(None);
+            }
+            if let Some(iter) = &mut self.pending
+                && let Some(item) = iter.next()
+            {
+                self.count(context)?;
+                return Ok(Some(item));
+            }
+            self.pending = None;
+            let Some(item) = self.input.next(context)? else {
+                self.done = true;
+                return Ok(None);
+            };
+            context.step()?;
+            match self.operator.id() {
+                "core.take" => {
+                    let count = self.remaining.get_or_insert_with(|| {
+                        self.operator.arguments()["count"]
+                            .as_integer()
+                            .and_then(crate::BigInteger::to_usize)
+                            .expect("query validation checked count")
+                    });
+                    if *count == 0 {
+                        self.done = true;
+                        return Ok(None);
+                    }
+                    *count -= 1;
+                    self.count(context)?;
+                    return Ok(Some(item));
+                }
+                "core.distinct-by-identity" => {
+                    let seen = self.seen.get_or_insert_with(HashSet::new);
+                    if seen.insert(item.identity()) {
+                        self.count(context)?;
+                        return Ok(Some(item));
+                    }
+                }
+                _ => {
+                    let output = apply_portable_operator_items(
+                        &self.operator,
+                        vec![item],
+                        context.limits.max_results,
+                    )?;
+                    if !output.is_empty() {
+                        self.pending = Some(output.into_iter());
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ConcatProducer {
+    producers: Vec<Box<dyn Producer>>,
+    index: usize,
+}
+
+impl ConcatProducer {
+    fn new(producers: Vec<Box<dyn Producer>>) -> Self {
+        Self {
+            producers,
+            index: 0,
+        }
+    }
+}
+
+impl Producer for ConcatProducer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        loop {
+            if self.index >= self.producers.len() {
+                return Ok(None);
+            }
+            if let Some(item) = self.producers[self.index].next(context)? {
+                return Ok(Some(item));
+            }
+            self.index += 1;
+            context.step()?;
+        }
+    }
+}
+
+struct MergeProducer {
+    producers: Vec<Box<dyn Producer>>,
+    remaining: Option<std::vec::IntoIter<PortableMatch>>,
+}
+
+impl MergeProducer {
+    fn new(producers: Vec<Box<dyn Producer>>) -> Self {
+        Self {
+            producers,
+            remaining: None,
+        }
+    }
+}
+
+impl Producer for MergeProducer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        if let Some(remaining) = &mut self.remaining {
+            return Ok(remaining.next());
+        }
+        let mut merged = Vec::new();
+        for producer in &mut self.producers {
+            merged.extend(materialize(producer, context)?);
+            if merged.len() > context.limits.max_results {
+                return Err(QueryFailure::ResourceLimitExceeded);
+            }
+        }
+        merged.sort_by_key(PortableMatch::identity);
+        self.remaining = Some(merged.into_iter());
+        Ok(self.remaining.as_mut().expect("just set").next())
+    }
+}
+
+fn selection_producer(selection: QuerySelection, child: Box<dyn Producer>) -> Box<dyn Producer> {
+    match selection {
+        QuerySelection::All => child,
+        QuerySelection::First => Box::new(FirstProducer { child, done: false }),
+        QuerySelection::Last => Box::new(LastProducer {
+            child,
+            state: LastState::Buffering,
+            buffer: Vec::new(),
+        }),
+        QuerySelection::ZeroOrOne => Box::new(ZeroOrOneProducer { child, count: 0 }),
+        QuerySelection::RequireOne => Box::new(RequireOneProducer {
+            child,
+            count: 0,
+            buffer: Vec::new(),
+            yielded: false,
+        }),
+    }
+}
+
+struct FirstProducer {
+    child: Box<dyn Producer>,
+    done: bool,
+}
+
+impl Producer for FirstProducer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        if self.done {
+            return Ok(None);
+        }
+        self.done = true;
+        self.child.next(context)
+    }
+}
+
+enum LastState {
+    Buffering,
+    Yielding(std::vec::IntoIter<PortableMatch>),
+}
+
+struct LastProducer {
+    child: Box<dyn Producer>,
+    state: LastState,
+    buffer: Vec<PortableMatch>,
+}
+
+impl Producer for LastProducer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        loop {
+            if let LastState::Yielding(iter) = &mut self.state {
+                return Ok(iter.next());
+            }
+            if let Some(item) = self.child.next(context)? {
+                self.buffer = vec![item];
+                continue;
+            }
+            let iter = std::mem::take(&mut self.buffer).into_iter();
+            self.state = LastState::Yielding(iter);
+        }
+    }
+}
+
+struct ZeroOrOneProducer {
+    child: Box<dyn Producer>,
+    count: usize,
+}
+
+impl Producer for ZeroOrOneProducer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        let Some(item) = self.child.next(context)? else {
+            return Ok(None);
+        };
+        if self.count == 1 {
+            return Err(QueryFailure::CardinalityViolation {
+                selection: QuerySelection::ZeroOrOne,
+                actual: 2,
+            });
+        }
+        self.count += 1;
+        Ok(Some(item))
+    }
+}
+
+struct RequireOneProducer {
+    child: Box<dyn Producer>,
+    count: usize,
+    buffer: Vec<PortableMatch>,
+    yielded: bool,
+}
+
+impl Producer for RequireOneProducer {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        if self.yielded {
+            return Ok(None);
+        }
+        loop {
+            if let Some(item) = self.child.next(context)? {
+                self.count += 1;
+                if self.count > 1 {
+                    return Err(QueryFailure::CardinalityViolation {
+                        selection: QuerySelection::RequireOne,
+                        actual: 2,
+                    });
+                }
+                self.buffer.push(item);
+            } else {
+                if self.count == 0 {
+                    return Err(QueryFailure::CardinalityViolation {
+                        selection: QuerySelection::RequireOne,
+                        actual: 0,
+                    });
+                }
+                self.yielded = true;
+                return Ok(self.buffer.pop());
+            }
+        }
+    }
+}
+
+/// Root result accounting: the root is the first standard result and may not
+/// bypass `max_results`; every later yielded result is counted the same way.
+struct RootCounter {
+    child: Box<dyn Producer>,
+    limits: QueryLimits,
+    root_checked: bool,
+    count: usize,
+}
+
+impl Producer for RootCounter {
+    fn next(
+        &mut self,
+        context: &mut LazyContext<'_>,
+    ) -> Result<Option<PortableMatch>, QueryFailure> {
+        if !self.root_checked {
+            self.root_checked = true;
+            if 1 > self.limits.max_results {
+                return Err(QueryFailure::ResourceLimitExceeded);
+            }
+        }
+        let Some(item) = self.child.next(context)? else {
+            return Ok(None);
+        };
+        self.count = self.count.saturating_add(1);
+        if self.count > self.limits.max_results {
+            return Err(QueryFailure::ResourceLimitExceeded);
+        }
+        Ok(Some(item))
+    }
+}
+
+fn apply_portable_operator_items(
     operator: &OperatorCall,
     input: Vec<PortableMatch>,
-    context: &mut PortableExecutionContext<'_>,
+    max_results: usize,
 ) -> Result<Vec<PortableMatch>, QueryFailure> {
     let mut output = Vec::new();
     match operator.id() {
@@ -918,7 +1408,11 @@ fn apply_portable_operator(
                 if let PortableMatch::Value { path, value } = item
                     && let Some(entries) = value.as_object()
                 {
-                    for (ordinal, entry) in entries.iter().enumerate() {
+                    for (ordinal, entry) in entries
+                        .iter()
+                        .take(max_results.saturating_add(1))
+                        .enumerate()
+                    {
                         let value_path =
                             path.child(ValuePathSegment::ObjectValue(entry.key().to_owned()));
                         output.push(PortableMatch::ObjectEntry {
@@ -961,7 +1455,11 @@ fn apply_portable_operator(
                 if let PortableMatch::Value { path, value } = item
                     && let Some(entries) = value.as_entry_mapping()
                 {
-                    for (ordinal, entry) in entries.iter().enumerate() {
+                    for (ordinal, entry) in entries
+                        .iter()
+                        .take(max_results.saturating_add(1))
+                        .enumerate()
+                    {
                         output.push(PortableMatch::EntryMappingEntry {
                             location: AssociationLocation::new(
                                 path.clone(),
@@ -1005,7 +1503,11 @@ fn apply_portable_operator(
                 if let PortableMatch::Value { path, value } = item
                     && let Some(elements) = value.as_sequence()
                 {
-                    for (index, element) in elements.iter().enumerate() {
+                    for (index, element) in elements
+                        .iter()
+                        .take(max_results.saturating_add(1))
+                        .enumerate()
+                    {
                         output.push(PortableMatch::Value {
                             path: path.child(ValuePathSegment::SequenceElement(index as u64)),
                             value: element.clone(),
@@ -1052,29 +1554,111 @@ fn apply_portable_operator(
         }
         _ => unreachable!("validated portable operator"),
     }
-    context.step(output.len())?;
     Ok(output)
 }
 
-fn apply_selection<T>(
-    mut values: Vec<T>,
-    selection: QuerySelection,
-) -> Result<Vec<T>, QueryFailure> {
-    match selection {
-        QuerySelection::All => Ok(values),
-        QuerySelection::First => Ok(values.into_iter().take(1).collect()),
-        QuerySelection::Last => Ok(values.pop().into_iter().collect()),
-        QuerySelection::ZeroOrOne if values.len() <= 1 => Ok(values),
-        QuerySelection::RequireOne if values.len() == 1 => Ok(values),
-        QuerySelection::ZeroOrOne | QuerySelection::RequireOne => {
-            Err(QueryFailure::CardinalityViolation {
-                selection,
-                actual: values.len(),
-            })
+/// Lazy pull cursor over a validated portable-value query.
+///
+/// The stream terminates with `Completed` only after every standard result
+/// was yielded, `Cancelled` when the token is cancelled before the stream is
+/// exhausted, and `Failed` when a resource limit or runtime error stops the
+/// stream. Matches yielded before a failure remain real local discoveries.
+pub struct PortableQueryCursor<'a> {
+    root: Box<dyn Producer>,
+    context: LazyContext<'a>,
+    terminal: Option<QueryTerminalState>,
+}
+
+impl<'a> PortableQueryCursor<'a> {
+    fn new(
+        root: Box<dyn Producer>,
+        limits: QueryLimits,
+        cancellation: &'a CancellationToken,
+    ) -> Self {
+        Self {
+            root,
+            context: LazyContext {
+                limits,
+                cancellation,
+                steps: 0,
+            },
+            terminal: None,
         }
+    }
+
+    /// Pulls the next match; `Ok(None)` means the stream completed.
+    pub fn next_match(&mut self) -> Option<Result<PortableMatch, QueryFailure>> {
+        if self.terminal.is_some() {
+            return None;
+        }
+        if self.context.cancellation.is_cancelled() {
+            self.terminal = Some(QueryTerminalState::Cancelled);
+            return Some(Err(QueryFailure::Cancelled));
+        }
+        match self.root.next(&mut self.context) {
+            Ok(Some(item)) => Some(Ok(item)),
+            Ok(None) => {
+                self.terminal = Some(QueryTerminalState::Completed);
+                None
+            }
+            Err(failure) => {
+                self.terminal = Some(if matches!(failure, QueryFailure::Cancelled) {
+                    QueryTerminalState::Cancelled
+                } else {
+                    QueryTerminalState::Failed
+                });
+                Some(Err(failure))
+            }
+        }
+    }
+
+    /// Terminal state; `None` while the stream is still open.
+    #[must_use]
+    pub const fn terminal_state(&self) -> Option<QueryTerminalState> {
+        self.terminal
     }
 }
 
+impl std::fmt::Debug for PortableQueryCursor<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PortableQueryCursor")
+            .field("steps", &self.context.steps)
+            .field("terminal", &self.terminal)
+            .finish_non_exhaustive()
+    }
+}
+
+fn build_portable_cursor_pipeline<'a>(
+    definition: &QueryDefinition,
+    root: PortableMatch,
+    limits: QueryLimits,
+    cancellation: &'a CancellationToken,
+) -> Result<PortableQueryCursor<'a>, QueryFailure> {
+    let mut context = LazyContext {
+        limits,
+        cancellation,
+        steps: 0,
+    };
+    let input = Box::new(InputProducer { root: Some(root) });
+    let expression = build_producer(definition.expression(), input, &mut context)?;
+    let expression = selection_producer(definition.selection(), expression);
+    let expression = Box::new(RootCounter {
+        child: expression,
+        limits,
+        root_checked: false,
+        count: 0,
+    });
+    Ok(PortableQueryCursor::new(expression, limits, cancellation))
+}
+
+impl Iterator for PortableQueryCursor<'_> {
+    type Item = Result<PortableMatch, QueryFailure>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_match()
+    }
+}
 /// Immutable query execution limits.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct QueryLimits {
@@ -1161,20 +1745,41 @@ pub enum QueryTerminalState {
 #[derive(Debug)]
 pub struct OrderedQueryCursor<T> {
     remaining: std::vec::IntoIter<T>,
+    declared_terminal: QueryTerminalState,
     terminal: Option<QueryTerminalState>,
+    cancellation: Option<CancellationToken>,
 }
 
 impl<T> OrderedQueryCursor<T> {
     /// Creates a cursor over a complete standard-order result.
     #[must_use]
     pub fn new(values: Vec<T>) -> Self {
+        Self::with_terminal(values, QueryTerminalState::Completed)
+    }
+
+    /// Creates a cursor with an explicit terminal state that remains hidden until exhaustion.
+    #[must_use]
+    pub fn with_terminal(values: Vec<T>, terminal: QueryTerminalState) -> Self {
         Self {
             remaining: values.into_iter(),
+            declared_terminal: terminal,
             terminal: None,
+            cancellation: None,
         }
     }
 
-    /// Becomes `Some(Completed)` only after the cursor is exhausted.
+    /// Creates a cursor that stops with `Cancelled` when the token is set.
+    #[must_use]
+    pub fn with_cancellation(values: Vec<T>, cancellation: &CancellationToken) -> Self {
+        Self {
+            remaining: values.into_iter(),
+            declared_terminal: QueryTerminalState::Completed,
+            terminal: None,
+            cancellation: Some(cancellation.clone()),
+        }
+    }
+
+    /// Terminal state; `None` while the cursor is still open.
     #[must_use]
     pub const fn terminal_state(&self) -> Option<QueryTerminalState> {
         self.terminal
@@ -1185,9 +1790,17 @@ impl<T> Iterator for OrderedQueryCursor<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self
+            .cancellation
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled)
+        {
+            self.terminal = Some(QueryTerminalState::Cancelled);
+            return None;
+        }
         let next = self.remaining.next();
         if next.is_none() {
-            self.terminal = Some(QueryTerminalState::Completed);
+            self.terminal = Some(self.declared_terminal);
         }
         next
     }
@@ -1307,12 +1920,137 @@ impl crate::StableFailure for QueryFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BigInteger, ObjectBuilder};
+    use crate::{BigInteger, ObjectBuilder, SequenceBuilder};
 
     fn capabilities() -> CapabilitySet {
         let mut capabilities = CapabilitySet::new();
         capabilities.insert(CapabilityId::new("core.query.ordered-results", 1));
         capabilities
+    }
+
+    #[test]
+    fn cursor_and_materialized_execution_share_identity_and_order() {
+        let mut object = ObjectBuilder::new();
+        object
+            .insert("a", PortableValue::integer(BigInteger::from(1_i64)))
+            .unwrap();
+        object
+            .insert("b", PortableValue::integer(BigInteger::from(2_i64)))
+            .unwrap();
+        let executable = QueryDefinition::new(QueryDomain::portable_value_v1())
+            .with_expression(
+                QueryExpression::Input
+                    .then(OperatorCall::new("core.try-object-entries", 1))
+                    .then(OperatorCall::new("core.object-entry-value", 1)),
+            )
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let target = object.build();
+        let materialized = executable
+            .execute_portable(&target, QueryLimits::default(), &CancellationToken::new())
+            .unwrap();
+        let cancellation = CancellationToken::new();
+        let mut cursor = executable
+            .execute_portable_cursor(&target, QueryLimits::default(), &cancellation)
+            .unwrap();
+        let mut from_cursor = Vec::new();
+        while let Some(item) = cursor.next_match() {
+            from_cursor.push(item.unwrap());
+        }
+        assert_eq!(cursor.terminal_state(), Some(QueryTerminalState::Completed));
+        assert_eq!(materialized.matches().to_vec(), from_cursor);
+    }
+
+    #[test]
+    fn cursor_cancellation_stops_stream_with_cancelled_terminal() {
+        let mut sequence = SequenceBuilder::new();
+        for value in [1, 2, 3] {
+            sequence.push(PortableValue::integer(BigInteger::from(value)));
+        }
+        let executable = QueryDefinition::new(QueryDomain::portable_value_v1())
+            .with_expression(
+                QueryExpression::Input.then(OperatorCall::new("core.try-sequence-elements", 1)),
+            )
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let token = CancellationToken::new();
+        let mut cursor = executable
+            .execute_portable_cursor(&sequence.build(), QueryLimits::default(), &token)
+            .unwrap();
+        assert!(cursor.next_match().is_some());
+        token.cancel();
+        assert!(matches!(
+            cursor.next_match(),
+            Some(Err(QueryFailure::Cancelled))
+        ));
+        assert_eq!(cursor.terminal_state(), Some(QueryTerminalState::Cancelled));
+        assert_eq!(cursor.next_match(), None);
+    }
+
+    #[test]
+    fn cursor_reports_resource_failure_with_failed_terminal() {
+        let mut sequence = SequenceBuilder::new();
+        for value in [1, 2, 3, 4, 5] {
+            sequence.push(PortableValue::integer(BigInteger::from(value)));
+        }
+        let executable = QueryDefinition::new(QueryDomain::portable_value_v1())
+            .with_expression(
+                QueryExpression::Input.then(OperatorCall::new("core.try-sequence-elements", 1)),
+            )
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let limits = QueryLimits {
+            max_results: 3,
+            ..QueryLimits::default()
+        };
+        let cancellation = CancellationToken::new();
+        let mut cursor = executable
+            .execute_portable_cursor(&sequence.build(), limits, &cancellation)
+            .unwrap();
+        let mut yielded = 0;
+        while let Some(item) = cursor.next_match() {
+            match item {
+                Ok(_) => yielded += 1,
+                Err(QueryFailure::ResourceLimitExceeded) => {
+                    assert_eq!(yielded, 3);
+                    assert_eq!(cursor.terminal_state(), Some(QueryTerminalState::Failed));
+                    return;
+                }
+                Err(other) => panic!("unexpected failure: {other:?}"),
+            }
+        }
+        panic!("stream should have failed");
+    }
+
+    #[test]
+    fn cursor_require_one_enforces_cardinality_at_exhaustion() {
+        let executable = QueryDefinition::new(QueryDomain::portable_value_v1())
+            .with_expression(QueryExpression::Input)
+            .with_selection(QuerySelection::RequireOne)
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let cancellation = CancellationToken::new();
+        let mut cursor = executable
+            .execute_portable_cursor(
+                &PortableValue::null(),
+                QueryLimits::default(),
+                &cancellation,
+            )
+            .unwrap();
+        assert!(matches!(
+            cursor.next_match(),
+            Some(Ok(PortableMatch::Value { .. }))
+        ));
+        assert_eq!(cursor.next_match(), None);
+        assert_eq!(cursor.terminal_state(), Some(QueryTerminalState::Completed));
     }
 
     #[test]
@@ -1446,5 +2184,50 @@ mod tests {
         }
         invalid.insert("unknown", PortableValue::null()).unwrap();
         assert!(QueryDefinition::from_protocol_value(&invalid.build()).is_err());
+    }
+
+    #[test]
+    fn syntax_kind_names_are_validated_before_binding() {
+        let definition = QueryDefinition::new(QueryDomain::json_lossless_syntax_v1())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("json.syntax-kind-is", 1)
+                        .with_argument("kind", PortableValue::string("NotAJsonKind")),
+                ),
+            );
+        assert!(matches!(
+            definition.validate(),
+            Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "kind"
+        ));
+
+        QueryDefinition::new(QueryDomain::toml_lossless_syntax_v1())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("toml.syntax-kind-is", 1)
+                        .with_argument("kind", PortableValue::string("Newline")),
+                ),
+            )
+            .validate()
+            .unwrap();
+    }
+
+    #[test]
+    fn cursor_declared_terminal_is_hidden_until_exhaustion() {
+        for terminal in [
+            QueryTerminalState::Completed,
+            QueryTerminalState::Cancelled,
+            QueryTerminalState::Failed,
+        ] {
+            let mut cursor = OrderedQueryCursor::with_terminal(vec![1, 2], terminal);
+            assert_eq!(cursor.terminal_state(), None);
+            assert_eq!(cursor.next(), Some(1));
+            assert_eq!(cursor.terminal_state(), None);
+            assert_eq!(cursor.next(), Some(2));
+            assert_eq!(cursor.terminal_state(), None);
+            assert_eq!(cursor.next(), None);
+            assert_eq!(cursor.terminal_state(), Some(terminal));
+            assert_eq!(cursor.next(), None);
+            assert_eq!(cursor.terminal_state(), Some(terminal));
+        }
     }
 }

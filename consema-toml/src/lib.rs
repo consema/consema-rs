@@ -22,7 +22,10 @@ pub use projection::{
     ProjectionLimits, ProjectionReport, ProjectionRequest, ProjectionResult, ProjectionTarget,
     ProvenanceEntry, ProvenanceMap, ProvenanceRelation, SourceOrigin,
 };
-pub use query::{TomlMatch, execute_toml_query, execute_toml_query_cursor};
+pub use query::{
+    TomlMatch, TomlSyntaxMatch, execute_toml_query, execute_toml_query_cursor,
+    execute_toml_syntax_query, execute_toml_syntax_query_cursor,
+};
 
 /// Frozen TOML language profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

@@ -1189,7 +1189,7 @@ mod tests {
     fn extension_semantic_support_requires_contract_validation() {
         struct EvenLengthContract;
         impl ExtensionContract for EvenLengthContract {
-            fn type_id(&self) -> &str {
+            fn type_id(&self) -> &'static str {
                 "example.even"
             }
 
@@ -1197,7 +1197,7 @@ mod tests {
                 1
             }
 
-            fn payload_codec_id(&self) -> &str {
+            fn payload_codec_id(&self) -> &'static str {
                 "example.raw@1"
             }
 

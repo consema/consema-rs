@@ -24,7 +24,10 @@ pub use projection::{
     ProjectionResult, ProjectionTarget, ProvenanceEntry, ProvenanceMap, ProvenanceRelation,
     SourceOrigin,
 };
-pub use query::{JsonMatch, execute_json_query, execute_json_query_cursor};
+pub use query::{
+    JsonMatch, JsonSyntaxMatch, execute_json_query, execute_json_query_cursor,
+    execute_json_syntax_query, execute_json_syntax_query_cursor,
+};
 
 /// Frozen JSON language profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

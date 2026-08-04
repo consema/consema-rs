@@ -1,9 +1,9 @@
-use crate::{Document, EntityKind, InternalItemKind, TomlItem, TomlItemKind};
+use crate::{Document, EntityKind, InternalItemKind, TomlItem, TomlItemKind, TomlSyntaxKind};
 use consema_core::{
     CancellationToken, ExecutableQuery, OperatorCall, OrderedQueryCursor, QueryExecution,
     QueryExpression, QueryFailure, QueryLimits, QuerySelection,
 };
-use consema_document::NodeRef;
+use consema_document::{NodeRef, NodeRole, Span};
 use std::collections::HashSet;
 
 /// Owned snapshot-bound TOML native semantic query match.
@@ -50,6 +50,41 @@ impl TomlMatch {
     }
 }
 
+/// Owned snapshot-bound TOML lossless syntax query match.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TomlSyntaxMatch {
+    node: NodeRef,
+    span: Span,
+    kind: TomlSyntaxKind,
+    ordinal: usize,
+}
+
+impl TomlSyntaxMatch {
+    /// Process-local syntax-piece identity.
+    #[must_use]
+    pub const fn node_ref(self) -> NodeRef {
+        self.node
+    }
+
+    /// Exact raw source span.
+    #[must_use]
+    pub const fn span(self) -> Span {
+        self.span
+    }
+
+    /// Format-specific lossless kind.
+    #[must_use]
+    pub const fn kind(self) -> TomlSyntaxKind {
+        self.kind
+    }
+
+    /// Zero-based source-order position.
+    #[must_use]
+    pub const fn ordinal(self) -> usize {
+        self.ordinal
+    }
+}
+
 /// Executes a validated TOML native semantic query against one immutable snapshot.
 pub fn execute_toml_query(
     executable: &ExecutableQuery,
@@ -85,6 +120,62 @@ pub fn execute_toml_query_cursor(
     cancellation: &CancellationToken,
 ) -> Result<OrderedQueryCursor<TomlMatch>, QueryFailure> {
     let result = execute_toml_query(executable, document, limits, cancellation)?;
+    Ok(OrderedQueryCursor::with_cancellation(
+        result.matches().to_vec(),
+        cancellation,
+    ))
+}
+
+/// Executes a validated TOML lossless syntax query against every source piece in raw order.
+pub fn execute_toml_syntax_query(
+    executable: &ExecutableQuery,
+    document: &Document,
+    limits: QueryLimits,
+    cancellation: &CancellationToken,
+) -> Result<QueryExecution<TomlSyntaxMatch>, QueryFailure> {
+    if executable.definition().domain().id() != "toml.lossless-syntax-query"
+        || executable.definition().domain().version() != 1
+    {
+        return Err(QueryFailure::DomainMismatch(
+            executable.definition().domain().clone(),
+        ));
+    }
+    let mut context = Context {
+        document,
+        limits,
+        cancellation,
+        steps: 0,
+    };
+    let pieces = document.lossless_structural_index().pieces();
+    context.step(pieces.len())?;
+    let input = pieces
+        .iter()
+        .zip(document.lossless_syntax_kinds())
+        .enumerate()
+        .map(|(ordinal, (piece, kind))| TomlSyntaxMatch {
+            node: document.authority.node_ref(
+                u64::try_from(ordinal).expect("parse limits keep syntax ordinals in u64"),
+                NodeRole::TomlSyntaxPiece,
+            ),
+            span: piece.span(),
+            kind: *kind,
+            ordinal,
+        })
+        .collect::<Vec<_>>();
+    let matches =
+        execute_syntax_expression(executable.definition().expression(), &input, &mut context)?;
+    let matches = apply_selection(matches, executable.definition().selection())?;
+    Ok(QueryExecution::completed(matches))
+}
+
+/// Executes a TOML lossless syntax query and exposes its complete ordered result as a cursor.
+pub fn execute_toml_syntax_query_cursor(
+    executable: &ExecutableQuery,
+    document: &Document,
+    limits: QueryLimits,
+    cancellation: &CancellationToken,
+) -> Result<OrderedQueryCursor<TomlSyntaxMatch>, QueryFailure> {
+    let result = execute_toml_syntax_query(executable, document, limits, cancellation)?;
     Ok(OrderedQueryCursor::new(result.matches().to_vec()))
 }
 
@@ -160,6 +251,91 @@ fn execute_expression(
             Ok(output)
         }
     }
+}
+
+fn execute_syntax_expression(
+    expression: &QueryExpression,
+    input: &[TomlSyntaxMatch],
+    context: &mut Context<'_>,
+) -> Result<Vec<TomlSyntaxMatch>, QueryFailure> {
+    match expression {
+        QueryExpression::Input => Ok(input.to_vec()),
+        QueryExpression::Apply {
+            input: expression_input,
+            operator,
+        } => {
+            let input = execute_syntax_expression(expression_input, input, context)?;
+            apply_syntax_operator(operator, input, context)
+        }
+        QueryExpression::Concat(branches) => {
+            let mut output = Vec::new();
+            for branch in branches {
+                output.extend(execute_syntax_expression(branch, input, context)?);
+                context.step(output.len())?;
+            }
+            Ok(output)
+        }
+        QueryExpression::StructureOrderMerge(branches) => {
+            let mut output = Vec::new();
+            for branch in branches {
+                output.extend(execute_syntax_expression(branch, input, context)?);
+            }
+            output.sort_by_key(|item| item.ordinal);
+            context.step(output.len())?;
+            Ok(output)
+        }
+    }
+}
+
+fn apply_syntax_operator(
+    operator: &OperatorCall,
+    input: Vec<TomlSyntaxMatch>,
+    context: &mut Context<'_>,
+) -> Result<Vec<TomlSyntaxMatch>, QueryFailure> {
+    let output: Vec<TomlSyntaxMatch> = match operator.id() {
+        "toml.syntax-kind-is" => {
+            let expected = TomlSyntaxKind::from_name(
+                operator.arguments()["kind"]
+                    .as_string()
+                    .expect("validated kind argument"),
+            )
+            .expect("kind name was validated before binding");
+            input
+                .into_iter()
+                .filter(|item| item.kind == expected)
+                .collect()
+        }
+        "toml.syntax-text-equals" => {
+            let expected = operator.arguments()["text"]
+                .as_string()
+                .expect("validated text argument")
+                .as_bytes();
+            input
+                .into_iter()
+                .filter(|item| {
+                    &context.document.source.bytes()[item.span.start_byte()..item.span.end_byte()]
+                        == expected
+                })
+                .collect()
+        }
+        "core.take" => {
+            let count = operator.arguments()["count"]
+                .as_integer()
+                .and_then(consema_core::BigInteger::to_usize)
+                .expect("validated take count");
+            input.into_iter().take(count).collect()
+        }
+        "core.distinct-by-identity" => {
+            let mut seen = HashSet::new();
+            input
+                .into_iter()
+                .filter(|item| seen.insert(item.node))
+                .collect()
+        }
+        _ => unreachable!("validated TOML syntax operator"),
+    };
+    context.step(output.len())?;
+    Ok(output)
 }
 
 fn apply_operator(
@@ -416,6 +592,61 @@ mod tests {
                 &cancellation,
             ),
             Err(QueryFailure::Cancelled)
+        );
+    }
+
+    #[test]
+    fn lossless_syntax_query_preserves_piece_order_kind_and_text() {
+        let document = parse(
+            b"a = 1 # note\nb = 2\n".as_slice(),
+            TomlProfile::Toml10V1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let newlines = QueryExpression::Input.then(
+            OperatorCall::new("toml.syntax-kind-is", 1)
+                .with_argument("kind", PortableValue::string("Newline")),
+        );
+        let comment = QueryExpression::Input.then(
+            OperatorCall::new("toml.syntax-text-equals", 1)
+                .with_argument("text", PortableValue::string("# note")),
+        );
+        let executable = QueryDefinition::new(QueryDomain::toml_lossless_syntax_v1())
+            .with_expression(QueryExpression::StructureOrderMerge(vec![
+                newlines, comment,
+            ]))
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let result = execute_toml_syntax_query(
+            &executable,
+            &document,
+            QueryLimits::default(),
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            result
+                .matches()
+                .iter()
+                .map(|item| item.kind())
+                .collect::<Vec<_>>(),
+            vec![
+                TomlSyntaxKind::Comment,
+                TomlSyntaxKind::Newline,
+                TomlSyntaxKind::Newline,
+            ]
+        );
+        assert_eq!(
+            result.matches()[0].node_ref().role(),
+            NodeRole::TomlSyntaxPiece
+        );
+        assert!(result.matches()[0].ordinal() < result.matches()[1].ordinal());
+        let span = result.matches()[0].span();
+        assert_eq!(
+            &document.source().bytes()[span.start_byte()..span.end_byte()],
+            b"# note"
         );
     }
 }
