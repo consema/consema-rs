@@ -1,6 +1,6 @@
 //! Audited projection-to-materialization composition.
 
-use crate::{Document, DocumentInner, core, document, json, toml, yaml};
+use crate::{Document, DocumentInner, core, document, ini, json, toml, yaml};
 use core::{OperationKind, PortableValue, StableFailure};
 use document::{
     CompleteMaterialization, MaterializationFidelity, MaterializationProvenanceMap,
@@ -22,6 +22,8 @@ pub enum ConversionFidelity {
 /// Complete format-owned projection report retained without flattening facts.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConversionProjectionReport {
+    /// INI projection report.
+    Ini(ini::ProjectionReport),
     /// JSON projection report.
     Json(json::ProjectionReport),
     /// TOML projection report.
@@ -33,6 +35,8 @@ pub enum ConversionProjectionReport {
 /// Complete format-owned source provenance retained for local audit.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConversionProjectionProvenance {
+    /// INI projection provenance.
+    Ini(ini::ProvenanceMap),
     /// JSON projection provenance.
     Json(json::ProvenanceMap),
     /// TOML projection provenance.
@@ -131,6 +135,11 @@ impl CompleteConversion {
                 ConversionProjectionReport::Json(report),
                 ConversionProjectionProvenance::Json(provenance),
             ) => json_projection_report_message(report, provenance, source_id)?,
+            (ConversionProjectionReport::Ini(report), ConversionProjectionProvenance::Ini(_))
+                if report.events().is_empty() =>
+            {
+                crate::protocol::ProjectionReportMessage::default()
+            }
             (ConversionProjectionReport::Toml(report), ConversionProjectionProvenance::Toml(_))
                 if report.events().is_empty() =>
             {
@@ -300,6 +309,32 @@ pub fn convert_json(
     }
 }
 
+/// Converts one INI document by composing its explicit projection and a target materializer.
+#[must_use]
+pub fn convert_ini(
+    source: &ini::Document,
+    projection_request: ini::ProjectionRequest,
+    materialization_request: &MaterializationRequest,
+) -> ConversionResult {
+    match source.project(projection_request) {
+        ini::ProjectionResult::Complete(projection) => complete_conversion(
+            source.profile(),
+            projection.value,
+            ini_fidelity(projection.fidelity),
+            ConversionProjectionReport::Ini(projection.report),
+            ConversionProjectionProvenance::Ini(projection.provenance),
+            materialization_request,
+        ),
+        ini::ProjectionResult::Failed(failure) => {
+            ConversionResult::Failed(ConversionFailure::ProjectionFailed {
+                report: ConversionProjectionReport::Ini(failure.report),
+                diagnostics: failure.diagnostics,
+                partial_analysis: Vec::new(),
+            })
+        }
+    }
+}
+
 /// Converts one TOML document by composing its published projection and a target materializer.
 #[must_use]
 pub fn convert_toml(
@@ -399,6 +434,26 @@ fn materialize_target(
     request: &MaterializationRequest,
 ) -> Result<MaterializedTarget, ConversionFailure> {
     match request.target_profile().id() {
+        "ini.portable" | "ini.windows" | "ini.python-configparser" => {
+            match ini::materialize(value, request) {
+                document::MaterializationResult::Complete(CompleteMaterialization {
+                    document,
+                    fidelity,
+                    report,
+                    provenance,
+                }) => Ok(MaterializedTarget {
+                    document: Document {
+                        inner: DocumentInner::Ini(Box::new(document)),
+                    },
+                    fidelity,
+                    report,
+                    provenance,
+                }),
+                document::MaterializationResult::Failed(failure) => {
+                    Err(materialization_failure(failure))
+                }
+            }
+        }
         "json.strict" | "jsonc.bounded" | "json5.standard" => {
             match json::materialize(value, request) {
                 document::MaterializationResult::Complete(CompleteMaterialization {
@@ -476,6 +531,14 @@ const fn json_fidelity(fidelity: json::Fidelity) -> ConversionFidelity {
         json::Fidelity::Exact => ConversionFidelity::Exact,
         json::Fidelity::Transformed => ConversionFidelity::Transformed,
         json::Fidelity::Lossy => ConversionFidelity::Lossy,
+    }
+}
+
+const fn ini_fidelity(fidelity: ini::Fidelity) -> ConversionFidelity {
+    match fidelity {
+        ini::Fidelity::Exact => ConversionFidelity::Exact,
+        ini::Fidelity::Transformed => ConversionFidelity::Transformed,
+        ini::Fidelity::Lossy => ConversionFidelity::Lossy,
     }
 }
 
@@ -623,10 +686,17 @@ mod tests {
     fn projection_provenance_json(complete: &CompleteConversion) -> &[json::ProvenanceEntry] {
         match &complete.projection_provenance {
             ConversionProjectionProvenance::Json(provenance) => provenance.entries(),
-            ConversionProjectionProvenance::Toml(_) | ConversionProjectionProvenance::Yaml(_) => {
-                &[]
-            }
+            ConversionProjectionProvenance::Ini(_)
+            | ConversionProjectionProvenance::Toml(_)
+            | ConversionProjectionProvenance::Yaml(_) => &[],
         }
+    }
+
+    fn ini_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("ini.portable", 1),
+            MaterializationStyleId::new("ini.portable-canonical", 1),
+        )
     }
 
     fn toml_request() -> MaterializationRequest {
@@ -1077,6 +1147,103 @@ mod tests {
             convert_yaml(&cyclic, duplicated, &json_request()),
             ConversionResult::Failed(ConversionFailure::YamlProjectionFailed {
                 failure: yaml::ValueProjectionFailure::Cycle { .. }
+            })
+        ));
+    }
+
+    #[test]
+    fn ini_and_json_convert_exactly_in_both_directions() {
+        let ini_source = ini::parse(
+            b"[service]\nname=api\nport=8080\n".as_slice(),
+            ini::IniProfile::PortableV1,
+            ini::IniEncodingSelection::ProfileDefault,
+            ini::IniParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(json_target) = convert_ini(
+            &ini_source,
+            ini::ProjectionRequest::best_exact_entry_mapping(),
+            &json_request(),
+        ) else {
+            panic!("INI to JSON should complete exactly")
+        };
+        assert_eq!(
+            json_target.document.render(),
+            br#"{"service":{"name":"api","port":"8080"}}"#
+        );
+        assert_eq!(
+            json_target.report.overall_fidelity(),
+            ConversionFidelity::Exact
+        );
+        assert!(matches!(
+            json_target.projection_provenance,
+            ConversionProjectionProvenance::Ini(_)
+        ));
+        let report = json_target
+            .protocol_report("source:ini", "target:json")
+            .unwrap();
+        assert_eq!(
+            report.overall_fidelity(),
+            protocol::ConversionFidelityMessage::Exact
+        );
+
+        let json_source = json::parse(
+            br#"{"service":{"name":"api","port":"8080"}}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection = ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        let ConversionResult::Complete(ini_target) =
+            convert_json(&json_source, &projection, &ini_request())
+        else {
+            panic!("JSON to INI should complete exactly")
+        };
+        assert_eq!(
+            ini_target.document.render(),
+            b"[service]\nname=api\nport=8080\n"
+        );
+        assert_eq!(
+            ini_target.report.target_profile(),
+            &ProfileId::new("ini.portable", 1)
+        );
+        assert_eq!(ini_target.document.as_ini().unwrap().entries().len(), 2);
+    }
+
+    #[test]
+    fn ini_conversion_failures_publish_no_partial_target() {
+        let malformed = ini::parse(
+            b"[service]\nbroken\n".as_slice(),
+            ini::IniProfile::PortableV1,
+            ini::IniEncodingSelection::ProfileDefault,
+            ini::IniParseLimits::default(),
+        )
+        .unwrap();
+        assert!(matches!(
+            convert_ini(
+                &malformed,
+                ini::ProjectionRequest::best_exact_entry_mapping(),
+                &json_request(),
+            ),
+            ConversionResult::Failed(ConversionFailure::ProjectionFailed { .. })
+        ));
+
+        let json_source = json::parse(
+            br#"{"service":{"port":8080}}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection = ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        assert!(matches!(
+            convert_json(&json_source, &projection, &ini_request()),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::Unrepresentable { .. },
+                ..
             })
         ));
     }

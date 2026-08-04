@@ -4,8 +4,8 @@ mod conversion;
 
 pub use conversion::{
     CompleteConversion, ConversionFailure, ConversionFidelity, ConversionProjectionProvenance,
-    ConversionProjectionReport, ConversionReport, ConversionResult, convert_json, convert_toml,
-    convert_yaml,
+    ConversionProjectionReport, ConversionReport, ConversionResult, convert_ini, convert_json,
+    convert_toml, convert_yaml,
 };
 
 pub use consema_core as core;
