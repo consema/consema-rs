@@ -591,6 +591,12 @@ impl Parser {
             PropertiesValueState::Present
         };
         let span = self.logical_source_span(first_line, last_line)?;
+        let key_anchor =
+            self.logical_anchor_span(logical_atoms, key_range.start, span.start_byte())?;
+        let value_anchor =
+            self.logical_anchor_span(logical_atoms, value_range.start, span.end_byte())?;
+        let key_fragments = self.fragment_spans(logical_atoms, key_range)?;
+        let value_fragments = self.fragment_spans(logical_atoms, value_range)?;
         self.logical_lines.push(PropertiesLogicalLine {
             node: logical_node,
             kind: PropertiesLogicalLineKind::Property,
@@ -600,8 +606,10 @@ impl Parser {
             node: property_node,
             logical_line: logical_node,
             span,
-            key_fragments: Arc::from(self.fragment_spans(logical_atoms, key_range)?),
-            value_fragments: Arc::from(self.fragment_spans(logical_atoms, value_range)?),
+            key_anchor,
+            value_anchor,
+            key_fragments: Arc::from(key_fragments),
+            value_fragments: Arc::from(value_fragments),
             key: JavaString::from_code_units(key.units),
             value: JavaString::from_code_units(value.units),
             value_state,
@@ -768,6 +776,25 @@ impl Parser {
         let first = &self.lines[first_line];
         let last = &self.lines[last_line];
         self.atom_span(first.atom_start, last.atom_content_end)
+    }
+
+    fn logical_anchor_span(
+        &self,
+        logical_atoms: &[usize],
+        position: usize,
+        empty_fallback: usize,
+    ) -> Result<Span, FatalFormationFailure> {
+        let raw = logical_atoms.get(position).map_or_else(
+            || {
+                logical_atoms
+                    .last()
+                    .map_or(empty_fallback, |index| self.atoms[*index].raw_end)
+            },
+            |index| self.atoms[*index].raw_start,
+        );
+        self.authority
+            .span(raw, raw)
+            .map_err(|_| FatalFormationFailure::resource_limit("source-coordinate-boundary", 1, 0))
     }
 
     fn atom_span(&self, start: usize, end: usize) -> Result<Span, FatalFormationFailure> {

@@ -9,8 +9,14 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 mod parser;
+mod projection;
 mod query;
 
+pub use projection::{
+    CompleteProjection, DuplicatePolicy, FailedProjectionAttempt, Fidelity, ProjectedLocation,
+    ProjectionEvent, ProjectionLimits, ProjectionReport, ProjectionRequest, ProjectionResult,
+    ProjectionTarget, ProvenanceEntry, ProvenanceMap, ProvenanceRelation, SourceOrigin,
+};
 pub use query::{
     PropertiesMatch, PropertiesSyntaxMatch, execute_properties_query,
     execute_properties_query_cursor, execute_properties_syntax_query,
@@ -448,6 +454,8 @@ pub struct Property {
     pub(crate) node: NodeRef,
     pub(crate) logical_line: NodeRef,
     pub(crate) span: Span,
+    pub(crate) key_anchor: Span,
+    pub(crate) value_anchor: Span,
     pub(crate) key_fragments: Arc<[Span]>,
     pub(crate) value_fragments: Arc<[Span]>,
     pub(crate) key: JavaString,
@@ -474,6 +482,18 @@ impl Property {
     #[must_use]
     pub const fn span(&self) -> Span {
         self.span
+    }
+
+    /// Zero-width source anchor at the start of the decoded key.
+    #[must_use]
+    pub const fn key_anchor(&self) -> Span {
+        self.key_anchor
+    }
+
+    /// Zero-width source anchor at the start of the decoded value.
+    #[must_use]
+    pub const fn value_anchor(&self) -> Span {
+        self.value_anchor
     }
 
     /// Ordered raw source fragments contributing to the key.
