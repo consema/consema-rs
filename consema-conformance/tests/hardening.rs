@@ -1,15 +1,23 @@
 //! Adversarial corpus and Rust publication-property checks.
 
-use consema_core::{ExecutableQuery, PortableValue, QueryDefinition, QueryExecution, QueryLimits};
+use consema_core::{
+    ExecutableQuery, ObjectBuilder, PortableValue, QueryDefinition, QueryExecution, QueryLimits,
+};
 use consema_document::{
-    ChangeSet, EncodingRequest, ParseLimits, SourceEncoding, SourceLimits, SourcePatch,
-    SourcePatchError, SourcePatchLimits, SourceReplacement, SourceSnapshot,
+    AssociationPlacement, ChangeSet, EncodingRequest, MaterializationLimits,
+    MaterializationRequest, MaterializationResult, MaterializationStyleId, NewlinePolicy,
+    ParseLimits, ProfileId, SourceEncoding, SourceLimits, SourcePatch, SourcePatchError,
+    SourcePatchLimits, SourceReplacement, SourceSnapshot,
 };
 use consema_json::{
-    CompleteProjection, Document, JsonProfile, ProjectionRequest, ProjectionResult, parse,
+    CompleteProjection, Document, EditTransactionBuilder as JsonEditBuilder, JsonProfile,
+    ProjectionRequest, ProjectionResult, parse,
 };
 use consema_protocol::{
-    CapabilityDeclaration, ChangeSetMessage, DiagnosticMessage, ProfileDescriptor,
+    CapabilityDeclaration, ChangeSetMessage, ContractId, ContractRegistry, ConversionReportMessage,
+    DiagnosticMessage, EditPlanMessage, FormatOperationRegistryMessage,
+    MaterializationProvenanceMapMessage, MaterializationReportMessage,
+    MaterializationRequestMessage, MaterializationResultMessage, ProfileDescriptor,
     ProjectionRequestMessage, ProjectionResultMessage, ProtocolError, ProtocolErrorKind,
     ProtocolLimits, ProtocolMessage, QueryResultMessage, RegistryManifest, SourcePatchMessage,
     SourceSnapshotMessage, decode_json, decode_pvce, encode_json, encode_pvce,
@@ -17,8 +25,8 @@ use consema_protocol::{
 use consema_pvce::{DecodeLimits, decode};
 use consema_toml::{
     CompleteProjection as TomlCompleteProjection, Document as TomlDocument,
-    ProjectionRequest as TomlProjectionRequest, ProjectionResult as TomlProjectionResult,
-    TomlProfile, parse as parse_toml,
+    EditTransactionBuilder as TomlEditBuilder, ProjectionRequest as TomlProjectionRequest,
+    ProjectionResult as TomlProjectionResult, TomlProfile, parse as parse_toml,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -54,6 +62,201 @@ fn completed_public_objects_are_send_and_sync() {
     assert_send_sync::<SourcePatch>();
     assert_send_sync::<SourceSnapshotMessage>();
     assert_send_sync::<SourcePatchMessage>();
+    assert_send_sync::<ConversionReportMessage>();
+    assert_send_sync::<EditPlanMessage>();
+    assert_send_sync::<FormatOperationRegistryMessage>();
+    assert_send_sync::<MaterializationProvenanceMapMessage>();
+    assert_send_sync::<MaterializationReportMessage>();
+    assert_send_sync::<MaterializationRequestMessage>();
+    assert_send_sync::<MaterializationResultMessage>();
+}
+
+fn object(key: &str, value: PortableValue) -> PortableValue {
+    let mut object = ObjectBuilder::new();
+    object.insert(key, value).unwrap();
+    object.build()
+}
+
+fn json_materialization_request(limits: MaterializationLimits) -> MaterializationRequest {
+    MaterializationRequest::new(
+        ProfileId::new("json.strict", 1),
+        MaterializationStyleId::new("json.canonical-compact", 1),
+    )
+    .with_newline(NewlinePolicy::None)
+    .with_limits(limits)
+}
+
+fn toml_materialization_request(limits: MaterializationLimits) -> MaterializationRequest {
+    MaterializationRequest::new(
+        ProfileId::new("toml.1.0", 1),
+        MaterializationStyleId::new("toml.canonical-document", 1),
+    )
+    .with_newline(NewlinePolicy::Lf)
+    .with_limits(limits)
+}
+
+#[test]
+fn bounded_materialization_never_returns_partial_documents() {
+    let mut deep = PortableValue::boolean(true);
+    for _ in 0..16 {
+        deep = PortableValue::sequence(vec![deep]);
+    }
+    let cases = [
+        (
+            deep,
+            MaterializationLimits {
+                max_depth: 3,
+                ..MaterializationLimits::default()
+            },
+        ),
+        (
+            PortableValue::sequence(vec![PortableValue::null(); 8]),
+            MaterializationLimits {
+                max_input_nodes: 4,
+                ..MaterializationLimits::default()
+            },
+        ),
+        (
+            PortableValue::string("x".repeat(128)),
+            MaterializationLimits {
+                max_output_bytes: 16,
+                ..MaterializationLimits::default()
+            },
+        ),
+        (
+            object("value", PortableValue::boolean(true)),
+            MaterializationLimits {
+                max_provenance_entries: 0,
+                ..MaterializationLimits::default()
+            },
+        ),
+    ];
+    for (value, limits) in cases {
+        match consema_json::materialize(&value, &json_materialization_request(limits)) {
+            MaterializationResult::Complete(_) => panic!("bounded JSON materialization completed"),
+            MaterializationResult::Failed(failure) => {
+                assert!(failure.analyzed_input_paths.len() <= limits.max_input_nodes);
+            }
+        }
+    }
+
+    let toml_cases = [
+        (
+            object(
+                "value",
+                PortableValue::sequence(vec![PortableValue::sequence(vec![
+                    PortableValue::sequence(vec![PortableValue::boolean(true)]),
+                ])]),
+            ),
+            MaterializationLimits {
+                max_depth: 2,
+                ..MaterializationLimits::default()
+            },
+        ),
+        (
+            object("value", PortableValue::string("x".repeat(128))),
+            MaterializationLimits {
+                max_output_bytes: 16,
+                ..MaterializationLimits::default()
+            },
+        ),
+        (
+            object("value", PortableValue::boolean(true)),
+            MaterializationLimits {
+                max_provenance_entries: 0,
+                ..MaterializationLimits::default()
+            },
+        ),
+    ];
+    for (value, limits) in toml_cases {
+        match consema_toml::materialize(&value, &toml_materialization_request(limits)) {
+            MaterializationResult::Complete(_) => panic!("bounded TOML materialization completed"),
+            MaterializationResult::Failed(failure) => {
+                assert!(failure.analyzed_input_paths.len() <= limits.max_input_nodes);
+            }
+        }
+    }
+}
+
+#[test]
+fn structural_transactions_are_snapshot_bound_and_atomic() {
+    let json_base = parse(
+        br#"{"stable":true}"#.as_slice(),
+        JsonProfile::StrictV1,
+        ParseLimits::default(),
+    )
+    .unwrap();
+    let json_other = parse(
+        br#"{"stable":true}"#.as_slice(),
+        JsonProfile::StrictV1,
+        ParseLimits::default(),
+    )
+    .unwrap();
+    let mut stale_json = JsonEditBuilder::new(&json_base);
+    stale_json.insert_member(
+        json_base.root().node_ref(),
+        "added",
+        PortableValue::boolean(true),
+        AssociationPlacement::End,
+    );
+    assert!(json_other.commit(&stale_json.build()).is_err());
+    assert_eq!(json_other.render(), br#"{"stable":true}"#);
+
+    let mut conflicting_json = JsonEditBuilder::new(&json_base);
+    conflicting_json
+        .insert_member(
+            json_base.root().node_ref(),
+            "first",
+            PortableValue::boolean(true),
+            AssociationPlacement::End,
+        )
+        .insert_member(
+            json_base.root().node_ref(),
+            "second",
+            PortableValue::boolean(false),
+            AssociationPlacement::End,
+        );
+    assert!(json_base.commit(&conflicting_json.build()).is_err());
+    assert_eq!(json_base.render(), br#"{"stable":true}"#);
+
+    let toml_base = parse_toml(
+        b"stable = true\n".as_slice(),
+        TomlProfile::Toml10V1,
+        ParseLimits::default(),
+    )
+    .unwrap();
+    let toml_other = parse_toml(
+        b"stable = true\n".as_slice(),
+        TomlProfile::Toml10V1,
+        ParseLimits::default(),
+    )
+    .unwrap();
+    let mut stale_toml = TomlEditBuilder::new(&toml_base);
+    stale_toml.insert_entry(
+        toml_base.root().node_ref(),
+        "added",
+        PortableValue::boolean(true),
+        AssociationPlacement::End,
+    );
+    assert!(toml_other.commit(&stale_toml.build()).is_err());
+    assert_eq!(toml_other.render(), b"stable = true\n");
+
+    let mut conflicting_toml = TomlEditBuilder::new(&toml_base);
+    conflicting_toml
+        .insert_entry(
+            toml_base.root().node_ref(),
+            "first",
+            PortableValue::boolean(true),
+            AssociationPlacement::End,
+        )
+        .insert_entry(
+            toml_base.root().node_ref(),
+            "second",
+            PortableValue::boolean(false),
+            AssociationPlacement::End,
+        );
+    assert!(toml_base.commit(&conflicting_toml.build()).is_err());
+    assert_eq!(toml_base.render(), b"stable = true\n");
 }
 
 #[test]
@@ -388,6 +591,75 @@ fn bounded_protocol_corpus_never_panics_or_bypasses_payload_validation() {
             .unwrap_err()
             .kind(),
         ProtocolErrorKind::UnknownField
+    );
+}
+
+#[test]
+fn protocol_v3_payloads_remain_registry_bound_under_mutation() {
+    let limits = ProtocolLimits::default();
+    let request = json_materialization_request(MaterializationLimits::default());
+    let payload = MaterializationRequestMessage::from_request(&request)
+        .to_value()
+        .unwrap();
+    let message = ProtocolMessage::new(
+        ContractId::new("core.materialization-request", 1).unwrap(),
+        payload,
+        ContractRegistry::v3(),
+    )
+    .unwrap();
+    let json = message.to_json(limits).unwrap();
+    let pvce = message.to_pvce(limits).unwrap();
+
+    assert_eq!(
+        ProtocolMessage::from_json(&json, limits, ContractRegistry::v3()).unwrap(),
+        message
+    );
+    assert_eq!(
+        ProtocolMessage::from_pvce(&pvce, limits, ContractRegistry::v3()).unwrap(),
+        message
+    );
+    assert_eq!(
+        ProtocolMessage::from_json(&json, limits, ContractRegistry::v2())
+            .unwrap_err()
+            .kind(),
+        ProtocolErrorKind::UnknownContract
+    );
+
+    for (bytes, json_transport) in [(&json, true), (&pvce, false)] {
+        for index in 0..bytes.len() {
+            let mut mutated = bytes.clone();
+            mutated[index] ^= 0x80;
+            if json_transport {
+                if let Ok(decoded) =
+                    ProtocolMessage::from_json(&mutated, limits, ContractRegistry::v3())
+                {
+                    assert_eq!(decoded.to_json(limits).unwrap(), mutated);
+                }
+            } else if let Ok(decoded) =
+                ProtocolMessage::from_pvce(&mutated, limits, ContractRegistry::v3())
+            {
+                assert_eq!(decoded.to_pvce(limits).unwrap(), mutated);
+            }
+        }
+        for end in 0..bytes.len() {
+            let decoded = if json_transport {
+                ProtocolMessage::from_json(&bytes[..end], limits, ContractRegistry::v3())
+            } else {
+                ProtocolMessage::from_pvce(&bytes[..end], limits, ContractRegistry::v3())
+            };
+            assert!(decoded.is_err());
+        }
+    }
+
+    let shallow = ProtocolLimits {
+        max_depth: 2,
+        ..limits
+    };
+    assert_eq!(
+        ProtocolMessage::from_json(&json, shallow, ContractRegistry::v3())
+            .unwrap_err()
+            .kind(),
+        ProtocolErrorKind::ResourceLimit
     );
 }
 
