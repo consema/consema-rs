@@ -839,7 +839,7 @@ fn comparison_name(
     }
     match (profile, is_key) {
         (IniProfile::WindowsV1, _) => value.to_ascii_lowercase(),
-        (IniProfile::PythonConfigParserV1, true) => value.to_lowercase(),
+        (IniProfile::PythonConfigParserV1, true) => crate::python_case::optionxform(value),
         (IniProfile::PortableV1 | IniProfile::PythonConfigParserV1, false)
         | (IniProfile::PortableV1, true) => value.to_owned(),
     }

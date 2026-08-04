@@ -1045,7 +1045,7 @@ impl Document {
             return Ok(());
         }
         let comparison = if self.profile == IniProfile::PythonConfigParserV1 {
-            key.to_lowercase()
+            crate::python_case::optionxform(key)
         } else {
             key.to_owned()
         };

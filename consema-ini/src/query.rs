@@ -686,7 +686,7 @@ fn key_comparison(profile: IniProfile, key: &str) -> String {
     match profile {
         IniProfile::PortableV1 => key.to_owned(),
         IniProfile::WindowsV1 => key.to_ascii_lowercase(),
-        IniProfile::PythonConfigParserV1 => key.to_lowercase(),
+        IniProfile::PythonConfigParserV1 => crate::python_case::optionxform(key),
     }
 }
 

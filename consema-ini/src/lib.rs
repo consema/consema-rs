@@ -12,6 +12,7 @@ mod materialization;
 mod operation_registry;
 mod parser;
 mod projection;
+mod python_case;
 mod query;
 
 pub use edit::{
