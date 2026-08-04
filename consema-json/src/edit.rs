@@ -4,8 +4,9 @@ use consema_core::{
 };
 use consema_document::{
     ChangeSet, NodeMapping, NodeMappingStatus, NodeRef, NodeRole, SnapshotIdentity, SourceEdit,
+    SourceLimits, SourcePatch, SourcePatchLimits, UntouchedByteProof,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 /// Explicit semantic scalar representation policy.
@@ -129,6 +130,10 @@ pub struct EditCommit {
     pub document: Document,
     /// Complete old-to-new change facts.
     pub change_set: ChangeSet,
+    /// Portable exact raw-byte application fact.
+    pub source_patch: SourcePatch,
+    /// Verifiable evidence for every byte outside the replacement set.
+    pub untouched_proof: UntouchedByteProof,
 }
 
 /// Stable edit validation or commit failure.
@@ -284,11 +289,58 @@ impl Document {
             mappings,
             diagnostics,
         );
+        let patch_limits = source_patch_limits(self.parse_limits, transaction.operations.len());
+        let source_patch = SourcePatch::derive(
+            &self.source,
+            new_document.source(),
+            &change_set,
+            operation_metadata(transaction),
+            patch_limits,
+        )
+        .map_err(|_| EditFailure::NewDocumentFormationFailed)?;
+        let untouched_proof = UntouchedByteProof::create(
+            &self.source,
+            new_document.source(),
+            source_patch.replacements(),
+        )
+        .map_err(|_| EditFailure::NewDocumentFormationFailed)?;
         Ok(EditCommit {
             document: new_document,
             change_set,
+            source_patch,
+            untouched_proof,
         })
     }
+}
+
+fn source_patch_limits(
+    parse_limits: consema_document::ParseLimits,
+    operation_count: usize,
+) -> SourcePatchLimits {
+    SourcePatchLimits {
+        source: SourceLimits {
+            max_raw_bytes: parse_limits.max_source_bytes,
+            max_decoded_utf8_bytes: parse_limits.max_source_bytes,
+            max_decoded_scalars: parse_limits.max_source_bytes,
+        },
+        max_replacements: operation_count,
+        max_patch_bytes: parse_limits.max_source_bytes.saturating_mul(2),
+    }
+}
+
+fn operation_metadata(transaction: &EditTransaction) -> BTreeMap<String, String> {
+    transaction
+        .operations
+        .iter()
+        .enumerate()
+        .map(|(index, operation)| {
+            let id = match operation {
+                ScalarReplacement::Semantic { .. } => "json.edit.replace-scalar-semantic@1",
+                ScalarReplacement::Literal { .. } => "json.edit.replace-scalar-literal@1",
+            };
+            (format!("operation.{index}"), id.to_owned())
+        })
+        .collect()
 }
 
 impl consema_core::StableFailure for EditFailure {
@@ -756,6 +808,23 @@ mod tests {
             b"{ /* lead */ \"a\" : 200 // tail\n}"
         );
         assert_eq!(commit.change_set.source_edits().len(), 1);
+        let patch_limits = source_patch_limits(document.parse_limits, 1);
+        assert_eq!(
+            commit
+                .source_patch
+                .apply(document.source(), patch_limits)
+                .unwrap()
+                .bytes(),
+            commit.document.render()
+        );
+        assert_eq!(
+            commit.untouched_proof.verify(
+                document.source(),
+                commit.document.source(),
+                commit.source_patch.replacements(),
+            ),
+            Ok(())
+        );
         assert_ne!(
             document.snapshot_identity(),
             commit.document.snapshot_identity()

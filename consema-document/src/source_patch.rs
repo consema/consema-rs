@@ -1,6 +1,6 @@
 //! Verifiable raw-byte patches between immutable source snapshots.
 
-use crate::{ContentDigest, EncodingFacts, SourceError, SourceLimits, SourceSnapshot};
+use crate::{ChangeSet, ContentDigest, EncodingFacts, SourceError, SourceLimits, SourceSnapshot};
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
@@ -141,6 +141,69 @@ pub struct SourcePatch {
 }
 
 impl SourcePatch {
+    /// Derives and verifies a portable patch from one complete document-level change fact.
+    pub fn derive(
+        base: &SourceSnapshot,
+        target: &SourceSnapshot,
+        change_set: &ChangeSet,
+        metadata: BTreeMap<String, String>,
+        limits: SourcePatchLimits,
+    ) -> Result<Self, SourcePatchError> {
+        if base.encoding_facts() != target.encoding_facts() {
+            return Err(SourcePatchError::EncodingMismatch);
+        }
+        let edits = change_set.source_edits();
+        let mut replacements = Vec::new();
+        replacements
+            .try_reserve(edits.len())
+            .map_err(|_| SourcePatchError::ResourceLimit {
+                name: "patch-allocation",
+                observed: edits.len(),
+                limit: limits.max_replacements,
+            })?;
+        let mut previous_new: Option<(usize, usize)> = None;
+        for (index, edit) in edits.iter().enumerate() {
+            if edit.old_span.snapshot() != change_set.old_snapshot()
+                || edit.new_span.snapshot() != change_set.new_snapshot()
+                || edit.old_span.end_byte() > base.bytes().len()
+                || edit.new_span.end_byte() > target.bytes().len()
+                || edit.replacement.as_ref()
+                    != &target.bytes()[edit.new_span.start_byte()..edit.new_span.end_byte()]
+            {
+                return Err(SourcePatchError::ChangeSetMismatch { index });
+            }
+            let new_range = (edit.new_span.start_byte(), edit.new_span.end_byte());
+            if let Some(previous) = previous_new {
+                if new_range <= previous || new_range.0 < previous.1 {
+                    return Err(SourcePatchError::ChangeSetMismatch { index });
+                }
+            }
+            let original = Arc::<[u8]>::from(
+                &base.bytes()[edit.old_span.start_byte()..edit.old_span.end_byte()],
+            );
+            replacements.push(SourceReplacement::new(
+                edit.old_span.start_byte(),
+                edit.old_span.end_byte(),
+                original,
+                edit.replacement.clone(),
+            ));
+            previous_new = Some(new_range);
+        }
+        let patch = Self::new(
+            base.digest(),
+            target.digest(),
+            base.encoding_facts(),
+            replacements,
+            metadata,
+            limits,
+        )?;
+        let reapplied = patch.apply(base, limits)?;
+        if reapplied.bytes() != target.bytes() {
+            return Err(SourcePatchError::TargetMismatch);
+        }
+        Ok(patch)
+    }
+
     /// Creates a patch from externally supplied facts after structural and resource validation.
     pub fn new(
         base_digest: ContentDigest,
@@ -250,6 +313,11 @@ impl SourcePatch {
 /// Stable source patch construction or application failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SourcePatchError {
+    /// A document-level source edit disagrees with its snapshots or replacement bytes.
+    ChangeSetMismatch {
+        /// Zero-based source edit position.
+        index: usize,
+    },
     /// Replacement start followed its end or its original byte count disagreed with its range.
     InvalidReplacement {
         /// Zero-based replacement position.
@@ -310,7 +378,8 @@ impl SourcePatchError {
             }
             Self::InvalidReplacement { .. }
             | Self::ReplacementOrder { .. }
-            | Self::DuplicateInsertion { .. } => "core.protocol.invalid-value@1",
+            | Self::DuplicateInsertion { .. }
+            | Self::ChangeSetMismatch { .. } => "core.protocol.invalid-value@1",
         }
     }
 }
@@ -425,7 +494,7 @@ fn check_limit(name: &'static str, observed: usize, limit: usize) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EncodingRequest, SourceEncoding};
+    use crate::{ChangeSet, DocumentAuthority, EncodingRequest, SourceEdit, SourceEncoding};
 
     fn utf8(bytes: &[u8]) -> SourceSnapshot {
         SourceSnapshot::from_utf8(Arc::<[u8]>::from(bytes)).unwrap()
@@ -451,6 +520,62 @@ mod tests {
         assert_eq!(
             patch.metadata().get("actor").map(String::as_str),
             Some("test")
+        );
+    }
+
+    #[test]
+    fn derives_exact_patch_from_document_change_facts() {
+        let base = utf8(b"abc");
+        let target = utf8(b"aXYc");
+        let old = DocumentAuthority::fresh();
+        let new = DocumentAuthority::fresh();
+        let change_set = ChangeSet::new(
+            old.identity(),
+            new.identity(),
+            vec![SourceEdit {
+                old_span: old.span(1, 2).unwrap(),
+                new_span: new.span(1, 3).unwrap(),
+                replacement: Arc::from(b"XY".as_slice()),
+            }],
+            Vec::new(),
+            Vec::new(),
+        );
+        let patch = SourcePatch::derive(
+            &base,
+            &target,
+            &change_set,
+            BTreeMap::new(),
+            SourcePatchLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            patch
+                .apply(&base, SourcePatchLimits::default())
+                .unwrap()
+                .bytes(),
+            target.bytes()
+        );
+
+        let inconsistent = ChangeSet::new(
+            old.identity(),
+            new.identity(),
+            vec![SourceEdit {
+                old_span: old.span(1, 2).unwrap(),
+                new_span: new.span(1, 3).unwrap(),
+                replacement: Arc::from(b"ZZ".as_slice()),
+            }],
+            Vec::new(),
+            Vec::new(),
+        );
+        assert_eq!(
+            SourcePatch::derive(
+                &base,
+                &target,
+                &inconsistent,
+                BTreeMap::new(),
+                SourcePatchLimits::default(),
+            ),
+            Err(SourcePatchError::ChangeSetMismatch { index: 0 })
         );
     }
 
