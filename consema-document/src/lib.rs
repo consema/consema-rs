@@ -6,9 +6,17 @@ use std::fmt::{self, Display, Formatter};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod materialization;
 mod source;
 mod source_patch;
 
+pub use materialization::{
+    FailedMaterializationAttempt, MappingPolicy, MaterializationFailure, MaterializationFidelity,
+    MaterializationInputLocation, MaterializationLimits, MaterializationProvenanceEntry,
+    MaterializationProvenanceMap, MaterializationRelation, MaterializationReport,
+    MaterializationRequest, MaterializationStyleId, MaterializedOrigin, NewlinePolicy,
+    RepresentabilityPolicy,
+};
 pub use source::{
     BomKind, ContentDigest, DecodedOffset, DecodedPosition, EncodingFacts, EncodingRequest,
     SourceEncoding, SourceError, SourceLimits, SourceSnapshot, UnsupportedBomKind,

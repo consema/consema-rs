@@ -13,6 +13,10 @@ pub enum OperationKind {
     QueryExecution,
     /// Projecting native semantics.
     Projection,
+    /// Materializing a portable representation into a new document.
+    Materialization,
+    /// Composing projection and materialization across profiles.
+    Conversion,
     /// Encoding a portable value.
     Encode,
     /// Decoding a portable value.
