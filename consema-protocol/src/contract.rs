@@ -175,10 +175,69 @@ const CONTRACTS_V5: &[ContractDescriptor] = &[
     descriptor("core.yaml-query-result", ContractStability::Stable),
 ];
 
+const CONTRACTS_V6: &[ContractDescriptor] = &[
+    descriptor("core.cancellation-request", ContractStability::Stable),
+    descriptor("core.capability-declaration", ContractStability::Stable),
+    descriptor("core.change-set", ContractStability::Stable),
+    descriptor("core.completion", ContractStability::Stable),
+    descriptor("core.conversion-report", ContractStability::Stable),
+    descriptor("core.diagnostic", ContractStability::Stable),
+    descriptor("core.edit-plan", ContractStability::Stable),
+    descriptor("core.error-code-registry", ContractStability::Stable),
+    descriptor("core.execution-policy", ContractStability::Stable),
+    descriptor("core.format-operation-registry", ContractStability::Stable),
+    descriptor("core.graph-projection-result", ContractStability::Stable),
+    descriptor("core.graph-provenance-map", ContractStability::Stable),
+    descriptor("core.graph-query-result", ContractStability::Stable),
+    descriptor("core.ini-query-result", ContractStability::Stable),
+    descriptor(
+        "core.java-properties-query-result",
+        ContractStability::Stable,
+    ),
+    descriptor("core.java-utf16-string", ContractStability::Stable),
+    descriptor(
+        "core.materialization-provenance-map",
+        ContractStability::Stable,
+    ),
+    descriptor("core.materialization-report", ContractStability::Stable),
+    descriptor("core.materialization-request", ContractStability::Stable),
+    descriptor_version("core.materialization-request", 2, ContractStability::Stable),
+    descriptor("core.materialization-result", ContractStability::Stable),
+    descriptor_version("core.materialization-result", 2, ContractStability::Stable),
+    descriptor("core.portable-graph", ContractStability::Stable),
+    descriptor("core.profile-descriptor", ContractStability::Stable),
+    descriptor("core.projection-report", ContractStability::Stable),
+    descriptor("core.projection-request", ContractStability::Stable),
+    descriptor("core.projection-result", ContractStability::Stable),
+    descriptor("core.protocol-message", ContractStability::Transport),
+    descriptor("core.provenance-map", ContractStability::Stable),
+    descriptor("core.query-definition", ContractStability::Stable),
+    descriptor("core.query-result", ContractStability::Stable),
+    descriptor("core.registry-manifest", ContractStability::Stable),
+    descriptor("core.source-encoding", ContractStability::Stable),
+    descriptor("core.source-patch", ContractStability::Stable),
+    descriptor_version("core.source-patch", 2, ContractStability::Stable),
+    descriptor("core.source-snapshot", ContractStability::Stable),
+    descriptor_version("core.source-snapshot", 2, ContractStability::Stable),
+    descriptor("core.yaml-query-result", ContractStability::Stable),
+];
+
 const fn descriptor(id: &'static str, stability: ContractStability) -> ContractDescriptor {
     ContractDescriptor {
         id,
         version: 1,
+        stability,
+    }
+}
+
+const fn descriptor_version(
+    id: &'static str,
+    version: u32,
+    stability: ContractStability,
+) -> ContractDescriptor {
+    ContractDescriptor {
+        id,
+        version,
         stability,
     }
 }
@@ -196,6 +255,7 @@ enum RegistryVersion {
     V3,
     V4,
     V5,
+    V6,
 }
 
 impl Default for ContractRegistry {
@@ -245,6 +305,14 @@ impl ContractRegistry {
         }
     }
 
+    /// Consema 0.8 semantic-model v6 registry.
+    #[must_use]
+    pub const fn v6() -> Self {
+        Self {
+            version: RegistryVersion::V6,
+        }
+    }
+
     /// Sorted registered contracts.
     #[must_use]
     pub const fn contracts(self) -> &'static [ContractDescriptor] {
@@ -253,6 +321,7 @@ impl ContractRegistry {
             RegistryVersion::V2 => CONTRACTS_V2,
             RegistryVersion::V3 | RegistryVersion::V4 => CONTRACTS_V3,
             RegistryVersion::V5 => CONTRACTS_V5,
+            RegistryVersion::V6 => CONTRACTS_V6,
         }
     }
 
@@ -279,6 +348,7 @@ impl ContractRegistry {
             RegistryVersion::V3 => ErrorCodeRegistry::v3(),
             RegistryVersion::V4 => ErrorCodeRegistry::v4(),
             RegistryVersion::V5 => ErrorCodeRegistry::v5(),
+            RegistryVersion::V6 => ErrorCodeRegistry::v6(),
         }
     }
 }
@@ -450,9 +520,10 @@ fn validate_identifier(identifier: &str, path: &str) -> Result<(), ProtocolError
 mod tests {
     use super::*;
     use consema_document::{
-        ContentDigest, FormatOperationRegistry, MaterializationFailure, MaterializationFidelity,
-        MaterializationRequest, MaterializationStyleId, NewlinePolicy, ProfileId, SourceLimits,
-        SourcePatch, SourcePatchLimits, SourceSnapshot,
+        BomPolicy, ContentDigest, EncodingRequest, FormatOperationRegistry, MaterializationFailure,
+        MaterializationFidelity, MaterializationRequest, MaterializationStyleId, NewlinePolicy,
+        ProfileId, SourceEncoding, SourceLimits, SourcePatch, SourcePatchLimits, SourceSnapshot,
+        WindowsCodePage,
     };
     use consema_graph::{GraphBuilder, GraphLimits, PgceLimits};
     use std::collections::BTreeMap;
@@ -551,6 +622,7 @@ mod tests {
             ContractRegistry::v3(),
             ContractRegistry::v4(),
             ContractRegistry::v5(),
+            ContractRegistry::v6(),
         ] {
             assert!(
                 registry
@@ -564,6 +636,14 @@ mod tests {
         assert_eq!(ContractRegistry::v3().contracts().len(), 25);
         assert_eq!(ContractRegistry::v4().contracts().len(), 25);
         assert_eq!(ContractRegistry::v5().contracts().len(), 30);
+        assert_eq!(ContractRegistry::v6().contracts().len(), 38);
+        for descriptor in ContractRegistry::v5().contracts() {
+            let contract = ContractId::new(descriptor.id, descriptor.version).unwrap();
+            assert_eq!(
+                ContractRegistry::v6().descriptor(&contract),
+                Some(descriptor)
+            );
+        }
         assert_eq!(
             ContractRegistry::v4().contracts(),
             ContractRegistry::v3().contracts()
@@ -811,6 +891,134 @@ mod tests {
                     &message.to_pvce(limits).unwrap(),
                     limits,
                     ContractRegistry::v5(),
+                )
+                .unwrap(),
+                message
+            );
+        }
+    }
+
+    #[test]
+    fn v6_envelopes_all_eight_new_pairs_and_old_registries_reject_them() {
+        let code_page = WindowsCodePage::from_number(1252).unwrap();
+        let encoding = SourceEncoding::WindowsCodePage(code_page);
+        let snapshot = SourceSnapshot::from_raw(
+            [b'k', b'=', 0x80],
+            EncodingRequest::new(encoding).with_bom_policy(BomPolicy::TreatAsContent),
+            SourceLimits::default(),
+        )
+        .unwrap();
+        let patch = SourcePatch::create(
+            &snapshot,
+            Vec::new(),
+            BTreeMap::new(),
+            SourcePatchLimits::default(),
+        )
+        .unwrap();
+        let request = MaterializationRequest::new(
+            ProfileId::new("ini.windows", 1),
+            MaterializationStyleId::new("ini.windows-canonical", 1),
+        )
+        .with_encoding(encoding)
+        .with_newline(NewlinePolicy::CrLf);
+        let materialized = crate::MaterializationResultMessageV2::complete(
+            ProfileId::new("ini.windows", 1),
+            "target:ini",
+            crate::SourceSnapshotMessageV2::from_snapshot(&snapshot),
+            MaterializationFidelity::Exact,
+            crate::MaterializationReportMessage::default(),
+            crate::MaterializationProvenanceMapMessage::default(),
+        )
+        .unwrap();
+        let ini_query = crate::IniQueryResultMessage::new(
+            consema_core::QueryDomain::ini_native_v1(),
+            consema_core::MatchRole::IniDocument,
+            Vec::new(),
+            crate::Completion::new(crate::CompletionStatus::Success, 0, 0, None, None).unwrap(),
+            Vec::new(),
+        )
+        .unwrap();
+        let properties_query = crate::JavaPropertiesQueryResultMessage::new(
+            consema_core::QueryDomain::java_properties_native_v1(),
+            consema_core::MatchRole::PropertiesDocument,
+            Vec::new(),
+            crate::Completion::new(crate::CompletionStatus::Success, 0, 0, None, None).unwrap(),
+            Vec::new(),
+        )
+        .unwrap();
+        let payloads = [
+            ("core.ini-query-result", 1, ini_query.to_value()),
+            (
+                "core.java-properties-query-result",
+                1,
+                properties_query.to_value(),
+            ),
+            (
+                "core.java-utf16-string",
+                1,
+                crate::JavaUtf16String::new(vec![0xD800], ProtocolLimits::default())
+                    .unwrap()
+                    .to_value(),
+            ),
+            (
+                "core.materialization-request",
+                2,
+                crate::MaterializationRequestMessageV2::from_request(&request)
+                    .to_value()
+                    .unwrap(),
+            ),
+            ("core.materialization-result", 2, materialized.to_value()),
+            (
+                "core.source-encoding",
+                1,
+                crate::SourceEncodingMessage::from_encoding(encoding).to_value(),
+            ),
+            (
+                "core.source-patch",
+                2,
+                crate::SourcePatchMessageV2::from_patch(&patch)
+                    .to_value()
+                    .unwrap(),
+            ),
+            (
+                "core.source-snapshot",
+                2,
+                crate::SourceSnapshotMessageV2::from_snapshot(&snapshot).to_value(),
+            ),
+        ];
+        let old_registries = [
+            ContractRegistry::v1(),
+            ContractRegistry::v2(),
+            ContractRegistry::v3(),
+            ContractRegistry::v4(),
+            ContractRegistry::v5(),
+        ];
+        let limits = ProtocolLimits::default();
+        for (id, version, payload) in payloads {
+            let contract = ContractId::new(id, version).unwrap();
+            for old in old_registries {
+                assert_eq!(
+                    ProtocolMessage::new(contract.clone(), payload.clone(), old)
+                        .unwrap_err()
+                        .kind(),
+                    ProtocolErrorKind::UnknownContract
+                );
+            }
+            let message = ProtocolMessage::new(contract, payload, ContractRegistry::v6()).unwrap();
+            assert_eq!(
+                ProtocolMessage::from_json(
+                    &message.to_json(limits).unwrap(),
+                    limits,
+                    ContractRegistry::v6(),
+                )
+                .unwrap(),
+                message
+            );
+            assert_eq!(
+                ProtocolMessage::from_pvce(
+                    &message.to_pvce(limits).unwrap(),
+                    limits,
+                    ContractRegistry::v6(),
                 )
                 .unwrap(),
                 message

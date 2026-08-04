@@ -962,6 +962,243 @@ const fn build_v5_codes() -> [ErrorCodeDescriptor; 132] {
     output
 }
 
+const NEW_CODES_V6: &[ErrorCodeDescriptor] = &[
+    code!(
+        "core.source.code-page-required@1",
+        Encoding,
+        "0.8.0",
+        "The selected source profile requires an explicit Windows code page"
+    ),
+    code!(
+        "core.source.unsupported-code-page@1",
+        Encoding,
+        "0.8.0",
+        "The requested Windows code page is not in the portable registry"
+    ),
+    code!(
+        "ini.edit.canonical-fallback@1",
+        Edit,
+        "0.8.0",
+        "INI editing used an authorized canonical representation fallback"
+    ),
+    code!(
+        "ini.edit.case-collision@1",
+        Edit,
+        "0.8.0",
+        "INI editing would create a profile-equivalent name collision"
+    ),
+    code!(
+        "ini.edit.invalid-name@1",
+        Edit,
+        "0.8.0",
+        "INI section or entry name is invalid for the selected profile"
+    ),
+    code!(
+        "ini.edit.invalid-placement@1",
+        Edit,
+        "0.8.0",
+        "INI structural edit placement is invalid"
+    ),
+    code!(
+        "ini.formation.case-collision@1",
+        Semantic,
+        "0.8.0",
+        "INI formation found profile-equivalent names with different spelling"
+    ),
+    code!(
+        "ini.formation.duplicate-entry@1",
+        Semantic,
+        "0.8.0",
+        "INI formation found a duplicate entry"
+    ),
+    code!(
+        "ini.formation.duplicate-section@1",
+        Semantic,
+        "0.8.0",
+        "INI formation found a duplicate section"
+    ),
+    code!(
+        "ini.materialization.round-trip-mismatch@1",
+        Materialization,
+        "0.8.0",
+        "Generated INI did not reproduce the promised input value"
+    ),
+    code!(
+        "ini.parse.invalid-character@1",
+        Syntax,
+        "0.8.0",
+        "INI source contains a character forbidden by the selected profile"
+    ),
+    code!(
+        "ini.parse.invalid-continuation@1",
+        Syntax,
+        "0.8.0",
+        "INI continuation syntax is invalid"
+    ),
+    code!(
+        "ini.parse.malformed-line@1",
+        Syntax,
+        "0.8.0",
+        "INI source line is malformed"
+    ),
+    code!(
+        "ini.parse.malformed-section@1",
+        Syntax,
+        "0.8.0",
+        "INI section header is malformed"
+    ),
+    code!(
+        "ini.parse.missing-delimiter@1",
+        Syntax,
+        "0.8.0",
+        "INI entry is missing a required key/value delimiter"
+    ),
+    code!(
+        "ini.parse.missing-section@1",
+        Conformance,
+        "0.8.0",
+        "INI entry appears where the selected profile requires a section"
+    ),
+    code!(
+        "ini.profile.encoding@1",
+        Encoding,
+        "0.8.0",
+        "INI source encoding conflicts with the selected profile"
+    ),
+    code!(
+        "ini.profile.mismatch@1",
+        Conformance,
+        "0.8.0",
+        "INI operation profile does not match the document profile"
+    ),
+    code!(
+        "ini.projection.collision@1",
+        Projection,
+        "0.8.0",
+        "INI projection encountered a rejected key or section collision"
+    ),
+    code!(
+        "ini.projection.duplicate-collapsed@1",
+        Projection,
+        "0.8.0",
+        "INI projection collapsed a duplicate under explicit policy"
+    ),
+    code!(
+        "ini.projection.incomplete-document@1",
+        Projection,
+        "0.8.0",
+        "Recovered INI syntax cannot enter a complete semantic projection"
+    ),
+    code!(
+        "ini.query.invalid-name-mode@1",
+        Query,
+        "0.8.0",
+        "INI query name comparison mode is invalid"
+    ),
+    code!(
+        "java-properties.edit.canonical-fallback@1",
+        Edit,
+        "0.8.0",
+        "Properties editing used an authorized canonical representation fallback"
+    ),
+    code!(
+        "java-properties.edit.invalid-placement@1",
+        Edit,
+        "0.8.0",
+        "Properties structural edit placement is invalid"
+    ),
+    code!(
+        "java-properties.java-string.invalid-wire@1",
+        Encoding,
+        "0.8.0",
+        "Exact Java UTF-16 string wire content is invalid"
+    ),
+    code!(
+        "java-properties.java-string.non-canonical-wire@1",
+        Encoding,
+        "0.8.0",
+        "Exact Java UTF-16 string wire content is not canonical"
+    ),
+    code!(
+        "java-properties.materialization.round-trip-mismatch@1",
+        Materialization,
+        "0.8.0",
+        "Generated Properties text did not reproduce the promised input value"
+    ),
+    code!(
+        "java-properties.parse.malformed-unicode-escape@1",
+        Syntax,
+        "0.8.0",
+        "Properties Unicode escape is malformed"
+    ),
+    code!(
+        "java-properties.profile.mismatch@1",
+        Conformance,
+        "0.8.0",
+        "Properties operation profile does not match the document profile"
+    ),
+    code!(
+        "java-properties.projection.duplicate-collapsed@1",
+        Projection,
+        "0.8.0",
+        "Properties projection collapsed a duplicate under explicit policy"
+    ),
+    code!(
+        "java-properties.projection.incomplete-document@1",
+        Projection,
+        "0.8.0",
+        "Recovered Properties syntax cannot enter a complete semantic projection"
+    ),
+    code!(
+        "java-properties.projection.unpaired-surrogate@1",
+        Projection,
+        "0.8.0",
+        "Properties content with an unpaired surrogate cannot become a PortableValue String"
+    ),
+    code!(
+        "java-properties.query.invalid-code-unit-filter@1",
+        Query,
+        "0.8.0",
+        "Properties query UTF-16 code-unit filter is invalid"
+    ),
+    code!(
+        "java-properties.source.profile-encoding@1",
+        Encoding,
+        "0.8.0",
+        "Properties source encoding conflicts with the selected profile"
+    ),
+];
+
+const ERROR_CODES_V6: [ErrorCodeDescriptor; 166] = build_v6_codes();
+
+const fn build_v6_codes() -> [ErrorCodeDescriptor; 166] {
+    let mut output = [ERROR_CODES_V5[0]; 166];
+    let mut old = 0;
+    let mut new = 0;
+    let mut target = 0;
+    while old < ERROR_CODES_V5.len() && new < NEW_CODES_V6.len() {
+        if const_str_less(ERROR_CODES_V5[old].code, NEW_CODES_V6[new].code) {
+            output[target] = ERROR_CODES_V5[old];
+            old += 1;
+        } else {
+            output[target] = NEW_CODES_V6[new];
+            new += 1;
+        }
+        target += 1;
+    }
+    while old < ERROR_CODES_V5.len() {
+        output[target] = ERROR_CODES_V5[old];
+        old += 1;
+        target += 1;
+    }
+    while new < NEW_CODES_V6.len() {
+        output[target] = NEW_CODES_V6[new];
+        new += 1;
+        target += 1;
+    }
+    output
+}
+
 const fn const_str_less(left: &str, right: &str) -> bool {
     let left = left.as_bytes();
     let right = right.as_bytes();
@@ -991,6 +1228,7 @@ enum RegistryVersion {
     V3,
     V4,
     V5,
+    V6,
 }
 
 impl Default for ErrorCodeRegistry {
@@ -1040,6 +1278,14 @@ impl ErrorCodeRegistry {
         }
     }
 
+    /// Consema 0.8 semantic-model v6 error registry.
+    #[must_use]
+    pub const fn v6() -> Self {
+        Self {
+            version: RegistryVersion::V6,
+        }
+    }
+
     /// Sorted immutable descriptors.
     #[must_use]
     pub const fn codes(self) -> &'static [ErrorCodeDescriptor] {
@@ -1049,6 +1295,7 @@ impl ErrorCodeRegistry {
             RegistryVersion::V3 => &ERROR_CODES_V3,
             RegistryVersion::V4 => &ERROR_CODES_V4,
             RegistryVersion::V5 => &ERROR_CODES_V5,
+            RegistryVersion::V6 => &ERROR_CODES_V6,
         }
     }
 
@@ -1132,6 +1379,12 @@ pub fn error_code_manifest_value_v4() -> PortableValue {
 #[must_use]
 pub fn error_code_manifest_value_v5() -> PortableValue {
     error_code_manifest_value_for(ErrorCodeRegistry::v5())
+}
+
+/// Encodes the semantic-model v6 `core.error-code-registry@1` payload.
+#[must_use]
+pub fn error_code_manifest_value_v6() -> PortableValue {
+    error_code_manifest_value_for(ErrorCodeRegistry::v6())
 }
 
 fn error_code_manifest_value_for(registry: ErrorCodeRegistry) -> PortableValue {
@@ -1268,6 +1521,7 @@ mod tests {
             ErrorCodeRegistry::v3(),
             ErrorCodeRegistry::v4(),
             ErrorCodeRegistry::v5(),
+            ErrorCodeRegistry::v6(),
         ] {
             assert!(
                 registry
@@ -1281,6 +1535,21 @@ mod tests {
         assert_eq!(ErrorCodeRegistry::v3().codes().len(), 90);
         assert_eq!(ErrorCodeRegistry::v4().codes().len(), 92);
         assert_eq!(ErrorCodeRegistry::v5().codes().len(), 132);
+        assert_eq!(ErrorCodeRegistry::v6().codes().len(), 166);
+        assert_eq!(NEW_CODES_V6.len(), 34);
+        for descriptor in ErrorCodeRegistry::v5().codes() {
+            assert_eq!(
+                ErrorCodeRegistry::v6().descriptor(descriptor.code),
+                Some(descriptor)
+            );
+        }
+        for descriptor in NEW_CODES_V6 {
+            assert!(!ErrorCodeRegistry::v5().contains(descriptor.code));
+            assert_eq!(
+                ErrorCodeRegistry::v6().descriptor(descriptor.code),
+                Some(descriptor)
+            );
+        }
         assert!(!ErrorCodeRegistry::v1().contains("core.source.patch-base-mismatch@1"));
         assert!(ErrorCodeRegistry::v2().contains("core.source.patch-base-mismatch@1"));
         assert!(!ErrorCodeRegistry::v2().contains("core.materialization.unrepresentable@1"));
@@ -1291,6 +1560,8 @@ mod tests {
         assert!(!ErrorCodeRegistry::v4().contains("yaml.parse.syntax@1"));
         assert!(ErrorCodeRegistry::v5().contains("yaml.parse.syntax@1"));
         assert!(ErrorCodeRegistry::v5().contains("core.pgce.non-canonical@1"));
+        assert!(!ErrorCodeRegistry::v5().contains("ini.profile.encoding@1"));
+        assert!(ErrorCodeRegistry::v6().contains("ini.profile.encoding@1"));
         let protocol_kinds = [
             ProtocolErrorKind::InvalidJson,
             ProtocolErrorKind::NonCanonicalJson,
@@ -1336,5 +1607,7 @@ mod tests {
         validate_error_code_manifest_value(&error_code_manifest_value_v2()).unwrap();
         validate_error_code_manifest_value(&error_code_manifest_value_v3()).unwrap();
         validate_error_code_manifest_value(&error_code_manifest_value_v4()).unwrap();
+        validate_error_code_manifest_value(&error_code_manifest_value_v5()).unwrap();
+        validate_error_code_manifest_value(&error_code_manifest_value_v6()).unwrap();
     }
 }
