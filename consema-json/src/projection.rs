@@ -594,6 +594,15 @@ impl ProjectionContext<'_> {
                 member.node_ref(),
                 member.span(),
             )?;
+            self.add_origin(
+                ProjectedLocation::Association(AssociationLocation::new(
+                    path.clone(),
+                    projected_ordinal as u64,
+                    AssociationRole::ObjectKey,
+                )),
+                member.key_node_ref(),
+                self.document.span(member.entity().key),
+            )?;
             let value = self.project_value(member.value(), value_path, depth + 1)?;
             builder
                 .insert(name.clone(), value)
@@ -788,6 +797,110 @@ mod tests {
             result.report.events()[0].kind,
             ProjectionEventKind::DuplicateCollapsed
         );
+    }
+
+    #[test]
+    fn object_projection_emits_distinct_key_association_provenance() {
+        let document = parse(
+            br#"{"a":1,"b":2}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let request = ProjectionRequestBuilder::new(ProjectionTarget::ProjectAsObjectV1)
+            .build()
+            .unwrap();
+        let ProjectionResult::Complete(result) = document.project(&request) else {
+            panic!("projection failed");
+        };
+        let associations: Vec<_> = result
+            .provenance
+            .entries()
+            .iter()
+            .filter_map(|entry| match &entry.projected {
+                ProjectedLocation::Association(location) => Some((
+                    location.role(),
+                    entry.origins.first().expect("origin").node.role(),
+                )),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            associations
+                .iter()
+                .filter(|(role, _)| *role == AssociationRole::ObjectEntry)
+                .count(),
+            2
+        );
+        assert_eq!(
+            associations
+                .iter()
+                .filter(|(role, _)| *role == AssociationRole::ObjectKey)
+                .count(),
+            2
+        );
+        assert_eq!(
+            associations
+                .iter()
+                .filter(|(role, source)| *role == AssociationRole::ObjectKey
+                    && *source == consema_document::NodeRole::ObjectKey)
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn duplicate_policy_keeps_key_provenance_of_retained_occurrence() {
+        let document = parse(
+            br#"{"a":1,"a":2}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        for policy in [DuplicateKeyPolicy::FirstWins, DuplicateKeyPolicy::LastWins] {
+            let request = ProjectionRequestBuilder::new(ProjectionTarget::ProjectAsObjectV1)
+                .global_duplicate_policy(policy)
+                .build()
+                .unwrap();
+            let ProjectionResult::Complete(result) = document.project(&request) else {
+                panic!("authorized projection failed");
+            };
+            let keys: Vec<_> = result
+                .provenance
+                .entries()
+                .iter()
+                .filter_map(|entry| match &entry.projected {
+                    ProjectedLocation::Association(location)
+                        if location.role() == AssociationRole::ObjectKey =>
+                    {
+                        entry.origins.first().map(|origin| origin.node)
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(keys.len(), 1);
+        }
+    }
+
+    #[test]
+    fn key_provenance_limit_fails_whole_projection() {
+        let document = parse(
+            br#"{"a":1,"b":2,"c":3}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let request = ProjectionRequestBuilder::new(ProjectionTarget::ProjectAsObjectV1)
+            .limits(ProjectionLimits {
+                max_provenance_entries: 6,
+                ..ProjectionLimits::default()
+            })
+            .build()
+            .unwrap();
+        assert!(matches!(
+            document.project(&request),
+            ProjectionResult::Failed(_)
+        ));
     }
 
     #[test]
