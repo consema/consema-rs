@@ -93,6 +93,14 @@ pub enum NodeRole {
     ArrayElement,
     /// Complete semantic value syntax.
     Value,
+    /// TOML native semantic item, including tables and array-of-tables.
+    TomlItem,
+    /// TOML table or inline-table key-to-item association.
+    TomlEntry,
+    /// TOML decoded key segment with source identity.
+    TomlKey,
+    /// TOML array or array-of-tables element association.
+    TomlArrayElement,
 }
 
 /// Opaque handle to one structural identity in exactly one snapshot.
@@ -427,6 +435,14 @@ pub struct FatalFormationFailure {
 }
 
 impl FatalFormationFailure {
+    /// Creates a fatal formation failure from one format-specific diagnostic.
+    #[must_use]
+    pub fn from_diagnostic(diagnostic: Diagnostic) -> Self {
+        Self {
+            diagnostics: vec![diagnostic],
+        }
+    }
+
     /// UTF-8 failure.
     #[must_use]
     pub fn invalid_utf8(valid_up_to: usize) -> Self {

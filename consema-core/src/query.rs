@@ -38,6 +38,12 @@ impl QueryDomain {
         Self::new("json.native-semantic-query", 1)
     }
 
+    /// `toml.native-semantic-query@1`.
+    #[must_use]
+    pub fn toml_native_v1() -> Self {
+        Self::new("toml.native-semantic-query", 1)
+    }
+
     /// Domain namespace.
     #[must_use]
     pub fn id(&self) -> &str {
@@ -66,6 +72,12 @@ pub enum MatchRole {
     JsonObjectMember,
     /// JSON array element.
     JsonArrayElement,
+    /// TOML native semantic item.
+    TomlItem,
+    /// TOML table or inline-table entry.
+    TomlEntry,
+    /// TOML array or array-of-tables element.
+    TomlArrayElement,
 }
 
 /// One versioned operator call with deterministic arguments.
@@ -213,6 +225,7 @@ impl QueryDefinition {
         let input_role = match (self.domain.id(), self.domain.version()) {
             ("core.portable-value-query", 1) => MatchRole::Value,
             ("json.native-semantic-query", 1) => MatchRole::JsonValue,
+            ("toml.native-semantic-query", 1) => MatchRole::TomlItem,
             _ => return Err(QueryFailure::DomainMismatch(self.domain.clone())),
         };
         let output_role = validate_expression(&self.domain, &self.expression, input_role)?;
@@ -643,6 +656,23 @@ fn validate_operator(
             }
             ("json.native-semantic-query", "json.array-element-value") => {
                 (MatchRole::JsonArrayElement, MatchRole::JsonValue, &[])
+            }
+            ("toml.native-semantic-query", "toml.try-table-entries") => {
+                (MatchRole::TomlItem, MatchRole::TomlEntry, &[])
+            }
+            ("toml.native-semantic-query", "toml.entry-name-equals") => (
+                MatchRole::TomlEntry,
+                MatchRole::TomlEntry,
+                &[("name", PortableValueKind::String)],
+            ),
+            ("toml.native-semantic-query", "toml.entry-item") => {
+                (MatchRole::TomlEntry, MatchRole::TomlItem, &[])
+            }
+            ("toml.native-semantic-query", "toml.try-array-elements") => {
+                (MatchRole::TomlItem, MatchRole::TomlArrayElement, &[])
+            }
+            ("toml.native-semantic-query", "toml.array-element-item") => {
+                (MatchRole::TomlArrayElement, MatchRole::TomlItem, &[])
             }
             (_, "core.take" | "core.distinct-by-identity") => (
                 input,
