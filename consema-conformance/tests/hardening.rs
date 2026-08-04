@@ -6,6 +6,11 @@ use consema_json::{
     CompleteProjection, Document, JsonProfile, ProjectionRequest, ProjectionResult, parse,
 };
 use consema_pvce::{DecodeLimits, decode};
+use consema_toml::{
+    CompleteProjection as TomlCompleteProjection, Document as TomlDocument,
+    ProjectionRequest as TomlProjectionRequest, ProjectionResult as TomlProjectionResult,
+    TomlProfile, parse as parse_toml,
+};
 
 fn assert_send_sync<T: Send + Sync>() {}
 
@@ -20,6 +25,80 @@ fn completed_public_objects_are_send_and_sync() {
     assert_send_sync::<ProjectionResult>();
     assert_send_sync::<CompleteProjection>();
     assert_send_sync::<ChangeSet>();
+    assert_send_sync::<TomlDocument>();
+    assert_send_sync::<TomlProjectionRequest>();
+    assert_send_sync::<TomlProjectionResult>();
+    assert_send_sync::<TomlCompleteProjection>();
+}
+
+#[test]
+fn bounded_toml_corpus_never_panics_or_fakes_completion() {
+    let fragments = [
+        "",
+        "key = 1",
+        "key = [",
+        "key = [[[[[[[[1]]]]]]]]",
+        "a.b.c = { x = [1, 2, 3] }",
+        "value = \"unterminated",
+        "value = 999999999999999999999999999999999999",
+        "name = 'first'\nname = 'second'",
+        "[[products]]\nname = 'one'\n[[products]]\nname = 'two'",
+        "time = 23:59:60",
+        "value = [nan, inf, -inf, -0.0]",
+        "ключ = 'значение'",
+        "\u{feff}key = 1",
+    ];
+    for fragment in fragments {
+        let result = parse_toml(
+            fragment.as_bytes(),
+            TomlProfile::Toml10V1,
+            ParseLimits::default(),
+        );
+        if let Ok(document) = result {
+            assert_eq!(document.render(), fragment.as_bytes());
+            let pieces = document.lossless_structural_index().pieces();
+            assert!(
+                pieces
+                    .windows(2)
+                    .all(|pair| pair[0].span().end_byte() == pair[1].span().start_byte())
+            );
+            assert_eq!(
+                pieces.last().map_or(0, |piece| piece.span().end_byte()),
+                fragment.len()
+            );
+        }
+    }
+    assert!(
+        parse_toml(
+            [0xff_u8].as_slice(),
+            TomlProfile::Toml10V1,
+            ParseLimits::default()
+        )
+        .is_err()
+    );
+
+    let limited = ParseLimits {
+        max_nesting_depth: 3,
+        max_token_count: 5,
+        max_node_count: 5,
+        ..ParseLimits::default()
+    };
+    assert!(
+        parse_toml(
+            b"value = [[[[1]]]]".as_slice(),
+            TomlProfile::Toml10V1,
+            limited
+        )
+        .is_err()
+    );
+    assert!(
+        parse_toml(
+            b"values = [0, 1, 2]".as_slice(),
+            TomlProfile::Toml10V1,
+            limited
+        )
+        .is_err()
+    );
 }
 
 #[test]

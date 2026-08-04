@@ -1,5 +1,7 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
+mod toml_v1;
+
 use consema_core::{
     BigInteger, BinaryFloat64, CapabilityId, CapabilitySet, Decimal, ObjectBuilder, OperatorCall,
     PortableValue, QueryDefinition, QueryDomain, QueryExpression, QueryFailure, QueryLimits,
@@ -14,6 +16,8 @@ use consema_json::{
 use consema_pvce::{DecodeError, DecodeLimits, decode, encode};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+
+pub use toml_v1::{TOML_V1_VECTORS_JSON, run_toml_v1};
 
 /// Embedded language-neutral suite bytes.
 pub const V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/v1.json");
