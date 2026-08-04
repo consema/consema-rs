@@ -17,6 +17,7 @@ mod backend;
 mod edit;
 mod materialization;
 mod native;
+mod operation_registry;
 mod projection;
 mod query;
 mod syntax;
@@ -34,6 +35,7 @@ pub use materialization::{
 };
 pub use native::GraphProjectionError;
 use native::{NativeContent, NativeStream, node_ref};
+pub use operation_registry::format_operation_registry;
 pub use projection::{
     CompleteGraphProjection, CompleteValueProjection, Fidelity, GraphProjectedLocation,
     GraphProjectionFailure, GraphProjectionLimits, GraphProjectionRequest, GraphProvenanceEntry,
