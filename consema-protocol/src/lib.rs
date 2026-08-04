@@ -16,6 +16,7 @@ mod graph_projection;
 mod graph_query;
 mod java_utf16;
 mod limits;
+mod line_query;
 mod materialization;
 mod operation;
 mod payload;
@@ -50,6 +51,10 @@ pub use graph_projection::{
 pub use graph_query::{GraphQueryMatchMessage, GraphQueryResultMessage};
 pub use java_utf16::{JavaUnicodeStatus, JavaUtf16String};
 pub use limits::ProtocolLimits;
+pub use line_query::{
+    IniMatchLocator, IniQueryResultMessage, JavaPropertiesMatchLocator,
+    JavaPropertiesQueryResultMessage,
+};
 pub use materialization::{
     MaterializationFailureMessage, MaterializationInputLocationMessage,
     MaterializationOutcomeMessage, MaterializationOutcomeMessageV2,
