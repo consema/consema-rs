@@ -2,10 +2,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use consema_core::{BigInteger, Decimal};
-use consema_document::{DocumentAuthority, FatalFormationFailure, NodeRef, NodeRole, ParseLimits};
+use consema_document::{
+    DecodedOffset, DocumentAuthority, FatalFormationFailure, NodeRef, NodeRole, ParseLimits,
+    SourceSnapshot, Span,
+};
 use consema_graph::{GraphBuildError, GraphBuilder, GraphLimits, GraphMappingEntry, PortableGraph};
 
 use crate::backend::{BackendEvent, BackendEventKind, BackendScalarStyle, BackendSpan, BackendTag};
+use crate::syntax::NamedOccurrence;
 use crate::{YamlProfile, YamlScalarKind, YamlScalarStyle};
 
 const TAG_NULL: &str = "tag:yaml.org,2002:null";
@@ -21,14 +25,22 @@ const TAG_BINARY: &str = "tag:yaml.org,2002:binary";
 #[derive(Clone, Debug)]
 pub(crate) struct NativeStream {
     pub(crate) nodes: Arc<[NativeNode]>,
-    pub(crate) roots: Arc<[usize]>,
+    pub(crate) documents: Arc<[NativeDocument]>,
     pub(crate) aliases: Arc<[NativeAlias]>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct NativeDocument {
+    pub(crate) root: usize,
+    pub(crate) span: Span,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct NativeNode {
     pub(crate) tag: Arc<str>,
     pub(crate) anchor: Option<Arc<str>>,
+    pub(crate) anchor_span: Option<Span>,
+    pub(crate) span: Span,
     pub(crate) content: NativeContent,
 }
 
@@ -51,6 +63,7 @@ pub(crate) struct NativeScalar {
 pub(crate) struct NativeSequenceItem {
     pub(crate) identity: u64,
     pub(crate) node: usize,
+    pub(crate) span: Span,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -58,6 +71,7 @@ pub(crate) struct NativeMappingEntry {
     pub(crate) identity: u64,
     pub(crate) key: usize,
     pub(crate) value: usize,
+    pub(crate) span: Span,
 }
 
 #[derive(Clone, Debug)]
@@ -65,6 +79,7 @@ pub(crate) struct NativeAlias {
     pub(crate) identity: u64,
     pub(crate) name: Arc<str>,
     pub(crate) target: usize,
+    pub(crate) span: Span,
 }
 
 /// Exact YAML-to-PortableGraph projection failure.
@@ -84,25 +99,27 @@ impl From<GraphBuildError> for GraphProjectionError {
 
 pub(crate) fn compose(
     events: &[BackendEvent],
-    text: &str,
+    source: &SourceSnapshot,
+    authority: &DocumentAuthority,
     profile: YamlProfile,
-    anchor_names: Vec<String>,
-    alias_names: Vec<String>,
+    anchors: Vec<NamedOccurrence>,
+    aliases: Vec<NamedOccurrence>,
     limits: ParseLimits,
 ) -> Result<NativeStream, FatalFormationFailure> {
     Composer {
         events,
-        text,
+        source,
+        authority,
         position: 0,
         profile,
         limits,
         nodes: Vec::new(),
-        roots: Vec::new(),
+        documents: Vec::new(),
         anchors: HashMap::new(),
-        anchor_names: anchor_names.into_iter(),
+        anchor_occurrences: anchors.into_iter(),
         anchor_name_by_id: HashMap::new(),
-        alias_names: alias_names.into_iter(),
-        aliases: Vec::new(),
+        alias_occurrences: aliases.into_iter(),
+        composed_aliases: Vec::new(),
         next_association: 0,
     }
     .compose()
@@ -151,8 +168,8 @@ impl NativeStream {
                 }
             }
         }
-        for root in self.roots.iter().copied() {
-            builder.push_root(ids[root])?;
+        for document in self.documents.iter() {
+            builder.push_root(ids[document.root])?;
         }
         builder.build().map_err(Into::into)
     }
@@ -160,33 +177,49 @@ impl NativeStream {
 
 struct Composer<'a> {
     events: &'a [BackendEvent],
-    text: &'a str,
+    source: &'a SourceSnapshot,
+    authority: &'a DocumentAuthority,
     position: usize,
     profile: YamlProfile,
     limits: ParseLimits,
     nodes: Vec<Option<NativeNode>>,
-    roots: Vec<usize>,
+    documents: Vec<NativeDocument>,
     anchors: HashMap<usize, usize>,
-    anchor_names: std::vec::IntoIter<String>,
+    anchor_occurrences: std::vec::IntoIter<NamedOccurrence>,
     anchor_name_by_id: HashMap<usize, Arc<str>>,
-    alias_names: std::vec::IntoIter<String>,
-    aliases: Vec<NativeAlias>,
+    alias_occurrences: std::vec::IntoIter<NamedOccurrence>,
+    composed_aliases: Vec<NativeAlias>,
     next_association: u64,
+}
+
+#[derive(Clone, Copy)]
+struct ComposedOccurrence {
+    node: usize,
+    span: Span,
 }
 
 impl Composer<'_> {
     fn compose(mut self) -> Result<NativeStream, FatalFormationFailure> {
         self.expect_simple(|kind| matches!(kind, BackendEventKind::StreamStart))?;
         while !self.peek_is(|kind| matches!(kind, BackendEventKind::StreamEnd)) {
-            self.expect_simple(|kind| matches!(kind, BackendEventKind::DocumentStart { .. }))?;
+            let document_start =
+                self.take_simple(|kind| matches!(kind, BackendEventKind::DocumentStart { .. }))?;
             self.anchors.clear();
+            self.anchor_name_by_id.clear();
             let root = self.node()?;
-            self.roots.push(root);
-            self.expect_simple(|kind| matches!(kind, BackendEventKind::DocumentEnd))?;
+            let document_end =
+                self.take_simple(|kind| matches!(kind, BackendEventKind::DocumentEnd))?;
+            self.documents.push(NativeDocument {
+                root: root.node,
+                span: self.covering_span(document_start, document_end)?,
+            });
         }
         self.expect_simple(|kind| matches!(kind, BackendEventKind::StreamEnd))?;
         if self.position != self.events.len() {
             return Err(native_failure("yaml.native.trailing-events@1"));
+        }
+        if self.anchor_occurrences.next().is_some() || self.alias_occurrences.next().is_some() {
+            return Err(native_failure("yaml.native.trailing-named-occurrence@1"));
         }
         let nodes = self
             .nodes
@@ -195,12 +228,12 @@ impl Composer<'_> {
             .collect::<Vec<_>>();
         Ok(NativeStream {
             nodes: Arc::from(nodes),
-            roots: Arc::from(self.roots),
-            aliases: Arc::from(self.aliases),
+            documents: Arc::from(self.documents),
+            aliases: Arc::from(self.composed_aliases),
         })
     }
 
-    fn node(&mut self) -> Result<usize, FatalFormationFailure> {
+    fn node(&mut self) -> Result<ComposedOccurrence, FatalFormationFailure> {
         let event = self
             .events
             .get(self.position)
@@ -214,19 +247,26 @@ impl Composer<'_> {
                     .get(&anchor_id)
                     .copied()
                     .ok_or_else(|| native_failure("yaml.anchor.unknown@1"))?;
-                let name = self
-                    .alias_names
+                let occurrence = self
+                    .alias_occurrences
                     .next()
-                    .map(Arc::from)
-                    .or_else(|| self.anchor_name_by_id.get(&anchor_id).cloned())
                     .ok_or_else(|| native_failure("yaml.alias.name-unavailable@1"))?;
+                let name = Arc::<str>::from(occurrence.name);
+                if self.anchor_name_by_id.get(&anchor_id).map(AsRef::as_ref) != Some(name.as_ref())
+                {
+                    return Err(native_failure("yaml.alias.name-mismatch@1"));
+                }
                 let identity = self.association_identity()?;
-                self.aliases.push(NativeAlias {
+                self.composed_aliases.push(NativeAlias {
                     identity,
                     name,
                     target,
+                    span: occurrence.span,
                 });
-                Ok(target)
+                Ok(ComposedOccurrence {
+                    node: target,
+                    span: occurrence.span,
+                })
             }
             BackendEventKind::Scalar {
                 decoded,
@@ -235,39 +275,52 @@ impl Composer<'_> {
                 tag,
             } => {
                 let index = self.reserve_node()?;
-                let anchor = self.register_anchor(anchor_id, index)?;
-                let decoded = exact_empty_scalar(decoded, event.span, self.text);
+                let (anchor, anchor_span) = self.register_anchor(anchor_id, index)?;
+                let decoded = exact_empty_scalar(
+                    decoded,
+                    event.span,
+                    self.source
+                        .decoded_text()
+                        .expect("YAML source is always decoded text"),
+                );
                 let (tag, scalar) = resolve_scalar(&decoded, style, tag.as_ref(), self.profile)?;
+                let span = self.raw_span(event.span)?;
                 self.nodes[index] = Some(NativeNode {
                     tag: Arc::from(tag),
                     anchor,
+                    anchor_span,
+                    span,
                     content: NativeContent::Scalar(scalar),
                 });
-                Ok(index)
+                Ok(ComposedOccurrence { node: index, span })
             }
             BackendEventKind::SequenceStart { anchor_id, tag } => {
                 let index = self.reserve_node()?;
-                let anchor = self.register_anchor(anchor_id, index)?;
+                let (anchor, anchor_span) = self.register_anchor(anchor_id, index)?;
                 let tag = resolve_collection_tag(tag.as_ref(), TAG_SEQ)?;
                 let mut items = Vec::new();
                 while !self.peek_is(|kind| matches!(kind, BackendEventKind::SequenceEnd)) {
-                    let node = self.node()?;
+                    let occurrence = self.node()?;
                     items.push(NativeSequenceItem {
                         identity: self.association_identity()?,
-                        node,
+                        node: occurrence.node,
+                        span: occurrence.span,
                     });
                 }
-                self.position += 1;
+                let end = self.take_simple(|kind| matches!(kind, BackendEventKind::SequenceEnd))?;
+                let span = self.covering_span(event.span, end)?;
                 self.nodes[index] = Some(NativeNode {
                     tag: Arc::from(tag),
                     anchor,
+                    anchor_span,
+                    span,
                     content: NativeContent::Sequence(Arc::from(items)),
                 });
-                Ok(index)
+                Ok(ComposedOccurrence { node: index, span })
             }
             BackendEventKind::MappingStart { anchor_id, tag } => {
                 let index = self.reserve_node()?;
-                let anchor = self.register_anchor(anchor_id, index)?;
+                let (anchor, anchor_span) = self.register_anchor(anchor_id, index)?;
                 let tag = resolve_collection_tag(tag.as_ref(), TAG_MAP)?;
                 let mut entries = Vec::new();
                 while !self.peek_is(|kind| matches!(kind, BackendEventKind::MappingEnd)) {
@@ -278,17 +331,21 @@ impl Composer<'_> {
                     let value = self.node()?;
                     entries.push(NativeMappingEntry {
                         identity: self.association_identity()?,
-                        key,
-                        value,
+                        key: key.node,
+                        value: value.node,
+                        span: self.covering_raw_spans(key.span, value.span)?,
                     });
                 }
-                self.position += 1;
+                let end = self.take_simple(|kind| matches!(kind, BackendEventKind::MappingEnd))?;
+                let span = self.covering_span(event.span, end)?;
                 self.nodes[index] = Some(NativeNode {
                     tag: Arc::from(tag),
                     anchor,
+                    anchor_span,
+                    span,
                     content: NativeContent::Mapping(Arc::from(entries)),
                 });
-                Ok(index)
+                Ok(ComposedOccurrence { node: index, span })
             }
             _ => Err(native_failure("yaml.native.unexpected-event@1")),
         }
@@ -312,18 +369,18 @@ impl Composer<'_> {
         &mut self,
         anchor_id: Option<usize>,
         node: usize,
-    ) -> Result<Option<Arc<str>>, FatalFormationFailure> {
+    ) -> Result<(Option<Arc<str>>, Option<Span>), FatalFormationFailure> {
         let Some(anchor_id) = anchor_id else {
-            return Ok(None);
+            return Ok((None, None));
         };
-        let name = Arc::<str>::from(
-            self.anchor_names
-                .next()
-                .ok_or_else(|| native_failure("yaml.anchor.name-unavailable@1"))?,
-        );
+        let occurrence = self
+            .anchor_occurrences
+            .next()
+            .ok_or_else(|| native_failure("yaml.anchor.name-unavailable@1"))?;
+        let name = Arc::<str>::from(occurrence.name);
         self.anchors.insert(anchor_id, node);
         self.anchor_name_by_id.insert(anchor_id, name.clone());
-        Ok(Some(name))
+        Ok((Some(name), Some(occurrence.span)))
     }
 
     fn association_identity(&mut self) -> Result<u64, FatalFormationFailure> {
@@ -348,11 +405,50 @@ impl Composer<'_> {
         &mut self,
         predicate: impl FnOnce(&BackendEventKind) -> bool,
     ) -> Result<(), FatalFormationFailure> {
+        self.take_simple(predicate).map(|_| ())
+    }
+
+    fn take_simple(
+        &mut self,
+        predicate: impl FnOnce(&BackendEventKind) -> bool,
+    ) -> Result<BackendSpan, FatalFormationFailure> {
         if !self.peek_is(predicate) {
             return Err(native_failure("yaml.native.unexpected-event@1"));
         }
+        let span = self.events[self.position].span;
         self.position += 1;
-        Ok(())
+        Ok(span)
+    }
+
+    fn raw_span(&self, span: BackendSpan) -> Result<Span, FatalFormationFailure> {
+        let start = self
+            .source
+            .raw_byte_at(DecodedOffset::UnicodeScalar(span.start_scalar))
+            .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))?;
+        let end = self
+            .source
+            .raw_byte_at(DecodedOffset::UnicodeScalar(span.end_scalar))
+            .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))?;
+        self.authority
+            .span(start, end)
+            .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))
+    }
+
+    fn covering_span(
+        &self,
+        start: BackendSpan,
+        end: BackendSpan,
+    ) -> Result<Span, FatalFormationFailure> {
+        self.raw_span(BackendSpan {
+            start_scalar: start.start_scalar,
+            end_scalar: end.end_scalar,
+        })
+    }
+
+    fn covering_raw_spans(&self, start: Span, end: Span) -> Result<Span, FatalFormationFailure> {
+        self.authority
+            .span(start.start_byte(), end.end_byte())
+            .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))
     }
 }
 

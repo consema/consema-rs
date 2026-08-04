@@ -552,8 +552,18 @@ fn role_name(role: MatchRole) -> &'static str {
         MatchRole::TomlArrayElement => "TomlArrayElement",
         MatchRole::JsonSyntaxPiece => "JsonSyntaxPiece",
         MatchRole::TomlSyntaxPiece => "TomlSyntaxPiece",
-        MatchRole::GraphNode | MatchRole::GraphSequenceElement | MatchRole::GraphMappingEntry => {
-            unreachable!("core.query-result@1 construction rejects graph roles")
+        MatchRole::GraphNode
+        | MatchRole::GraphSequenceElement
+        | MatchRole::GraphMappingEntry
+        | MatchRole::YamlStream
+        | MatchRole::YamlDocument
+        | MatchRole::YamlNode
+        | MatchRole::YamlMappingEntry
+        | MatchRole::YamlSequenceElement
+        | MatchRole::YamlAnchorDefinition
+        | MatchRole::YamlAliasOccurrence
+        | MatchRole::YamlSyntaxPiece => {
+            unreachable!("core.query-result@1 construction rejects newer roles")
         }
     }
 }
@@ -561,7 +571,17 @@ fn role_name(role: MatchRole) -> &'static str {
 const fn is_v1_role(role: MatchRole) -> bool {
     !matches!(
         role,
-        MatchRole::GraphNode | MatchRole::GraphSequenceElement | MatchRole::GraphMappingEntry
+        MatchRole::GraphNode
+            | MatchRole::GraphSequenceElement
+            | MatchRole::GraphMappingEntry
+            | MatchRole::YamlStream
+            | MatchRole::YamlDocument
+            | MatchRole::YamlNode
+            | MatchRole::YamlMappingEntry
+            | MatchRole::YamlSequenceElement
+            | MatchRole::YamlAnchorDefinition
+            | MatchRole::YamlAliasOccurrence
+            | MatchRole::YamlSyntaxPiece
     )
 }
 

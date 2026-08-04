@@ -1,6 +1,6 @@
 use consema_document::{
     DecodedOffset, DocumentAuthority, FatalFormationFailure, LosslessStructuralIndex,
-    SourceSnapshot, StructuralPiece, StructuralPieceKind,
+    SourceSnapshot, Span, StructuralPiece, StructuralPieceKind,
 };
 
 use crate::YamlSyntaxKind;
@@ -24,8 +24,8 @@ pub(crate) fn tokenize(
     let lexemes = Scanner::new(&chars, max_tokens).scan()?;
     let mut pieces = Vec::with_capacity(lexemes.len());
     let mut kinds = Vec::with_capacity(lexemes.len());
-    let mut anchor_names = Vec::new();
-    let mut alias_names = Vec::new();
+    let mut anchors = Vec::new();
+    let mut aliases = Vec::new();
     for lexeme in lexemes {
         let start = source
             .raw_byte_at(DecodedOffset::UnicodeScalar(lexeme.start))
@@ -33,10 +33,11 @@ pub(crate) fn tokenize(
         let end = source
             .raw_byte_at(DecodedOffset::UnicodeScalar(lexeme.end))
             .expect("scanner offsets are decoded scalar boundaries");
+        let span = authority
+            .span(start, end)
+            .expect("scanner emits ordered raw ranges");
         pieces.push(StructuralPiece::new(
-            authority
-                .span(start, end)
-                .expect("scanner emits ordered raw ranges"),
+            span,
             if lexeme.kind.is_trivia() {
                 StructuralPieceKind::Trivia
             } else if lexeme.kind == YamlSyntaxKind::ErrorRegion {
@@ -51,9 +52,9 @@ pub(crate) fn tokenize(
                 .iter()
                 .collect::<String>();
             if lexeme.kind == YamlSyntaxKind::Anchor {
-                anchor_names.push(name);
+                anchors.push(NamedOccurrence { name, span });
             } else {
-                alias_names.push(name);
+                aliases.push(NamedOccurrence { name, span });
             }
         }
     }
@@ -62,16 +63,22 @@ pub(crate) fn tokenize(
     Ok(Tokenized {
         index,
         kinds,
-        anchor_names,
-        alias_names,
+        anchors,
+        aliases,
     })
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct NamedOccurrence {
+    pub(crate) name: String,
+    pub(crate) span: Span,
 }
 
 pub(crate) struct Tokenized {
     pub(crate) index: LosslessStructuralIndex,
     pub(crate) kinds: Vec<YamlSyntaxKind>,
-    pub(crate) anchor_names: Vec<String>,
-    pub(crate) alias_names: Vec<String>,
+    pub(crate) anchors: Vec<NamedOccurrence>,
+    pub(crate) aliases: Vec<NamedOccurrence>,
 }
 
 struct Scanner<'a> {

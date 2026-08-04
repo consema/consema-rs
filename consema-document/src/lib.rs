@@ -137,6 +137,10 @@ pub enum NodeRole {
     JsonSyntaxPiece,
     /// One TOML lossless syntax piece.
     TomlSyntaxPiece,
+    /// Complete YAML serialization stream.
+    YamlStream,
+    /// One independent YAML document in a stream.
+    YamlDocument,
     /// YAML representation node.
     YamlNode,
     /// YAML ordered sequence association.
@@ -145,6 +149,10 @@ pub enum NodeRole {
     YamlMappingEntry,
     /// YAML alias serialization occurrence.
     YamlAlias,
+    /// YAML anchor definition occurrence.
+    YamlAnchorDefinition,
+    /// One YAML lossless syntax piece.
+    YamlSyntaxPiece,
 }
 
 /// Opaque handle to one structural identity in exactly one snapshot.

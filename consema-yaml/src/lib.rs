@@ -15,11 +15,16 @@ use consema_document::{
 
 mod backend;
 mod native;
+mod query;
 mod syntax;
 
 use backend::{BackendError, BackendEventKind, parse_events};
 pub use native::GraphProjectionError;
 use native::{NativeContent, NativeStream, node_ref};
+pub use query::{
+    YamlMatch, YamlSyntaxMatch, execute_yaml_query, execute_yaml_query_cursor,
+    execute_yaml_syntax_query, execute_yaml_syntax_query_cursor,
+};
 use syntax::{Tokenized, tokenize};
 
 /// Frozen YAML language profile.
@@ -166,6 +171,39 @@ impl YamlSyntaxKind {
         }
     }
 
+    /// Resolves one exact stable kind name.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "Bom" => Some(Self::Bom),
+            "Whitespace" => Some(Self::Whitespace),
+            "Newline" => Some(Self::Newline),
+            "Comment" => Some(Self::Comment),
+            "Directive" => Some(Self::Directive),
+            "DocumentStart" => Some(Self::DocumentStart),
+            "DocumentEnd" => Some(Self::DocumentEnd),
+            "SequenceEntry" => Some(Self::SequenceEntry),
+            "ExplicitKey" => Some(Self::ExplicitKey),
+            "MappingValue" => Some(Self::MappingValue),
+            "FlowSequenceStart" => Some(Self::FlowSequenceStart),
+            "FlowSequenceEnd" => Some(Self::FlowSequenceEnd),
+            "FlowMappingStart" => Some(Self::FlowMappingStart),
+            "FlowMappingEnd" => Some(Self::FlowMappingEnd),
+            "FlowEntry" => Some(Self::FlowEntry),
+            "Anchor" => Some(Self::Anchor),
+            "Alias" => Some(Self::Alias),
+            "Tag" => Some(Self::Tag),
+            "PlainScalar" => Some(Self::PlainScalar),
+            "SingleQuotedScalar" => Some(Self::SingleQuotedScalar),
+            "DoubleQuotedScalar" => Some(Self::DoubleQuotedScalar),
+            "LiteralBlockHeader" => Some(Self::LiteralBlockHeader),
+            "FoldedBlockHeader" => Some(Self::FoldedBlockHeader),
+            "BlockScalarContent" => Some(Self::BlockScalarContent),
+            "ErrorRegion" => Some(Self::ErrorRegion),
+            _ => None,
+        }
+    }
+
     const fn is_trivia(self) -> bool {
         matches!(
             self,
@@ -229,10 +267,12 @@ pub fn parse(
     let Tokenized {
         index: structural_index,
         kinds: syntax_kinds,
-        anchor_names,
-        alias_names,
+        anchors,
+        aliases,
     } = tokenize(&source, &authority, limits.max_token_count)?;
-    let native = native::compose(&events, text, profile, anchor_names, alias_names, limits)?;
+    let native = native::compose(
+        &events, &source, &authority, profile, anchors, aliases, limits,
+    )?;
     Ok(Document {
         authority,
         source,
@@ -259,6 +299,21 @@ pub struct Document {
 }
 
 impl Document {
+    /// Snapshot-bound identity of the complete serialization stream.
+    #[must_use]
+    pub fn stream_node_ref(&self) -> consema_document::NodeRef {
+        self.authority
+            .node_ref(0, consema_document::NodeRole::YamlStream)
+    }
+
+    /// Exact raw span of the complete serialization stream.
+    #[must_use]
+    pub fn stream_span(&self) -> consema_document::Span {
+        self.authority
+            .span(0, self.source.len())
+            .expect("source length is an ordered span")
+    }
+
     /// Snapshot identity to which future native handles and spans are bound.
     #[must_use]
     pub const fn snapshot_identity(&self) -> SnapshotIdentity {
@@ -311,13 +366,12 @@ impl Document {
     #[must_use]
     pub fn document(&self, ordinal: usize) -> Option<YamlDocument<'_>> {
         self.native
-            .roots
+            .documents
             .get(ordinal)
-            .copied()
-            .map(|root| YamlDocument {
+            .map(|document| YamlDocument {
                 owner: self,
                 ordinal,
-                root,
+                document,
             })
     }
 
@@ -370,7 +424,7 @@ impl Document {
 pub struct YamlDocument<'a> {
     owner: &'a Document,
     ordinal: usize,
-    root: usize,
+    document: &'a native::NativeDocument,
 }
 
 impl<'a> YamlDocument<'a> {
@@ -380,12 +434,27 @@ impl<'a> YamlDocument<'a> {
         self.ordinal
     }
 
+    /// Snapshot-bound document identity.
+    #[must_use]
+    pub fn node_ref(self) -> consema_document::NodeRef {
+        self.owner.authority.node_ref(
+            u64::try_from(self.ordinal).expect("parse limits keep document ordinals in u64"),
+            consema_document::NodeRole::YamlDocument,
+        )
+    }
+
+    /// Backend-validated raw document presentation span.
+    #[must_use]
+    pub const fn span(self) -> consema_document::Span {
+        self.document.span
+    }
+
     /// Representation root. Alias occurrences already share target identity.
     #[must_use]
     pub const fn root(self) -> YamlNode<'a> {
         YamlNode {
             owner: self.owner,
-            index: self.root,
+            index: self.document.root,
         }
     }
 }
@@ -404,6 +473,12 @@ impl<'a> YamlNode<'a> {
         node_ref(&self.owner.authority, self.index)
     }
 
+    /// Exact raw representation occurrence span.
+    #[must_use]
+    pub fn span(self) -> consema_document::Span {
+        self.owner.native.nodes[self.index].span
+    }
+
     /// Resolved tag identifier.
     #[must_use]
     pub fn tag(self) -> &'a str {
@@ -414,6 +489,26 @@ impl<'a> YamlNode<'a> {
     #[must_use]
     pub fn anchor(self) -> Option<&'a str> {
         self.owner.native.nodes[self.index].anchor.as_deref()
+    }
+
+    /// Snapshot-bound anchor-definition identity, when this node defines one.
+    #[must_use]
+    pub fn anchor_node_ref(self) -> Option<consema_document::NodeRef> {
+        self.owner.native.nodes[self.index]
+            .anchor
+            .as_ref()
+            .map(|_| {
+                self.owner.authority.node_ref(
+                    u64::try_from(self.index).expect("parse limits keep node indexes in u64"),
+                    consema_document::NodeRole::YamlAnchorDefinition,
+                )
+            })
+    }
+
+    /// Exact raw `&name` span, when this node defines an anchor.
+    #[must_use]
+    pub fn anchor_span(self) -> Option<consema_document::Span> {
+        self.owner.native.nodes[self.index].anchor_span
     }
 
     /// Native node kind.
@@ -527,6 +622,12 @@ impl<'a> YamlSequenceItem<'a> {
         )
     }
 
+    /// Exact raw element occurrence span, including an alias spelling when used.
+    #[must_use]
+    pub const fn span(self) -> consema_document::Span {
+        self.item.span
+    }
+
     /// Referenced representation node.
     #[must_use]
     pub const fn node(self) -> YamlNode<'a> {
@@ -552,6 +653,12 @@ impl<'a> YamlMappingEntry<'a> {
             self.entry.identity,
             consema_document::NodeRole::YamlMappingEntry,
         )
+    }
+
+    /// Raw span from the key occurrence through the value occurrence.
+    #[must_use]
+    pub const fn span(self) -> consema_document::Span {
+        self.entry.span
     }
 
     /// Arbitrary key node.
@@ -587,6 +694,12 @@ impl<'a> YamlAlias<'a> {
         self.owner
             .authority
             .node_ref(self.alias.identity, consema_document::NodeRole::YamlAlias)
+    }
+
+    /// Exact raw `*name` occurrence span.
+    #[must_use]
+    pub const fn span(self) -> consema_document::Span {
+        self.alias.span
     }
 
     /// Exact alias name without `*`.
@@ -789,6 +902,50 @@ mod tests {
         assert_eq!(
             graph.node(graph_root).unwrap().sequence_items(),
             Some([graph_root].as_slice())
+        );
+    }
+
+    #[test]
+    fn native_handles_retain_exact_anchor_alias_and_association_spans() {
+        let source = b"---\nroot: &node [one, *node]\n";
+        let document = parse(
+            source.as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            document.stream_node_ref().role(),
+            consema_document::NodeRole::YamlStream
+        );
+        assert_eq!(document.stream_span().end_byte(), source.len());
+        let yaml_document = document.document(0).unwrap();
+        assert_eq!(
+            yaml_document.node_ref().role(),
+            consema_document::NodeRole::YamlDocument
+        );
+        let entry = yaml_document.root().mapping_entry(0).unwrap();
+        let sequence = entry.value();
+        let anchor_span = sequence.anchor_span().unwrap();
+        assert_eq!(
+            &source[anchor_span.start_byte()..anchor_span.end_byte()],
+            b"&node"
+        );
+        assert_eq!(
+            sequence.anchor_node_ref().unwrap().role(),
+            consema_document::NodeRole::YamlAnchorDefinition
+        );
+        let alias = document.alias(0).unwrap();
+        assert_eq!(
+            &source[alias.span().start_byte()..alias.span().end_byte()],
+            b"*node"
+        );
+        assert_eq!(alias.target().node_ref(), sequence.node_ref());
+        let element = sequence.sequence_item(1).unwrap();
+        assert_eq!(element.span(), alias.span());
+        assert_eq!(
+            element.node_ref().role(),
+            consema_document::NodeRole::YamlSequenceElement
         );
     }
 

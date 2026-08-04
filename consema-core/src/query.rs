@@ -56,6 +56,12 @@ impl QueryDomain {
         Self::new("toml.native-semantic-query", 1)
     }
 
+    /// `yaml.native-semantic-query@1`.
+    #[must_use]
+    pub fn yaml_native_v1() -> Self {
+        Self::new("yaml.native-semantic-query", 1)
+    }
+
     /// `json.lossless-syntax-query@1`.
     #[must_use]
     pub fn json_lossless_syntax_v1() -> Self {
@@ -72,6 +78,12 @@ impl QueryDomain {
     #[must_use]
     pub fn toml_lossless_syntax_v1() -> Self {
         Self::new("toml.lossless-syntax-query", 1)
+    }
+
+    /// `yaml.lossless-syntax-query@1`.
+    #[must_use]
+    pub fn yaml_lossless_syntax_v1() -> Self {
+        Self::new("yaml.lossless-syntax-query", 1)
     }
 
     /// Domain namespace.
@@ -108,10 +120,26 @@ pub enum MatchRole {
     TomlEntry,
     /// TOML array or array-of-tables element.
     TomlArrayElement,
+    /// Complete YAML serialization stream.
+    YamlStream,
+    /// One independent YAML document.
+    YamlDocument,
+    /// YAML representation node.
+    YamlNode,
+    /// YAML ordered mapping association.
+    YamlMappingEntry,
+    /// YAML ordered sequence association.
+    YamlSequenceElement,
+    /// YAML anchor definition occurrence.
+    YamlAnchorDefinition,
+    /// YAML alias serialization occurrence.
+    YamlAliasOccurrence,
     /// JSON lossless syntax piece.
     JsonSyntaxPiece,
     /// TOML lossless syntax piece.
     TomlSyntaxPiece,
+    /// YAML lossless syntax piece.
+    YamlSyntaxPiece,
     /// PortableGraph node.
     GraphNode,
     /// PortableGraph sequence element association.
@@ -309,8 +337,10 @@ impl QueryDefinition {
             ("core.portable-graph-query", 1) => MatchRole::GraphNode,
             ("json.native-semantic-query", 1 | 2) => MatchRole::JsonValue,
             ("toml.native-semantic-query", 1) => MatchRole::TomlItem,
+            ("yaml.native-semantic-query", 1) => MatchRole::YamlStream,
             ("json.lossless-syntax-query", 1 | 2) => MatchRole::JsonSyntaxPiece,
             ("toml.lossless-syntax-query", 1) => MatchRole::TomlSyntaxPiece,
+            ("yaml.lossless-syntax-query", 1) => MatchRole::YamlSyntaxPiece,
             _ => return Err(QueryFailure::DomainMismatch(self.domain.clone())),
         };
         let output_role = validate_expression(&self.domain, &self.expression, input_role)?;
@@ -764,6 +794,54 @@ fn validate_operator(
             ("toml.native-semantic-query", "toml.array-element-item") => {
                 (MatchRole::TomlArrayElement, MatchRole::TomlItem, &[])
             }
+            ("yaml.native-semantic-query", "yaml.documents") => {
+                (MatchRole::YamlStream, MatchRole::YamlDocument, &[])
+            }
+            ("yaml.native-semantic-query", "yaml.document-root") => {
+                (MatchRole::YamlDocument, MatchRole::YamlNode, &[])
+            }
+            (
+                "yaml.native-semantic-query",
+                "yaml.where-node-kind" | "yaml.where-tag" | "yaml.scalar-canonical-equals",
+            ) => (
+                MatchRole::YamlNode,
+                MatchRole::YamlNode,
+                &[(
+                    (if operator.id() == "yaml.where-node-kind" {
+                        "kind"
+                    } else if operator.id() == "yaml.where-tag" {
+                        "tag"
+                    } else {
+                        "canonical"
+                    }),
+                    PortableValueKind::String,
+                )],
+            ),
+            ("yaml.native-semantic-query", "yaml.try-sequence-elements") => {
+                (MatchRole::YamlNode, MatchRole::YamlSequenceElement, &[])
+            }
+            ("yaml.native-semantic-query", "yaml.sequence-element-node") => {
+                (MatchRole::YamlSequenceElement, MatchRole::YamlNode, &[])
+            }
+            ("yaml.native-semantic-query", "yaml.try-mapping-entries") => {
+                (MatchRole::YamlNode, MatchRole::YamlMappingEntry, &[])
+            }
+            (
+                "yaml.native-semantic-query",
+                "yaml.mapping-entry-key" | "yaml.mapping-entry-value",
+            ) => (MatchRole::YamlMappingEntry, MatchRole::YamlNode, &[]),
+            ("yaml.native-semantic-query", "yaml.anchor-definition") => {
+                (MatchRole::YamlNode, MatchRole::YamlAnchorDefinition, &[])
+            }
+            ("yaml.native-semantic-query", "yaml.anchor-node") => {
+                (MatchRole::YamlAnchorDefinition, MatchRole::YamlNode, &[])
+            }
+            ("yaml.native-semantic-query", "yaml.alias-occurrences") => {
+                (MatchRole::YamlStream, MatchRole::YamlAliasOccurrence, &[])
+            }
+            ("yaml.native-semantic-query", "yaml.alias-target") => {
+                (MatchRole::YamlAliasOccurrence, MatchRole::YamlNode, &[])
+            }
             ("json.lossless-syntax-query", "json.syntax-kind-is") => (
                 MatchRole::JsonSyntaxPiece,
                 MatchRole::JsonSyntaxPiece,
@@ -782,6 +860,16 @@ fn validate_operator(
             ("toml.lossless-syntax-query", "toml.syntax-text-equals") => (
                 MatchRole::TomlSyntaxPiece,
                 MatchRole::TomlSyntaxPiece,
+                &[("text", PortableValueKind::String)],
+            ),
+            ("yaml.lossless-syntax-query", "yaml.syntax-kind-is") => (
+                MatchRole::YamlSyntaxPiece,
+                MatchRole::YamlSyntaxPiece,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("yaml.lossless-syntax-query", "yaml.syntax-text-equals") => (
+                MatchRole::YamlSyntaxPiece,
+                MatchRole::YamlSyntaxPiece,
                 &[("text", PortableValueKind::String)],
             ),
             ("core.portable-graph-query", "graph.reachable-nodes") => {
@@ -891,6 +979,42 @@ fn validate_operator(
             argument: "kind".to_owned(),
         });
     }
+    if operator.id() == "yaml.syntax-kind-is"
+        && !is_yaml_syntax_kind(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "yaml.where-node-kind"
+        && !matches!(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+            "Scalar" | "Sequence" | "Mapping"
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "yaml.where-tag"
+        && operator.arguments()["tag"]
+            .as_string()
+            .expect("validated string")
+            .is_empty()
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "tag".to_owned(),
+        });
+    }
     if operator.id() == "graph.where-kind"
         && !matches!(
             operator.arguments["kind"]
@@ -955,6 +1079,37 @@ fn is_toml_syntax_kind(kind: &str) -> bool {
             | "RightBrace"
             | "Comma"
             | "Dot"
+    )
+}
+
+fn is_yaml_syntax_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Bom"
+            | "Whitespace"
+            | "Newline"
+            | "Comment"
+            | "Directive"
+            | "DocumentStart"
+            | "DocumentEnd"
+            | "FlowSequenceStart"
+            | "FlowSequenceEnd"
+            | "FlowMappingStart"
+            | "FlowMappingEnd"
+            | "FlowEntry"
+            | "SequenceEntry"
+            | "ExplicitKey"
+            | "MappingValue"
+            | "Anchor"
+            | "Alias"
+            | "Tag"
+            | "PlainScalar"
+            | "SingleQuotedScalar"
+            | "DoubleQuotedScalar"
+            | "LiteralBlockHeader"
+            | "FoldedBlockHeader"
+            | "BlockScalarContent"
+            | "ErrorRegion"
     )
 }
 
