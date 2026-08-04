@@ -1297,11 +1297,7 @@ mod tests {
             ..QueryLimits::default()
         };
         assert!(matches!(
-            executable.execute_portable(
-                &PortableValue::null(),
-                limits,
-                &CancellationToken::new()
-            ),
+            executable.execute_portable(&PortableValue::null(), limits, &CancellationToken::new()),
             Err(QueryFailure::ResourceLimitExceeded)
         ));
     }

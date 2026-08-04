@@ -344,12 +344,7 @@ mod tests {
             ..QueryLimits::default()
         };
         assert!(matches!(
-            execute_json_query(
-                &executable,
-                &document,
-                limits,
-                &CancellationToken::new()
-            ),
+            execute_json_query(&executable, &document, limits, &CancellationToken::new()),
             Err(QueryFailure::ResourceLimitExceeded)
         ));
     }
