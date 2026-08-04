@@ -1,6 +1,7 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
 mod protocol_v1;
+mod source_v1;
 mod toml_v1;
 
 use consema_core::{
@@ -21,6 +22,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 pub use protocol_v1::{PROTOCOL_V1_VECTORS_JSON, run_protocol_v1};
+pub use source_v1::{SOURCE_V1_VECTORS_JSON, run_source_v1, run_source_v1_json};
 pub use toml_v1::{TOML_V1_VECTORS_JSON, run_toml_v1};
 
 /// Embedded language-neutral suite bytes.
@@ -816,7 +818,7 @@ fn projection_key_provenance(case: &VectorCase<'_>) -> Result<(), String> {
         match location.role() {
             consema_core::AssociationRole::ObjectKey => keys += 1,
             consema_core::AssociationRole::ObjectEntry => entries += 1,
-            _ => {}
+            consema_core::AssociationRole::EntryMappingEntry => {}
         }
     }
     ensure(keys == key_origins && entries == entry_origins)
