@@ -598,7 +598,11 @@ impl ProjectionResultMessage {
             ("completion", self.completion.to_value()),
             (
                 "value",
-                self.value.clone().unwrap_or_else(PortableValue::null),
+                self.value
+                    .as_ref()
+                    .map_or_else(PortableValue::null, |value| {
+                        object(vec![("portable_value", value.clone())])
+                    }),
             ),
             (
                 "fidelity",
@@ -628,7 +632,11 @@ impl ProjectionResultMessage {
             ],
             "$",
         )?;
-        let projected = (fields[2] != &PortableValue::null()).then(|| fields[2].clone());
+        let projected = if fields[2] == &PortableValue::null() {
+            None
+        } else {
+            Some(exact_fields(fields[2], &["portable_value"], "$.value")?[0].clone())
+        };
         let fidelity = optional_string(fields[3], "$.fidelity")?
             .map(parse_fidelity)
             .transpose()?;
@@ -1128,6 +1136,23 @@ mod tests {
             Some(ProjectionFidelity::Exact),
             ProjectionReportMessage::default(),
             provenance,
+            Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            ProjectionResultMessage::from_value(&result.to_value()).unwrap(),
+            result
+        );
+    }
+
+    #[test]
+    fn successful_null_value_is_distinct_from_absent_value() {
+        let result = ProjectionResultMessage::new(
+            Completion::new(CompletionStatus::Success, 1, 1, None, None).unwrap(),
+            Some(PortableValue::null()),
+            Some(ProjectionFidelity::Exact),
+            ProjectionReportMessage::default(),
+            ProvenanceMapMessage::default(),
             Vec::new(),
         )
         .unwrap();
