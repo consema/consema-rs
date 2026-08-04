@@ -24,6 +24,8 @@ const TRIVIA_AND_STRINGS: &[u8] =
     include_bytes!("../../../conformance/fixtures/toml/trivia-and-strings.toml");
 const INVALID_DUPLICATE: &[u8] =
     include_bytes!("../../../conformance/fixtures/toml/invalid-duplicate.toml");
+const CARGO_MANIFEST: &[u8] = include_bytes!("../../../Cargo.toml");
+const PYPROJECT: &[u8] = include_bytes!("../../../conformance/fixtures/toml/pyproject.toml");
 
 /// Parses and runs every embedded `consema.toml.conformance@1` case.
 #[must_use]
@@ -91,6 +93,8 @@ fn run_case(id: &str) -> Result<(), String> {
         "toml.parse.reject-invalid" => reject_invalid(),
         "toml.resource.token-limit" => token_limit(),
         "toml.resource.node-depth-limits" => node_depth_limits(),
+        "toml.corpus.cargo-manifest" => corpus_document(CARGO_MANIFEST),
+        "toml.corpus.pyproject" => corpus_document(PYPROJECT),
         _ => Err("runner does not recognize published TOML case".to_owned()),
     }
 }
@@ -380,6 +384,18 @@ fn node_depth_limits() -> Result<(), String> {
     )
 }
 
+fn corpus_document(source: &[u8]) -> Result<(), String> {
+    let document = parse_fixture(source)?;
+    ensure(
+        document.render() == source
+            && document.formation_status() == FormationStatus::Complete
+            && matches!(
+                document.project(projection_request()),
+                ProjectionResult::Complete(_)
+            ),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,6 +404,6 @@ mod tests {
     fn published_toml_v1_suite_is_conformant() {
         let report = run_toml_v1();
         assert!(report.is_conformant(), "{report:#?}");
-        assert_eq!(report.passed.len(), 16);
+        assert_eq!(report.passed.len(), 18);
     }
 }
