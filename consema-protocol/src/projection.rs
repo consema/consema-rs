@@ -6,8 +6,8 @@ use crate::schema::{
     sequence, signed_i32, string, unsigned_u32, unsigned_u64,
 };
 use crate::{
-    Completion, CompletionStatus, ContractId, DiagnosticMessage, ProtocolError, ProtocolErrorKind,
-    SourceLocation,
+    Completion, CompletionStatus, ContractId, DiagnosticMessage, ErrorCodeRegistry, ProtocolError,
+    ProtocolErrorKind, SourceLocation,
 };
 use consema_core::{
     AssociationLocation, BigInteger, ObjectBuilder, PortableValue, QueryDefinition,
@@ -445,6 +445,9 @@ pub struct ProjectionReportMessage {
 impl ProjectionReportMessage {
     /// Validates event cross-field invariants.
     pub fn new(events: Vec<ProjectionEventMessage>) -> Result<Self, ProtocolError> {
+        for event in &events {
+            ErrorCodeRegistry::v1().validate_at(&event.code, "$.events.code")?;
+        }
         if events.iter().any(|event| {
             event.code.is_empty()
                 || (event.loss_classification == LossClassification::Lossy && event.reversible)
@@ -1169,7 +1172,7 @@ mod tests {
             1,
             0,
             None,
-            Some("core.projection.failed@1".to_owned()),
+            Some("core.projection.target-not-applicable@1".to_owned()),
         )
         .unwrap();
         assert!(
@@ -1190,6 +1193,24 @@ mod tests {
                 .unwrap_err()
                 .kind(),
             ProtocolErrorKind::ProcessLocalHandle
+        );
+    }
+
+    #[test]
+    fn projection_event_codes_are_registry_bound() {
+        assert!(
+            ProjectionReportMessage::new(vec![ProjectionEventMessage {
+                code: "example.projection@1".to_owned(),
+                policy_rule_id: None,
+                source_locations: Vec::new(),
+                projected_location: None,
+                old_category: None,
+                new_category: None,
+                reversible: false,
+                loss_classification: LossClassification::None,
+                arguments: BTreeMap::new(),
+            }])
+            .is_err()
         );
     }
 }

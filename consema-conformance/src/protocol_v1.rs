@@ -15,13 +15,14 @@ use consema_json::{
 use consema_protocol::{
     CancellationRequest, CapabilityDeclaration, ChangeSetMessage, Completion, CompletionStatus,
     ContractId, ContractRegistry, ContractStability, DiagnosticMessage, ErrorCodeRegistry,
-    ExecutionPolicy, NativeMatchLocator, ProfileDescriptor, ProjectedLocationMessage,
-    ProjectionFidelity, ProjectionPolicy, ProjectionReportMessage, ProjectionRequestMessage,
-    ProjectionResultMessage, ProjectionRule, ProjectionScope, ProtocolErrorKind, ProtocolLimits,
-    ProtocolMessage, ProvenanceEntryMessage, ProvenanceMapMessage, ProvenanceRelation,
-    QueryResultMessage, RegistryManifest, SourceOriginMessage, decode_json, decode_pvce,
-    encode_json, encode_pvce, error_code_manifest_value, query_definition_from_message,
-    query_definition_message, query_failure_code, validate_error_code_manifest_value,
+    ExecutionPolicy, LossClassification, NativeMatchLocator, ProfileDescriptor,
+    ProjectedLocationMessage, ProjectionEventMessage, ProjectionFidelity, ProjectionPolicy,
+    ProjectionReportMessage, ProjectionRequestMessage, ProjectionResultMessage, ProjectionRule,
+    ProjectionScope, ProtocolErrorKind, ProtocolLimits, ProtocolMessage, ProvenanceEntryMessage,
+    ProvenanceMapMessage, ProvenanceRelation, QueryResultMessage, RegistryManifest,
+    SourceOriginMessage, decode_json, decode_pvce, encode_json, encode_pvce,
+    error_code_manifest_value, query_definition_from_message, query_definition_message,
+    query_failure_code, validate_error_code_manifest_value,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -97,12 +98,15 @@ fn run_case(id: &str) -> Result<(), String> {
         "protocol.capability.conditional-roundtrip" => capability_roundtrip(),
         "protocol.capability.reject-contradiction" => capability_contradiction(),
         "protocol.diagnostic.require-source-binding" => diagnostic_source_binding(),
+        "protocol.diagnostic.reject-category-registry-mismatch" => diagnostic_category_mismatch(),
         "protocol.completion.reject-contradiction" => completion_contradiction(),
+        "protocol.completion.reject-unregistered-failure-code" => completion_unregistered_code(),
         "protocol.query.definition-envelope" => query_definition_envelope(),
         "protocol.query.portable-result" => query_portable_result(),
         "protocol.query.reject-native-handle" => reject_native_handle(),
         "protocol.projection.request-roundtrip" => projection_request_roundtrip(),
         "protocol.projection.no-partial-value" => projection_no_partial(),
+        "protocol.projection.reject-unregistered-event-code" => projection_unregistered_code(),
         "protocol.provenance.externalized-roundtrip" => provenance_roundtrip(),
         "protocol.change-set.actual-edit-roundtrip" => change_set_roundtrip(),
         "protocol.registry.current-roundtrip" => registry_roundtrip(),
@@ -522,6 +526,24 @@ fn diagnostic_source_binding() -> Result<(), String> {
     )
 }
 
+fn diagnostic_category_mismatch() -> Result<(), String> {
+    let message = DiagnosticMessage {
+        code: "json.object.duplicate-member@1".to_owned(),
+        category: DiagnosticCategory::Syntax,
+        severity: DiagnosticSeverity::Error,
+        primary: None,
+        related: Vec::new(),
+        arguments: BTreeMap::new(),
+        notes: Vec::new(),
+        fixes: Vec::new(),
+        occurrence: 0,
+    };
+    ensure(
+        DiagnosticMessage::from_value(&message.to_value())
+            .is_err_and(|error| error.kind() == ProtocolErrorKind::InvalidValue),
+    )
+}
+
 fn completion_contradiction() -> Result<(), String> {
     ensure(
         Completion::new(
@@ -530,6 +552,19 @@ fn completion_contradiction() -> Result<(), String> {
             1,
             Some("max_steps".to_owned()),
             None,
+        )
+        .is_err_and(|error| error.kind() == ProtocolErrorKind::InvalidValue),
+    )
+}
+
+fn completion_unregistered_code() -> Result<(), String> {
+    ensure(
+        Completion::new(
+            CompletionStatus::Failed,
+            1,
+            0,
+            None,
+            Some("example.failure@1".to_owned()),
         )
         .is_err_and(|error| error.kind() == ProtocolErrorKind::InvalidValue),
     )
@@ -620,6 +655,23 @@ fn projection_no_partial() -> Result<(), String> {
             ProvenanceMapMessage::default(),
             Vec::new(),
         )
+        .is_err_and(|error| error.kind() == ProtocolErrorKind::InvalidValue),
+    )
+}
+
+fn projection_unregistered_code() -> Result<(), String> {
+    ensure(
+        ProjectionReportMessage::new(vec![ProjectionEventMessage {
+            code: "example.projection@1".to_owned(),
+            policy_rule_id: None,
+            source_locations: Vec::new(),
+            projected_location: None,
+            old_category: None,
+            new_category: None,
+            reversible: false,
+            loss_classification: LossClassification::None,
+            arguments: BTreeMap::new(),
+        }])
         .is_err_and(|error| error.kind() == ProtocolErrorKind::InvalidValue),
     )
 }
@@ -739,6 +791,6 @@ mod tests {
     fn published_protocol_v1_suite_is_conformant() {
         let report = run_protocol_v1();
         assert!(report.is_conformant(), "{report:#?}");
-        assert_eq!(report.passed.len(), 29);
+        assert_eq!(report.passed.len(), 32);
     }
 }

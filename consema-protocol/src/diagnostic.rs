@@ -3,7 +3,7 @@
 use crate::schema::{
     exact_fields, integer_u64, object, schema_fields, sequence, string, unsigned_u64,
 };
-use crate::{ProtocolError, ProtocolErrorKind};
+use crate::{ErrorCodeRegistry, ProtocolError, ProtocolErrorKind};
 use consema_core::{
     Diagnostic, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, ObjectBuilder,
     PortableValue, RelatedLocation, SequenceBuilder,
@@ -138,7 +138,7 @@ impl DiagnosticMessage {
                 })
             })
             .collect::<Result<Vec<_>, ProtocolError>>()?;
-        Ok(Self {
+        let result = Self {
             code: diagnostic.code.clone(),
             category: diagnostic.category,
             severity: diagnostic.severity,
@@ -148,7 +148,9 @@ impl DiagnosticMessage {
             notes: diagnostic.notes.clone(),
             fixes: Vec::new(),
             occurrence: diagnostic.occurrence,
-        })
+        };
+        validate_diagnostic_code(&result.code, result.category)?;
+        Ok(result)
     }
 
     /// Converts portable diagnostic facts back to a snapshot-neutral core value.
@@ -298,7 +300,7 @@ impl DiagnosticMessage {
             .enumerate()
             .map(|(index, fix)| decode_fix(fix, &format!("$.fixes[{index}]")))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self {
+        let result = Self {
             code: string(fields[1], "$.code")?.to_owned(),
             category: parse_category(string(fields[2], "$.category")?)?,
             severity: parse_severity(string(fields[3], "$.severity")?)?,
@@ -308,8 +310,23 @@ impl DiagnosticMessage {
             notes,
             fixes,
             occurrence: unsigned_u64(fields[9], "$.occurrence")?,
-        })
+        };
+        validate_diagnostic_code(&result.code, result.category)?;
+        Ok(result)
     }
+}
+
+fn validate_diagnostic_code(code: &str, category: DiagnosticCategory) -> Result<(), ProtocolError> {
+    let descriptor = ErrorCodeRegistry::v1().descriptor(code).ok_or_else(|| {
+        crate::schema::invalid("$.code", format!("unregistered public code: {code}"))
+    })?;
+    if descriptor.category != category {
+        return Err(crate::schema::invalid(
+            "$.category",
+            "diagnostic category contradicts the error-code registry",
+        ));
+    }
+    Ok(())
 }
 
 fn bind_location(
@@ -465,7 +482,7 @@ mod tests {
     #[test]
     fn diagnostic_round_trip_preserves_fixes_and_locations() {
         let message = DiagnosticMessage {
-            code: "example.problem@1".to_owned(),
+            code: "json.object.duplicate-member@1".to_owned(),
             category: DiagnosticCategory::Semantic,
             severity: DiagnosticSeverity::Warning,
             primary: Some(SourceLocation::new("sha256:abc", 2, 4).unwrap()),
@@ -489,7 +506,7 @@ mod tests {
     #[test]
     fn core_snapshot_location_requires_explicit_binding() {
         let diagnostic = Diagnostic::new(
-            "example.problem@1",
+            "json.syntax.expected-value@1",
             DiagnosticCategory::Syntax,
             DiagnosticSeverity::Error,
             Some(DiagnosticLocation {
@@ -507,5 +524,24 @@ mod tests {
         );
         let portable = DiagnosticMessage::from_core(&diagnostic, Some("source:one")).unwrap();
         assert_eq!(portable.primary.unwrap().source_id(), "source:one");
+    }
+
+    #[test]
+    fn diagnostic_code_and_category_are_registry_bound() {
+        let mut message = DiagnosticMessage {
+            code: "example.problem@1".to_owned(),
+            category: DiagnosticCategory::Semantic,
+            severity: DiagnosticSeverity::Warning,
+            primary: None,
+            related: Vec::new(),
+            arguments: BTreeMap::new(),
+            notes: Vec::new(),
+            fixes: Vec::new(),
+            occurrence: 0,
+        };
+        assert!(DiagnosticMessage::from_value(&message.to_value()).is_err());
+        message.code = "json.object.duplicate-member@1".to_owned();
+        message.category = DiagnosticCategory::Syntax;
+        assert!(DiagnosticMessage::from_value(&message.to_value()).is_err());
     }
 }

@@ -381,19 +381,30 @@ impl ErrorCodeRegistry {
     /// Whether a full exact code is registered.
     #[must_use]
     pub fn contains(self, candidate: &str) -> bool {
+        self.descriptor(candidate).is_some()
+    }
+
+    /// Returns the exact registered descriptor.
+    #[must_use]
+    pub fn descriptor(self, candidate: &str) -> Option<&'static ErrorCodeDescriptor> {
         ERROR_CODES
             .binary_search_by_key(&candidate, |descriptor| descriptor.code)
-            .is_ok()
+            .ok()
+            .map(|index| &ERROR_CODES[index])
     }
 
     /// Validates an exact registered code.
     pub fn validate(self, candidate: &str) -> Result<(), ProtocolError> {
+        self.validate_at(candidate, "$.code")
+    }
+
+    pub(crate) fn validate_at(self, candidate: &str, path: &str) -> Result<(), ProtocolError> {
         if self.contains(candidate) {
             Ok(())
         } else {
             Err(ProtocolError::new(
                 ProtocolErrorKind::InvalidValue,
-                "$.code",
+                path,
                 format!("unregistered public code: {candidate}"),
             ))
         }

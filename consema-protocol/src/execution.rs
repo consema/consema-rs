@@ -1,9 +1,9 @@
 //! Resource, cancellation, and completion protocols.
 
-use crate::ProtocolError;
 use crate::schema::{
     integer_u64, nullable_string, object, optional_string, schema_fields, string, unsigned_u64,
 };
+use crate::{ErrorCodeRegistry, ProtocolError};
 use consema_core::{ObjectBuilder, OperationStatus, PortableValue};
 use std::collections::BTreeMap;
 
@@ -56,6 +56,9 @@ impl Completion {
         limit_name: Option<String>,
         failure_code: Option<String>,
     ) -> Result<Self, ProtocolError> {
+        if let Some(code) = failure_code.as_deref() {
+            ErrorCodeRegistry::v1().validate_at(code, "$.failure_code")?;
+        }
         let valid = match status {
             CompletionStatus::Success | CompletionStatus::Cancelled => {
                 limit_name.is_none() && failure_code.is_none()
@@ -369,6 +372,16 @@ mod tests {
         assert_eq!(
             Completion::from_value(&completion.to_value()).unwrap(),
             completion
+        );
+        assert!(
+            Completion::new(
+                CompletionStatus::Failed,
+                1,
+                0,
+                None,
+                Some("example.failure@1".to_owned()),
+            )
+            .is_err()
         );
     }
 
