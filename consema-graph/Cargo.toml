@@ -7,6 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+consema-core = { path = "../consema-core", version = "0.6.0" }
 
 [lints]
 workspace = true

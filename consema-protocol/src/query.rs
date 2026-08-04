@@ -162,6 +162,12 @@ impl QueryResultMessage {
         completion: Completion,
         diagnostics: Vec<DiagnosticMessage>,
     ) -> Result<Self, ProtocolError> {
+        if !is_v1_role(role) {
+            return Err(crate::schema::invalid(
+                "$.role",
+                "role is not published by core.query-result@1",
+            ));
+        }
         let produced = u64::try_from(matches.len()).map_err(|_| {
             crate::schema::invalid("$.matches", "match count exceeds protocol range")
         })?;
@@ -533,7 +539,7 @@ const fn association_role_name(role: AssociationRole) -> &'static str {
     }
 }
 
-const fn role_name(role: MatchRole) -> &'static str {
+fn role_name(role: MatchRole) -> &'static str {
     match role {
         MatchRole::Value => "Value",
         MatchRole::ObjectEntry => "ObjectEntry",
@@ -546,7 +552,17 @@ const fn role_name(role: MatchRole) -> &'static str {
         MatchRole::TomlArrayElement => "TomlArrayElement",
         MatchRole::JsonSyntaxPiece => "JsonSyntaxPiece",
         MatchRole::TomlSyntaxPiece => "TomlSyntaxPiece",
+        MatchRole::GraphNode | MatchRole::GraphSequenceElement | MatchRole::GraphMappingEntry => {
+            unreachable!("core.query-result@1 construction rejects graph roles")
+        }
     }
+}
+
+const fn is_v1_role(role: MatchRole) -> bool {
+    !matches!(
+        role,
+        MatchRole::GraphNode | MatchRole::GraphSequenceElement | MatchRole::GraphMappingEntry
+    )
 }
 
 fn parse_role(value: &str) -> Result<MatchRole, ProtocolError> {
@@ -649,5 +665,18 @@ mod tests {
             QueryResultMessage::from_value(&result.to_value()).unwrap(),
             result
         );
+    }
+
+    #[test]
+    fn frozen_query_result_v1_rejects_graph_roles() {
+        let error = QueryResultMessage::new(
+            QueryDomain::portable_graph_v1(),
+            MatchRole::GraphNode,
+            Vec::new(),
+            Completion::new(CompletionStatus::Success, 0, 0, None, None).unwrap(),
+            Vec::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
     }
 }

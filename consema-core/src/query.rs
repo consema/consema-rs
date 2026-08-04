@@ -32,6 +32,12 @@ impl QueryDomain {
         Self::new("core.portable-value-query", 1)
     }
 
+    /// `core.portable-graph-query@1`.
+    #[must_use]
+    pub fn portable_graph_v1() -> Self {
+        Self::new("core.portable-graph-query", 1)
+    }
+
     /// `json.native-semantic-query@1`.
     #[must_use]
     pub fn json_native_v1() -> Self {
@@ -106,6 +112,12 @@ pub enum MatchRole {
     JsonSyntaxPiece,
     /// TOML lossless syntax piece.
     TomlSyntaxPiece,
+    /// PortableGraph node.
+    GraphNode,
+    /// PortableGraph sequence element association.
+    GraphSequenceElement,
+    /// PortableGraph mapping association.
+    GraphMappingEntry,
 }
 
 /// One versioned operator call with deterministic arguments.
@@ -294,6 +306,7 @@ impl QueryDefinition {
     pub fn validate(self) -> Result<ValidatedQuery, QueryFailure> {
         let input_role = match (self.domain.id(), self.domain.version()) {
             ("core.portable-value-query", 1) => MatchRole::Value,
+            ("core.portable-graph-query", 1) => MatchRole::GraphNode,
             ("json.native-semantic-query", 1 | 2) => MatchRole::JsonValue,
             ("toml.native-semantic-query", 1) => MatchRole::TomlItem,
             ("json.lossless-syntax-query", 1 | 2) => MatchRole::JsonSyntaxPiece,
@@ -771,6 +784,32 @@ fn validate_operator(
                 MatchRole::TomlSyntaxPiece,
                 &[("text", PortableValueKind::String)],
             ),
+            ("core.portable-graph-query", "graph.reachable-nodes") => {
+                (MatchRole::GraphNode, MatchRole::GraphNode, &[])
+            }
+            ("core.portable-graph-query", "graph.where-kind") => (
+                MatchRole::GraphNode,
+                MatchRole::GraphNode,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("core.portable-graph-query", "graph.where-tag") => (
+                MatchRole::GraphNode,
+                MatchRole::GraphNode,
+                &[("tag", PortableValueKind::String)],
+            ),
+            ("core.portable-graph-query", "graph.try-sequence-elements") => {
+                (MatchRole::GraphNode, MatchRole::GraphSequenceElement, &[])
+            }
+            ("core.portable-graph-query", "graph.sequence-element-node") => {
+                (MatchRole::GraphSequenceElement, MatchRole::GraphNode, &[])
+            }
+            ("core.portable-graph-query", "graph.try-mapping-entries") => {
+                (MatchRole::GraphNode, MatchRole::GraphMappingEntry, &[])
+            }
+            (
+                "core.portable-graph-query",
+                "graph.mapping-entry-key" | "graph.mapping-entry-value",
+            ) => (MatchRole::GraphMappingEntry, MatchRole::GraphNode, &[]),
             (_, "core.take" | "core.distinct-by-identity") => (
                 input,
                 input,
@@ -850,6 +889,30 @@ fn validate_operator(
         return Err(QueryFailure::InvalidArgument {
             operator: operator.id.clone(),
             argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "graph.where-kind"
+        && !matches!(
+            operator.arguments["kind"]
+                .as_string()
+                .expect("validated string"),
+            "Scalar" | "Sequence" | "Mapping"
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "graph.where-tag"
+        && operator.arguments["tag"]
+            .as_string()
+            .expect("validated string")
+            .is_empty()
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "tag".to_owned(),
         });
     }
     Ok(output)
