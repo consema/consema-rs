@@ -1,5 +1,6 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
+mod json_family_v2;
 mod operations_v1;
 mod protocol_v1;
 mod protocol_v2;
@@ -24,6 +25,9 @@ use consema_pvce::{
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+pub use json_family_v2::{
+    JSON_FAMILY_V2_VECTORS_JSON, run_json_family_v2, run_json_family_v2_json,
+};
 pub use operations_v1::{OPERATIONS_V1_VECTORS_JSON, run_operations_v1, run_operations_v1_json};
 pub use protocol_v1::{PROTOCOL_V1_VECTORS_JSON, run_protocol_v1};
 pub use protocol_v2::{PROTOCOL_V2_VECTORS_JSON, run_protocol_v2, run_protocol_v2_json};
