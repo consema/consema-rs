@@ -397,7 +397,7 @@ fn measure_root(value: &EncodedValue, limits: EncodeLimits) -> Result<usize, Enc
             )?
         }
     };
-    Ok(add(add(4, 1)?, record)?)
+    add(add(4, 1)?, record)
 }
 
 /// Strictly decodes a core or already canonical extension root.
