@@ -1,6 +1,7 @@
 //! Lossless `toml.1.0@1` documents and native semantics.
 
 mod parser;
+mod query;
 
 use consema_core::{BinaryFloat64, Diagnostic};
 use consema_document::{
@@ -9,6 +10,8 @@ use consema_document::{
     SourceSnapshot, Span,
 };
 use std::sync::Arc;
+
+pub use query::{TomlMatch, execute_toml_query, execute_toml_query_cursor};
 
 /// Frozen TOML language profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
