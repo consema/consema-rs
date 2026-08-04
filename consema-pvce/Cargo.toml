@@ -7,7 +7,7 @@ license.workspace = true
 description = "PVCE/1 canonical codec"
 
 [dependencies]
-consema-core = { path = "../consema-core", version = "0.5.0" }
+consema-core = { path = "../consema-core", version = "0.6.0" }
 
 [lints]
 workspace = true
