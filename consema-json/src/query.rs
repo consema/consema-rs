@@ -1,4 +1,6 @@
-use crate::{Document, InternalValueKind, JsonSyntaxKind, JsonValueKind, SemanticAvailability};
+use crate::{
+    Document, InternalValueKind, JsonProfile, JsonSyntaxKind, JsonValueKind, SemanticAvailability,
+};
 use consema_core::{
     CancellationToken, ExecutableQuery, OperatorCall, OrderedQueryCursor, QueryExecution,
     QueryExpression, QueryFailure, QueryLimits, QuerySelection,
@@ -92,8 +94,10 @@ pub fn execute_json_query(
     limits: QueryLimits,
     cancellation: &CancellationToken,
 ) -> Result<QueryExecution<JsonMatch>, QueryFailure> {
+    let version = executable.definition().domain().version();
     if executable.definition().domain().id() != "json.native-semantic-query"
-        || executable.definition().domain().version() != 1
+        || !matches!(version, 1 | 2)
+        || (document.profile == JsonProfile::Json5StandardV1 && version != 2)
     {
         return Err(QueryFailure::DomainMismatch(
             executable.definition().domain().clone(),
@@ -141,8 +145,10 @@ pub fn execute_json_syntax_query(
     limits: QueryLimits,
     cancellation: &CancellationToken,
 ) -> Result<QueryExecution<JsonSyntaxMatch>, QueryFailure> {
+    let version = executable.definition().domain().version();
     if executable.definition().domain().id() != "json.lossless-syntax-query"
-        || executable.definition().domain().version() != 1
+        || !matches!(version, 1 | 2)
+        || (document.profile == JsonProfile::Json5StandardV1 && version != 2)
     {
         return Err(QueryFailure::DomainMismatch(
             executable.definition().domain().clone(),
@@ -634,5 +640,75 @@ mod tests {
             ),
             Err(QueryFailure::Cancelled)
         );
+    }
+
+    #[test]
+    fn json5_requires_v2_and_exposes_extended_kinds() {
+        let value_document = parse(
+            b"-Infinity".as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let native_v1 = QueryDefinition::new(QueryDomain::json_native_v1())
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        assert!(matches!(
+            execute_json_query(
+                &native_v1,
+                &value_document,
+                QueryLimits::default(),
+                &CancellationToken::new()
+            ),
+            Err(QueryFailure::DomainMismatch(_))
+        ));
+        let native_v2 = QueryDefinition::new(QueryDomain::json_native_v2())
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let result = execute_json_query(
+            &native_v2,
+            &value_document,
+            QueryLimits::default(),
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        assert!(matches!(
+            result.matches(),
+            [JsonMatch::Value {
+                kind: Some(JsonValueKind::BinaryFloat64),
+                ..
+            }]
+        ));
+
+        let syntax_document = parse(
+            b"{identifier:1}".as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let syntax_v2 = QueryDefinition::new(QueryDomain::json_lossless_syntax_v2())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("json.syntax-kind-is", 1)
+                        .with_argument("kind", consema_core::PortableValue::string("Identifier")),
+                ),
+            )
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let result = execute_json_syntax_query(
+            &syntax_v2,
+            &syntax_document,
+            QueryLimits::default(),
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        assert_eq!(result.matches().len(), 1);
+        assert_eq!(result.matches()[0].kind(), JsonSyntaxKind::Identifier);
     }
 }

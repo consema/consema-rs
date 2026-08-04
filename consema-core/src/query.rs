@@ -38,6 +38,12 @@ impl QueryDomain {
         Self::new("json.native-semantic-query", 1)
     }
 
+    /// `json.native-semantic-query@2` with JSON5 `BinaryFloat64` support.
+    #[must_use]
+    pub fn json_native_v2() -> Self {
+        Self::new("json.native-semantic-query", 2)
+    }
+
     /// `toml.native-semantic-query@1`.
     #[must_use]
     pub fn toml_native_v1() -> Self {
@@ -48,6 +54,12 @@ impl QueryDomain {
     #[must_use]
     pub fn json_lossless_syntax_v1() -> Self {
         Self::new("json.lossless-syntax-query", 1)
+    }
+
+    /// `json.lossless-syntax-query@2` with JSON5 Identifier support.
+    #[must_use]
+    pub fn json_lossless_syntax_v2() -> Self {
+        Self::new("json.lossless-syntax-query", 2)
     }
 
     /// `toml.lossless-syntax-query@1`.
@@ -282,9 +294,9 @@ impl QueryDefinition {
     pub fn validate(self) -> Result<ValidatedQuery, QueryFailure> {
         let input_role = match (self.domain.id(), self.domain.version()) {
             ("core.portable-value-query", 1) => MatchRole::Value,
-            ("json.native-semantic-query", 1) => MatchRole::JsonValue,
+            ("json.native-semantic-query", 1 | 2) => MatchRole::JsonValue,
             ("toml.native-semantic-query", 1) => MatchRole::TomlItem,
-            ("json.lossless-syntax-query", 1) => MatchRole::JsonSyntaxPiece,
+            ("json.lossless-syntax-query", 1 | 2) => MatchRole::JsonSyntaxPiece,
             ("toml.lossless-syntax-query", 1) => MatchRole::TomlSyntaxPiece,
             _ => return Err(QueryFailure::DomainMismatch(self.domain.clone())),
         };
@@ -817,6 +829,7 @@ fn validate_operator(
     }
     if operator.id() == "json.syntax-kind-is"
         && !is_json_syntax_kind(
+            domain.version(),
             operator.arguments["kind"]
                 .as_string()
                 .expect("validated string"),
@@ -842,7 +855,7 @@ fn validate_operator(
     Ok(output)
 }
 
-fn is_json_syntax_kind(kind: &str) -> bool {
+fn is_json_syntax_kind(domain_version: u32, kind: &str) -> bool {
     matches!(
         kind,
         "Bom"
@@ -861,7 +874,7 @@ fn is_json_syntax_kind(kind: &str) -> bool {
             | "False"
             | "Null"
             | "ErrorRegion"
-    )
+    ) || (domain_version == 2 && kind == "Identifier")
 }
 
 fn is_toml_syntax_kind(kind: &str) -> bool {
@@ -2200,6 +2213,22 @@ mod tests {
             definition.validate(),
             Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "kind"
         ));
+
+        let identifier_filter = |domain| {
+            QueryDefinition::new(domain).with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("json.syntax-kind-is", 1)
+                        .with_argument("kind", PortableValue::string("Identifier")),
+                ),
+            )
+        };
+        assert!(matches!(
+            identifier_filter(QueryDomain::json_lossless_syntax_v1()).validate(),
+            Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "kind"
+        ));
+        identifier_filter(QueryDomain::json_lossless_syntax_v2())
+            .validate()
+            .unwrap();
 
         QueryDefinition::new(QueryDomain::toml_lossless_syntax_v1())
             .with_expression(
