@@ -75,79 +75,73 @@ impl SourceSnapshotMessage {
     /// Encodes the fixed-field PortableValue schema.
     #[must_use]
     pub fn to_value(&self) -> PortableValue {
-        object(vec![
-            ("schema", PortableValue::string("core.source-snapshot@1")),
-            (
-                "raw_bytes",
-                PortableValue::bytes(self.snapshot.bytes().to_vec()),
-            ),
-            ("digest", digest_value(self.snapshot.digest())),
-            ("encoding", encoding_value(self.snapshot.encoding_facts())),
-            (
-                "decoded_status",
-                PortableValue::string(if self.snapshot.decoded_text().is_some() {
-                    "Available"
-                } else {
-                    "NotText"
-                }),
-            ),
-        ])
+        source_snapshot_value(
+            &self.snapshot,
+            "core.source-snapshot@1",
+            encoding_value(self.snapshot.encoding_facts()),
+        )
     }
 
     /// Strictly decodes and re-verifies raw bytes, digest, encoding, and decoded status.
     pub fn from_value(value: &PortableValue, limits: SourceLimits) -> Result<Self, ProtocolError> {
-        let fields = schema_fields(
+        source_snapshot_from_value(
             value,
             "core.source-snapshot@1",
-            &[
-                "schema",
-                "raw_bytes",
-                "digest",
-                "encoding",
-                "decoded_status",
-            ],
-            "$",
-        )?;
-        let raw = bytes(fields[1], "$.raw_bytes")?;
-        let claimed_digest = digest_from_value(fields[2], "$.digest")?;
-        let claimed_encoding = encoding_from_value(fields[3], "$.encoding")?;
-        let decoded_status = string(fields[4], "$.decoded_status")?;
-        if !matches!(decoded_status, "Available" | "NotText") {
-            return Err(crate::schema::invalid(
-                "$.decoded_status",
-                "expected Available or NotText",
-            ));
-        }
-        let snapshot = SourceSnapshot::from_raw(
-            Arc::<[u8]>::from(raw),
-            request_from_facts(claimed_encoding),
+            encoding_from_value,
+            request_from_facts,
             limits,
         )
-        .map_err(|error| source_error("$.raw_bytes", error))?;
-        if snapshot.digest() != claimed_digest {
-            return Err(crate::schema::invalid(
-                "$.digest",
-                "digest does not match raw_bytes",
-            ));
+        .map(|snapshot| Self { snapshot })
+    }
+}
+
+/// Transferable `core.source-snapshot@2` content fact.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceSnapshotMessageV2 {
+    snapshot: SourceSnapshot,
+}
+
+impl SourceSnapshotMessageV2 {
+    /// Copies one immutable snapshot into a source-v2 message.
+    #[must_use]
+    pub fn from_snapshot(snapshot: &SourceSnapshot) -> Self {
+        Self {
+            snapshot: snapshot.clone(),
         }
-        if snapshot.encoding_facts() != claimed_encoding {
-            return Err(crate::schema::invalid(
-                "$.encoding",
-                "encoding facts do not match raw_bytes resolution",
-            ));
-        }
-        let actual_status = if snapshot.decoded_text().is_some() {
-            "Available"
-        } else {
-            "NotText"
-        };
-        if decoded_status != actual_status {
-            return Err(crate::schema::invalid(
-                "$.decoded_status",
-                "decoded status contradicts selected encoding",
-            ));
-        }
-        Ok(Self { snapshot })
+    }
+
+    /// Verified immutable source snapshot.
+    #[must_use]
+    pub const fn snapshot(&self) -> &SourceSnapshot {
+        &self.snapshot
+    }
+
+    /// Consumes the message and returns its verified snapshot.
+    #[must_use]
+    pub fn into_snapshot(self) -> SourceSnapshot {
+        self.snapshot
+    }
+
+    /// Encodes the exact source-snapshot v2 schema.
+    #[must_use]
+    pub fn to_value(&self) -> PortableValue {
+        source_snapshot_value(
+            &self.snapshot,
+            "core.source-snapshot@2",
+            encoding_value_v2(self.snapshot.encoding_facts()),
+        )
+    }
+
+    /// Strictly decodes and re-verifies every source-v2 fact.
+    pub fn from_value(value: &PortableValue, limits: SourceLimits) -> Result<Self, ProtocolError> {
+        source_snapshot_from_value(
+            value,
+            "core.source-snapshot@2",
+            encoding_from_value_v2,
+            request_from_facts_v2,
+            limits,
+        )
+        .map(|snapshot| Self { snapshot })
     }
 }
 
@@ -181,49 +175,11 @@ impl SourcePatchMessage {
     /// Encodes the fixed-field PortableValue schema.
     pub fn to_value(&self) -> Result<PortableValue, ProtocolError> {
         ensure_v1_encoding_facts(self.patch.encoding_facts(), "$.encoding")?;
-        let mut replacements = SequenceBuilder::new();
-        for replacement in self.patch.replacements() {
-            let old_start = u64::try_from(replacement.old_start()).map_err(|_| {
-                crate::schema::invalid("$.replacements.old_start", "offset exceeds u64")
-            })?;
-            let old_end = u64::try_from(replacement.old_end()).map_err(|_| {
-                crate::schema::invalid("$.replacements.old_end", "offset exceeds u64")
-            })?;
-            replacements.push(object(vec![
-                ("old_start", integer_u64(old_start)),
-                ("old_end", integer_u64(old_end)),
-                (
-                    "original",
-                    PortableValue::bytes(replacement.original().to_vec()),
-                ),
-                (
-                    "replacement",
-                    PortableValue::bytes(replacement.replacement().to_vec()),
-                ),
-                (
-                    "redact_original",
-                    PortableValue::boolean(replacement.redact_original()),
-                ),
-                (
-                    "redact_replacement",
-                    PortableValue::boolean(replacement.redact_replacement()),
-                ),
-            ]));
-        }
-        let mut metadata = ObjectBuilder::new();
-        for (name, value) in self.patch.metadata() {
-            metadata
-                .insert(name, PortableValue::string(value.as_str()))
-                .expect("BTreeMap metadata names are unique");
-        }
-        Ok(object(vec![
-            ("schema", PortableValue::string("core.source-patch@1")),
-            ("base_digest", digest_value(self.patch.base_digest())),
-            ("target_digest", digest_value(self.patch.target_digest())),
-            ("encoding", encoding_value(self.patch.encoding_facts())),
-            ("replacements", replacements.build()),
-            ("metadata", metadata.build()),
-        ]))
+        source_patch_value(
+            &self.patch,
+            "core.source-patch@1",
+            encoding_value(self.patch.encoding_facts()),
+        )
     }
 
     /// Strictly decodes structural patch facts without applying them to a base snapshot.
@@ -231,60 +187,246 @@ impl SourcePatchMessage {
         value: &PortableValue,
         limits: SourcePatchLimits,
     ) -> Result<Self, ProtocolError> {
-        let fields = schema_fields(
-            value,
-            "core.source-patch@1",
-            &[
-                "schema",
-                "base_digest",
-                "target_digest",
-                "encoding",
-                "replacements",
-                "metadata",
-            ],
-            "$",
-        )?;
-        let base_digest = digest_from_value(fields[1], "$.base_digest")?;
-        let target_digest = digest_from_value(fields[2], "$.target_digest")?;
-        let encoding = encoding_from_value(fields[3], "$.encoding")?;
-        let replacement_values = sequence(fields[4], "$.replacements")?;
-        if replacement_values.len() > limits.max_replacements {
-            return Err(ProtocolError::new(
-                ProtocolErrorKind::ResourceLimit,
-                "$.replacements",
-                "replacement count exceeds configured limit",
-            ));
-        }
-        let replacements = replacement_values
-            .iter()
-            .enumerate()
-            .map(|(index, value)| replacement_from_value(value, index))
-            .collect::<Result<Vec<_>, _>>()?;
-        let metadata_entries = fields[5].as_object().ok_or_else(|| {
-            ProtocolError::new(
-                ProtocolErrorKind::WrongType,
-                "$.metadata",
-                "expected Object<String, String>",
-            )
-        })?;
-        let mut metadata = BTreeMap::new();
-        for entry in metadata_entries {
-            metadata.insert(
-                entry.key().to_owned(),
-                string(entry.value(), &format!("$.metadata.{}", entry.key()))?.to_owned(),
-            );
-        }
-        let patch = SourcePatch::new(
-            base_digest,
-            target_digest,
-            encoding,
-            replacements,
-            metadata,
-            limits,
-        )
-        .map_err(patch_error)?;
-        Ok(Self { patch })
+        source_patch_from_value(value, "core.source-patch@1", encoding_from_value, limits)
+            .map(|patch| Self { patch })
     }
+}
+
+/// Transferable `core.source-patch@2` verification facts.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourcePatchMessageV2 {
+    patch: SourcePatch,
+}
+
+impl SourcePatchMessageV2 {
+    /// Copies one validated source patch into a source-v2 message.
+    #[must_use]
+    pub fn from_patch(patch: &SourcePatch) -> Self {
+        Self {
+            patch: patch.clone(),
+        }
+    }
+
+    /// Validated source patch.
+    #[must_use]
+    pub const fn patch(&self) -> &SourcePatch {
+        &self.patch
+    }
+
+    /// Consumes the message and returns its validated patch.
+    #[must_use]
+    pub fn into_patch(self) -> SourcePatch {
+        self.patch
+    }
+
+    /// Encodes the exact source-patch v2 schema.
+    pub fn to_value(&self) -> Result<PortableValue, ProtocolError> {
+        source_patch_value(
+            &self.patch,
+            "core.source-patch@2",
+            encoding_value_v2(self.patch.encoding_facts()),
+        )
+    }
+
+    /// Strictly decodes structural source-patch v2 facts.
+    pub fn from_value(
+        value: &PortableValue,
+        limits: SourcePatchLimits,
+    ) -> Result<Self, ProtocolError> {
+        source_patch_from_value(value, "core.source-patch@2", encoding_from_value_v2, limits)
+            .map(|patch| Self { patch })
+    }
+}
+
+fn source_snapshot_value(
+    snapshot: &SourceSnapshot,
+    schema: &'static str,
+    encoding: PortableValue,
+) -> PortableValue {
+    object(vec![
+        ("schema", PortableValue::string(schema)),
+        ("raw_bytes", PortableValue::bytes(snapshot.bytes().to_vec())),
+        ("digest", digest_value(snapshot.digest())),
+        ("encoding", encoding),
+        (
+            "decoded_status",
+            PortableValue::string(if snapshot.decoded_text().is_some() {
+                "Available"
+            } else {
+                "NotText"
+            }),
+        ),
+    ])
+}
+
+fn source_snapshot_from_value(
+    value: &PortableValue,
+    schema: &'static str,
+    parse_encoding: fn(&PortableValue, &str) -> Result<EncodingFacts, ProtocolError>,
+    request_from_encoding: fn(EncodingFacts) -> EncodingRequest,
+    limits: SourceLimits,
+) -> Result<SourceSnapshot, ProtocolError> {
+    let fields = schema_fields(
+        value,
+        schema,
+        &[
+            "schema",
+            "raw_bytes",
+            "digest",
+            "encoding",
+            "decoded_status",
+        ],
+        "$",
+    )?;
+    let raw = bytes(fields[1], "$.raw_bytes")?;
+    let claimed_digest = digest_from_value(fields[2], "$.digest")?;
+    let claimed_encoding = parse_encoding(fields[3], "$.encoding")?;
+    let decoded_status = string(fields[4], "$.decoded_status")?;
+    if !matches!(decoded_status, "Available" | "NotText") {
+        return Err(crate::schema::invalid(
+            "$.decoded_status",
+            "expected Available or NotText",
+        ));
+    }
+    let snapshot = SourceSnapshot::from_raw(
+        Arc::<[u8]>::from(raw),
+        request_from_encoding(claimed_encoding),
+        limits,
+    )
+    .map_err(|error| source_error("$.raw_bytes", error))?;
+    if snapshot.digest() != claimed_digest {
+        return Err(crate::schema::invalid(
+            "$.digest",
+            "digest does not match raw_bytes",
+        ));
+    }
+    if snapshot.encoding_facts() != claimed_encoding {
+        return Err(crate::schema::invalid(
+            "$.encoding",
+            "encoding facts do not match raw_bytes resolution",
+        ));
+    }
+    let actual_status = if snapshot.decoded_text().is_some() {
+        "Available"
+    } else {
+        "NotText"
+    };
+    if decoded_status != actual_status {
+        return Err(crate::schema::invalid(
+            "$.decoded_status",
+            "decoded status contradicts selected encoding",
+        ));
+    }
+    Ok(snapshot)
+}
+
+fn source_patch_value(
+    patch: &SourcePatch,
+    schema: &'static str,
+    encoding: PortableValue,
+) -> Result<PortableValue, ProtocolError> {
+    let mut replacements = SequenceBuilder::new();
+    for replacement in patch.replacements() {
+        let old_start = u64::try_from(replacement.old_start()).map_err(|_| {
+            crate::schema::invalid("$.replacements.old_start", "offset exceeds u64")
+        })?;
+        let old_end = u64::try_from(replacement.old_end())
+            .map_err(|_| crate::schema::invalid("$.replacements.old_end", "offset exceeds u64"))?;
+        replacements.push(object(vec![
+            ("old_start", integer_u64(old_start)),
+            ("old_end", integer_u64(old_end)),
+            (
+                "original",
+                PortableValue::bytes(replacement.original().to_vec()),
+            ),
+            (
+                "replacement",
+                PortableValue::bytes(replacement.replacement().to_vec()),
+            ),
+            (
+                "redact_original",
+                PortableValue::boolean(replacement.redact_original()),
+            ),
+            (
+                "redact_replacement",
+                PortableValue::boolean(replacement.redact_replacement()),
+            ),
+        ]));
+    }
+    let mut metadata = ObjectBuilder::new();
+    for (name, value) in patch.metadata() {
+        metadata
+            .insert(name, PortableValue::string(value.as_str()))
+            .expect("BTreeMap metadata names are unique");
+    }
+    Ok(object(vec![
+        ("schema", PortableValue::string(schema)),
+        ("base_digest", digest_value(patch.base_digest())),
+        ("target_digest", digest_value(patch.target_digest())),
+        ("encoding", encoding),
+        ("replacements", replacements.build()),
+        ("metadata", metadata.build()),
+    ]))
+}
+
+fn source_patch_from_value(
+    value: &PortableValue,
+    schema: &'static str,
+    parse_encoding: fn(&PortableValue, &str) -> Result<EncodingFacts, ProtocolError>,
+    limits: SourcePatchLimits,
+) -> Result<SourcePatch, ProtocolError> {
+    let fields = schema_fields(
+        value,
+        schema,
+        &[
+            "schema",
+            "base_digest",
+            "target_digest",
+            "encoding",
+            "replacements",
+            "metadata",
+        ],
+        "$",
+    )?;
+    let base_digest = digest_from_value(fields[1], "$.base_digest")?;
+    let target_digest = digest_from_value(fields[2], "$.target_digest")?;
+    let encoding = parse_encoding(fields[3], "$.encoding")?;
+    let replacement_values = sequence(fields[4], "$.replacements")?;
+    if replacement_values.len() > limits.max_replacements {
+        return Err(ProtocolError::new(
+            ProtocolErrorKind::ResourceLimit,
+            "$.replacements",
+            "replacement count exceeds configured limit",
+        ));
+    }
+    let replacements = replacement_values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| replacement_from_value(value, index))
+        .collect::<Result<Vec<_>, _>>()?;
+    let metadata_entries = fields[5].as_object().ok_or_else(|| {
+        ProtocolError::new(
+            ProtocolErrorKind::WrongType,
+            "$.metadata",
+            "expected Object<String, String>",
+        )
+    })?;
+    let mut metadata = BTreeMap::new();
+    for entry in metadata_entries {
+        metadata.insert(
+            entry.key().to_owned(),
+            string(entry.value(), &format!("$.metadata.{}", entry.key()))?.to_owned(),
+        );
+    }
+    SourcePatch::new(
+        base_digest,
+        target_digest,
+        encoding,
+        replacements,
+        metadata,
+        limits,
+    )
+    .map_err(patch_error)
 }
 
 fn replacement_from_value(
@@ -453,6 +595,41 @@ fn encoding_value(facts: EncodingFacts) -> PortableValue {
     ])
 }
 
+fn encoding_value_v2(facts: EncodingFacts) -> PortableValue {
+    object(vec![
+        (
+            "profile_default",
+            source_encoding_value(facts.profile_default()),
+        ),
+        (
+            "bom_policy",
+            PortableValue::string(match facts.bom_policy() {
+                BomPolicy::DetectUnicode => "DetectUnicode",
+                BomPolicy::TreatAsContent => "TreatAsContent",
+            }),
+        ),
+        (
+            "bom",
+            facts.bom().map_or_else(PortableValue::null, |bom| {
+                PortableValue::string(bom_name(bom))
+            }),
+        ),
+        (
+            "declaration",
+            facts
+                .declaration()
+                .map_or_else(PortableValue::null, source_encoding_value),
+        ),
+        (
+            "caller_override",
+            facts
+                .caller_override()
+                .map_or_else(PortableValue::null, source_encoding_value),
+        ),
+        ("selected", source_encoding_value(facts.selected())),
+    ])
+}
+
 fn ensure_v1_encoding_facts(facts: EncodingFacts, path: &str) -> Result<(), ProtocolError> {
     if facts.bom_policy() != BomPolicy::DetectUnicode {
         return Err(crate::schema::invalid(
@@ -499,6 +676,50 @@ fn encoding_from_value(value: &PortableValue, path: &str) -> Result<EncodingFact
     let selected = encoding_from_name(string(fields[4], &format!("{path}.selected"))?)?;
     EncodingFacts::from_claim(profile_default, bom, declaration, caller_override, selected)
         .map_err(|error| source_error(path, error))
+}
+
+fn encoding_from_value_v2(
+    value: &PortableValue,
+    path: &str,
+) -> Result<EncodingFacts, ProtocolError> {
+    let fields = exact_fields(
+        value,
+        &[
+            "profile_default",
+            "bom_policy",
+            "bom",
+            "declaration",
+            "caller_override",
+            "selected",
+        ],
+        path,
+    )?;
+    let profile_default =
+        source_encoding_from_value(fields[0], &format!("{path}.profile_default"))?;
+    let bom_policy = match string(fields[1], &format!("{path}.bom_policy"))? {
+        "DetectUnicode" => BomPolicy::DetectUnicode,
+        "TreatAsContent" => BomPolicy::TreatAsContent,
+        _ => {
+            return Err(crate::schema::invalid(
+                &format!("{path}.bom_policy"),
+                "unknown BOM policy",
+            ));
+        }
+    };
+    let bom = optional_bom(fields[2], &format!("{path}.bom"))?;
+    let declaration = optional_source_encoding_v2(fields[3], &format!("{path}.declaration"))?;
+    let caller_override =
+        optional_source_encoding_v2(fields[4], &format!("{path}.caller_override"))?;
+    let selected = source_encoding_from_value(fields[5], &format!("{path}.selected"))?;
+    EncodingFacts::from_claim_with_bom_policy(
+        profile_default,
+        bom_policy,
+        bom,
+        declaration,
+        caller_override,
+        selected,
+    )
+    .map_err(|error| source_error(path, error))
 }
 
 fn encoding_name(encoding: SourceEncoding) -> &'static str {
@@ -556,8 +777,31 @@ fn optional_encoding(
     }
 }
 
+fn optional_source_encoding_v2(
+    value: &PortableValue,
+    path: &str,
+) -> Result<Option<SourceEncoding>, ProtocolError> {
+    if value == &PortableValue::null() {
+        Ok(None)
+    } else {
+        source_encoding_from_value(value, path).map(Some)
+    }
+}
+
 fn request_from_facts(facts: EncodingFacts) -> EncodingRequest {
     let mut request = EncodingRequest::new(facts.profile_default());
+    if let Some(declaration) = facts.declaration() {
+        request = request.with_declaration(declaration);
+    }
+    if let Some(caller_override) = facts.caller_override() {
+        request = request.with_caller_override(caller_override);
+    }
+    request
+}
+
+fn request_from_facts_v2(facts: EncodingFacts) -> EncodingRequest {
+    let mut request =
+        EncodingRequest::new(facts.profile_default()).with_bom_policy(facts.bom_policy());
     if let Some(declaration) = facts.declaration() {
         request = request.with_declaration(declaration);
     }
@@ -738,6 +982,99 @@ mod tests {
         )
         .unwrap();
         let error = SourceSnapshotMessage::from_snapshot(&content_bom_snapshot).unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
+    }
+
+    #[test]
+    fn source_snapshot_v2_round_trips_code_page_and_bom_policy() {
+        let code_page = consema_document::WindowsCodePage::from_number(1252).unwrap();
+        let snapshot = SourceSnapshot::from_raw(
+            Arc::<[u8]>::from([0xef, 0xbb, 0xbf, b'A']),
+            EncodingRequest::new(SourceEncoding::WindowsCodePage(code_page))
+                .with_bom_policy(BomPolicy::TreatAsContent),
+            SourceLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(snapshot.decoded_text(), Some("ï»¿A"));
+        let value = SourceSnapshotMessageV2::from_snapshot(&snapshot).to_value();
+        for transported in [
+            decode_json(
+                &encode_json(&value, ProtocolLimits::default()).unwrap(),
+                ProtocolLimits::default(),
+            )
+            .unwrap(),
+            decode_pvce(
+                &encode_pvce(&value, ProtocolLimits::default()).unwrap(),
+                ProtocolLimits::default(),
+            )
+            .unwrap(),
+        ] {
+            let decoded =
+                SourceSnapshotMessageV2::from_value(&transported, SourceLimits::default()).unwrap();
+            assert_eq!(decoded.snapshot(), &snapshot);
+            assert_eq!(decoded.to_value(), value);
+        }
+        assert!(SourceSnapshotMessage::from_value(&value, SourceLimits::default()).is_err());
+    }
+
+    #[test]
+    fn source_patch_v2_round_trips_and_applies_code_page_bytes() {
+        let code_page = consema_document::WindowsCodePage::from_number(1252).unwrap();
+        let base = SourceSnapshot::from_raw(
+            Arc::<[u8]>::from([0x80, b'A']),
+            EncodingRequest::new(SourceEncoding::WindowsCodePage(code_page))
+                .with_bom_policy(BomPolicy::TreatAsContent),
+            SourceLimits::default(),
+        )
+        .unwrap();
+        let patch = SourcePatch::create(
+            &base,
+            vec![SourceReplacement::new(
+                1,
+                2,
+                b"A".as_slice(),
+                b"B".as_slice(),
+            )],
+            BTreeMap::from([("actor".to_owned(), "source-v2-test".to_owned())]),
+            SourcePatchLimits::default(),
+        )
+        .unwrap();
+        let value = SourcePatchMessageV2::from_patch(&patch).to_value().unwrap();
+        let decoded =
+            SourcePatchMessageV2::from_value(&value, SourcePatchLimits::default()).unwrap();
+        assert_eq!(decoded.patch(), &patch);
+        let target = decoded
+            .patch()
+            .apply(&base, SourcePatchLimits::default())
+            .unwrap();
+        assert_eq!(target.bytes(), &[0x80, b'B']);
+        assert_eq!(target.decoded_text(), Some("€B"));
+        assert!(SourcePatchMessage::from_value(&value, SourcePatchLimits::default()).is_err());
+    }
+
+    #[test]
+    fn source_snapshot_v2_rejects_contradictory_bom_policy() {
+        let snapshot = SourceSnapshot::from_utf8(Arc::<[u8]>::from(b"plain".as_slice())).unwrap();
+        let value = SourceSnapshotMessageV2::from_snapshot(&snapshot).to_value();
+        let fields = value.as_object().unwrap();
+        let encoding = fields[3].value().as_object().unwrap();
+        let forged_encoding = object(vec![
+            ("profile_default", encoding[0].value().clone()),
+            ("bom_policy", PortableValue::string("TreatAsContent")),
+            ("bom", PortableValue::string("Utf8")),
+            ("declaration", encoding[3].value().clone()),
+            ("caller_override", encoding[4].value().clone()),
+            ("selected", encoding[5].value().clone()),
+        ]);
+        let forged = object(vec![
+            ("schema", fields[0].value().clone()),
+            ("raw_bytes", fields[1].value().clone()),
+            ("digest", fields[2].value().clone()),
+            ("encoding", forged_encoding),
+            ("decoded_status", fields[4].value().clone()),
+        ]);
+        let error =
+            SourceSnapshotMessageV2::from_value(&forged, SourceLimits::default()).unwrap_err();
         assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
     }
 
