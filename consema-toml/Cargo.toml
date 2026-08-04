@@ -1,0 +1,15 @@
+[package]
+name = "consema-toml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Lossless TOML 1.0 implementation for Consema"
+
+[dependencies]
+consema-core = { path = "../consema-core", version = "0.1.0" }
+consema-document = { path = "../consema-document", version = "0.1.0" }
+toml_edit.workspace = true
+
+[lints]
+workspace = true
