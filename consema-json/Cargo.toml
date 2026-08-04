@@ -7,8 +7,8 @@ license.workspace = true
 description = "Lossless JSON and JSONC implementation for Consema"
 
 [dependencies]
-consema-core = { path = "../consema-core", version = "0.2.0" }
-consema-document = { path = "../consema-document", version = "0.2.0" }
+consema-core = { path = "../consema-core", version = "0.3.0" }
+consema-document = { path = "../consema-document", version = "0.3.0" }
 
 [lints]
 workspace = true
