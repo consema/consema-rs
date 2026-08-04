@@ -143,6 +143,19 @@ pub struct NodeRef {
     role: NodeRole,
 }
 
+/// Placement of a new association relative to one container or exact anchor.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum AssociationPlacement {
+    /// First association in the target container.
+    Start,
+    /// Last association in the target container.
+    End,
+    /// Immediately before one exact existing association.
+    Before(NodeRef),
+    /// Immediately after one exact existing association.
+    After(NodeRef),
+}
+
 impl NodeRef {
     /// Owning snapshot.
     #[must_use]

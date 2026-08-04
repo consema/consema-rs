@@ -258,7 +258,7 @@ impl Document {
             mappings,
             diagnostics,
         );
-        let patch_limits = source_patch_limits(self.parse_limits, transaction.operations.len());
+        let patch_limits = source_patch_limits(self.parse_limits, change_set.source_edits().len());
         let source_patch = SourcePatch::derive(
             &self.source,
             new_document.source(),

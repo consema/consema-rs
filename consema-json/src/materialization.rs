@@ -31,6 +31,21 @@ pub fn materialize(
     }
 }
 
+pub(crate) fn canonical_fragment(
+    value: &PortableValue,
+    limits: MaterializationLimits,
+) -> Result<Vec<u8>, MaterializationFailure> {
+    let mut analyzed = Vec::new();
+    let mut writer = JsonWriter::new(
+        JsonStyle::Compact,
+        NewlinePolicy::None,
+        limits,
+        &mut analyzed,
+    );
+    writer.value(value, &ValuePath::root(), 0)?;
+    Ok(writer.output.finish())
+}
+
 fn materialize_complete(
     value: &PortableValue,
     request: &MaterializationRequest,
