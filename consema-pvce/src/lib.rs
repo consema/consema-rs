@@ -1299,6 +1299,21 @@ mod tests {
     }
 
     #[test]
+    fn core_decode_rejects_extension_roots() {
+        let value = EncodedValue::Extended(ExtendedValue::new(
+            "example.uuid",
+            1,
+            "example.raw@1",
+            vec![1, 2, 3],
+        ));
+        let bytes = encode_value(&value);
+        assert_eq!(
+            decode(&bytes, DecodeLimits::default()),
+            Err(DecodeError::ExpectedCoreValue)
+        );
+    }
+
+    #[test]
     fn rejects_non_minimal_version_varint() {
         let mut bytes = MAGIC.to_vec();
         bytes.extend_from_slice(&[0x81, 0x00, 0x00, 0x00]);

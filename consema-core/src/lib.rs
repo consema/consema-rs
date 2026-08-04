@@ -20,6 +20,7 @@ pub use query::{
 };
 pub use value::{
     BigInteger, BinaryFloat32, BinaryFloat64, Date, Decimal, EntryMappingBuilder,
-    EntryMappingEntry, ExtendedValue, LocalDateTime, ObjectBuilder, ObjectEntry, OffsetDateTime,
-    PortableValue, PortableValueKind, SequenceBuilder, Time, ValueBuildError,
+    EntryMappingEntry, ExtendedValue, ExtensionContract, ExtensionValidationError, LocalDateTime,
+    ObjectBuilder, ObjectEntry, OffsetDateTime, PortableValue, PortableValueKind, SequenceBuilder,
+    Time, ValueBuildError,
 };

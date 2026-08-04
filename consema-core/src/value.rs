@@ -1007,6 +1007,28 @@ impl SequenceBuilder {
     }
 }
 
+/// Failure to validate a canonical extension payload.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExtensionValidationError {
+    /// The payload does not satisfy the extension contract.
+    InvalidCanonicalPayload,
+}
+
+/// Formal semantic contract for one extension type.
+///
+/// Semantic support is only claimed after `validate_canonical` accepts the
+/// payload; opaque preservation never claims semantic understanding.
+pub trait ExtensionContract {
+    /// Stable extension type identifier.
+    fn type_id(&self) -> &str;
+    /// Semantic contract version.
+    fn semantic_version(&self) -> u32;
+    /// Canonical payload codec identifier.
+    fn payload_codec_id(&self) -> &str;
+    /// Validates one canonical payload against the contract invariants.
+    fn validate_canonical(&self, payload: &[u8]) -> Result<(), ExtensionValidationError>;
+}
+
 /// Formally versioned extension value, separate from the closed core tree.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ExtendedValue {
@@ -1017,7 +1039,11 @@ pub struct ExtendedValue {
 }
 
 impl ExtendedValue {
-    /// Creates an already validated canonical extension payload.
+    /// Creates an opaque extension value from an already canonical payload.
+    ///
+    /// This constructor performs no semantic validation: it is for opaque
+    /// preservation and forwarding of payloads validated elsewhere. Semantic
+    /// support must go through [`Self::validated`] with a formal contract.
     #[must_use]
     pub fn new(
         type_id: impl Into<Arc<str>>,
@@ -1031,6 +1057,22 @@ impl ExtendedValue {
             payload_codec_id: payload_codec_id.into(),
             canonical_payload: canonical_payload.into(),
         }
+    }
+
+    /// Constructs a semantically supported extension only after the contract
+    /// accepted the canonical payload.
+    pub fn validated(
+        contract: &impl ExtensionContract,
+        payload: impl Into<Arc<[u8]>>,
+    ) -> Result<Self, ExtensionValidationError> {
+        let payload = payload.into();
+        contract.validate_canonical(&payload)?;
+        Ok(Self::new(
+            contract.type_id(),
+            contract.semantic_version(),
+            contract.payload_codec_id(),
+            payload,
+        ))
     }
 
     /// Stable extension type identifier.
@@ -1141,5 +1183,37 @@ mod tests {
     fn negative_year_leap_rule_uses_absolute_remainders() {
         assert!(Date::new(BigInteger::from(-400_i64), 2, 29).is_ok());
         assert!(Date::new(BigInteger::from(-100_i64), 2, 29).is_err());
+    }
+
+    #[test]
+    fn extension_semantic_support_requires_contract_validation() {
+        struct EvenLengthContract;
+        impl ExtensionContract for EvenLengthContract {
+            fn type_id(&self) -> &str {
+                "example.even"
+            }
+
+            fn semantic_version(&self) -> u32 {
+                1
+            }
+
+            fn payload_codec_id(&self) -> &str {
+                "example.raw@1"
+            }
+
+            fn validate_canonical(&self, payload: &[u8]) -> Result<(), ExtensionValidationError> {
+                (payload.len() % 2 == 0)
+                    .then_some(())
+                    .ok_or(ExtensionValidationError::InvalidCanonicalPayload)
+            }
+        }
+        let accepted =
+            ExtendedValue::validated(&EvenLengthContract, vec![1, 2]).expect("even payload");
+        assert_eq!(accepted.type_id(), "example.even");
+        assert_eq!(accepted.canonical_payload(), &[1, 2]);
+        assert!(matches!(
+            ExtendedValue::validated(&EvenLengthContract, vec![1, 2, 3]),
+            Err(ExtensionValidationError::InvalidCanonicalPayload)
+        ));
     }
 }
