@@ -107,6 +107,298 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<PortableValue, Decod
         EncodedValue::Extended(_) => Err(DecodeError::ExpectedCoreValue),
     }
 }
+/// Bounded canonical encoding limits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EncodeLimits {
+    /// Maximum complete stream bytes.
+    pub max_bytes: usize,
+    /// Maximum nested container depth.
+    pub max_depth: usize,
+    /// Maximum total core records.
+    pub max_nodes: usize,
+    /// Maximum entries in one container.
+    pub max_container_entries: usize,
+    /// Maximum arbitrary integer magnitude bytes.
+    pub max_integer_bytes: usize,
+    /// Maximum String, Bytes, or extension payload bytes.
+    pub max_blob_bytes: usize,
+}
+
+impl Default for EncodeLimits {
+    fn default() -> Self {
+        Self {
+            max_bytes: 64 * 1024 * 1024,
+            max_depth: 256,
+            max_nodes: 1_000_000,
+            max_container_entries: 1_000_000,
+            max_integer_bytes: 1024 * 1024,
+            max_blob_bytes: 64 * 1024 * 1024,
+        }
+    }
+}
+
+/// Stable bounded encoding failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EncodeError {
+    /// A declared resource limit was reached; no partial output is returned.
+    ResourceLimit(&'static str),
+    /// Computed stream size overflowed the host address space.
+    LengthOverflow,
+}
+
+/// Encodes one core value with explicit resource limits; never truncates.
+pub fn encode_bounded(value: &PortableValue, limits: EncodeLimits) -> Result<Vec<u8>, EncodeError> {
+    let size = measure_root(&EncodedValue::Core(value.clone()), limits)?;
+    if size > limits.max_bytes {
+        return Err(EncodeError::ResourceLimit("stream-bytes"));
+    }
+    Ok(encode_value(&EncodedValue::Core(value.clone())))
+}
+
+/// Encodes one core or extension root with explicit resource limits.
+pub fn encode_value_bounded(
+    value: &EncodedValue,
+    limits: EncodeLimits,
+) -> Result<Vec<u8>, EncodeError> {
+    let size = measure_root(value, limits)?;
+    if size > limits.max_bytes {
+        return Err(EncodeError::ResourceLimit("stream-bytes"));
+    }
+    Ok(encode_value(value))
+}
+
+struct Sizer {
+    limits: EncodeLimits,
+    nodes: usize,
+}
+
+impl Sizer {
+    fn record(&mut self, depth: usize) -> Result<(), EncodeError> {
+        if depth > self.limits.max_depth {
+            return Err(EncodeError::ResourceLimit("nesting-depth"));
+        }
+        self.nodes = self.nodes.saturating_add(1);
+        if self.nodes > self.limits.max_nodes {
+            return Err(EncodeError::ResourceLimit("value-nodes"));
+        }
+        Ok(())
+    }
+
+    fn blob_size(&self, length: usize, name: &'static str) -> Result<usize, EncodeError> {
+        if length > self.limits.max_blob_bytes {
+            return Err(EncodeError::ResourceLimit(name));
+        }
+        add(varint_size(length as u64), length)
+    }
+
+    fn integer_field_size(&self, value: &BigInteger) -> Result<usize, EncodeError> {
+        let magnitude = value.magnitude().len();
+        if magnitude > self.limits.max_integer_bytes {
+            return Err(EncodeError::ResourceLimit("integer-bytes"));
+        }
+        let payload = add(add(1, varint_size(magnitude as u64))?, magnitude)?;
+        add(varint_size(payload as u64), payload)
+    }
+
+    fn decimal_field_size(&self, value: &Decimal) -> Result<usize, EncodeError> {
+        let payload = add(
+            self.integer_field_size(value.coefficient())?,
+            self.integer_field_size(value.exponent())?,
+        )?;
+        add(varint_size(payload as u64), payload)
+    }
+
+    fn date_field_size(&self, value: &Date) -> Result<usize, EncodeError> {
+        let payload = add(self.integer_field_size(value.year())?, 2)?;
+        add(varint_size(payload as u64), payload)
+    }
+
+    fn time_field_size(&self, value: &Time) -> Result<usize, EncodeError> {
+        let payload = add(3, self.decimal_field_size(value.fractional_second())?)?;
+        add(varint_size(payload as u64), payload)
+    }
+
+    fn container_size(
+        &mut self,
+        count: usize,
+        values: impl IntoIterator<Item = PortableValue>,
+        depth: usize,
+    ) -> Result<usize, EncodeError> {
+        if count > self.limits.max_container_entries {
+            return Err(EncodeError::ResourceLimit("container-entries"));
+        }
+        let mut payload = varint_size(count as u64);
+        for value in values {
+            payload = add(payload, self.record_size(&value, depth)?)?;
+        }
+        Ok(payload)
+    }
+
+    fn record_size(&mut self, value: &PortableValue, depth: usize) -> Result<usize, EncodeError> {
+        self.record(depth)?;
+        let (tag, payload) = match value.kind() {
+            PortableValueKind::Null => (TAG_NULL, 0),
+            PortableValueKind::Boolean => (
+                if value.as_boolean().expect("boolean kind") {
+                    TAG_TRUE
+                } else {
+                    TAG_FALSE
+                },
+                0,
+            ),
+            PortableValueKind::Integer => {
+                let magnitude = value.as_integer().expect("integer kind").magnitude().len();
+                if magnitude > self.limits.max_integer_bytes {
+                    return Err(EncodeError::ResourceLimit("integer-bytes"));
+                }
+                (
+                    TAG_INTEGER,
+                    add(add(1, varint_size(magnitude as u64))?, magnitude)?,
+                )
+            }
+            PortableValueKind::Decimal => (
+                TAG_DECIMAL,
+                add(
+                    self.integer_field_size(
+                        value.as_decimal().expect("decimal kind").coefficient(),
+                    )?,
+                    self.integer_field_size(value.as_decimal().expect("decimal kind").exponent())?,
+                )?,
+            ),
+            PortableValueKind::BinaryFloat32 => (TAG_FLOAT32, 4),
+            PortableValueKind::BinaryFloat64 => (TAG_FLOAT64, 8),
+            PortableValueKind::String => (
+                TAG_STRING,
+                self.blob_size(value.as_string().expect("string kind").len(), "blob-bytes")?,
+            ),
+            PortableValueKind::Bytes => (
+                TAG_BYTES,
+                self.blob_size(value.as_bytes().expect("bytes kind").len(), "blob-bytes")?,
+            ),
+            PortableValueKind::Date => (
+                TAG_DATE,
+                add(
+                    self.integer_field_size(value.as_date().expect("date kind").year())?,
+                    2,
+                )?,
+            ),
+            PortableValueKind::Time => (
+                TAG_TIME,
+                add(
+                    3,
+                    self.decimal_field_size(
+                        value.as_time().expect("time kind").fractional_second(),
+                    )?,
+                )?,
+            ),
+            PortableValueKind::LocalDateTime => {
+                let value = value.as_local_date_time().expect("local date-time kind");
+                (
+                    TAG_LOCAL_DATE_TIME,
+                    add(
+                        self.date_field_size(value.date())?,
+                        self.time_field_size(value.time())?,
+                    )?,
+                )
+            }
+            PortableValueKind::OffsetDateTime => {
+                let value = value.as_offset_date_time().expect("offset date-time kind");
+                (
+                    TAG_OFFSET_DATE_TIME,
+                    add(
+                        add(
+                            self.date_field_size(value.local().date())?,
+                            self.time_field_size(value.local().time())?,
+                        )?,
+                        self.integer_field_size(&BigInteger::from(i64::from(
+                            value.offset_seconds(),
+                        )))?,
+                    )?,
+                )
+            }
+            PortableValueKind::Sequence => {
+                let values = value.as_sequence().expect("sequence kind");
+                (
+                    TAG_SEQUENCE,
+                    self.container_size(values.len(), values.iter().cloned(), depth + 1)?,
+                )
+            }
+            PortableValueKind::Object => {
+                let entries = value.as_object().expect("object kind");
+                let mut payload = varint_size(entries.len() as u64);
+                if entries.len() > self.limits.max_container_entries {
+                    return Err(EncodeError::ResourceLimit("container-entries"));
+                }
+                for entry in entries {
+                    let key = PortableValue::string(entry.key());
+                    payload = add(
+                        payload,
+                        add(
+                            self.record_size(&key, depth + 1)?,
+                            self.record_size(entry.value(), depth + 1)?,
+                        )?,
+                    )?;
+                }
+                (TAG_OBJECT, payload)
+            }
+            PortableValueKind::EntryMapping => {
+                let entries = value.as_entry_mapping().expect("entry-mapping kind");
+                let mut payload = varint_size(entries.len() as u64);
+                if entries.len() > self.limits.max_container_entries {
+                    return Err(EncodeError::ResourceLimit("container-entries"));
+                }
+                for entry in entries {
+                    payload = add(
+                        payload,
+                        add(
+                            self.record_size(entry.key(), depth + 1)?,
+                            self.record_size(entry.value(), depth + 1)?,
+                        )?,
+                    )?;
+                }
+                (TAG_ENTRY_MAPPING, payload)
+            }
+        };
+        add(add(varint_size(tag), varint_size(payload as u64))?, payload)
+    }
+}
+
+fn add(left: usize, right: usize) -> Result<usize, EncodeError> {
+    left.checked_add(right).ok_or(EncodeError::LengthOverflow)
+}
+
+const fn varint_size(mut value: u64) -> usize {
+    let mut size = 1;
+    while value >= 0x80 {
+        value >>= 7;
+        size += 1;
+    }
+    size
+}
+
+fn measure_root(value: &EncodedValue, limits: EncodeLimits) -> Result<usize, EncodeError> {
+    let mut sizer = Sizer { limits, nodes: 0 };
+    let record = match value {
+        EncodedValue::Core(value) => sizer.record_size(value, 0)?,
+        EncodedValue::Extended(value) => {
+            let payload = add(
+                add(
+                    sizer.blob_size(value.type_id().len(), "blob-bytes")?,
+                    varint_size(u64::from(value.semantic_version())),
+                )?,
+                add(
+                    sizer.blob_size(value.payload_codec_id().len(), "blob-bytes")?,
+                    sizer.blob_size(value.canonical_payload().len(), "blob-bytes")?,
+                )?,
+            )?;
+            add(
+                add(varint_size(TAG_EXTENDED), varint_size(payload as u64))?,
+                payload,
+            )?
+        }
+    };
+    Ok(add(add(4, 1)?, record)?)
+}
 
 /// Strictly decodes a core or already canonical extension root.
 pub fn decode_value(bytes: &[u8], limits: DecodeLimits) -> Result<EncodedValue, DecodeError> {
@@ -767,6 +1059,14 @@ mod tests {
         let offset = OffsetDateTime::new(local.clone(), -23 * 60 * 60).unwrap();
         let mut mapping = EntryMappingBuilder::new();
         mapping.push(PortableValue::boolean(true), PortableValue::null());
+        let mut object = ObjectBuilder::new();
+        object
+            .insert("a", PortableValue::integer(BigInteger::from(1_i64)))
+            .unwrap();
+        object
+            .insert("b", PortableValue::string("\u{4e2d}"))
+            .unwrap();
+        round_trip(object.build());
         let mut sequence = SequenceBuilder::new();
         for value in [
             PortableValue::null(),
@@ -791,6 +1091,116 @@ mod tests {
             sequence.push(value);
         }
         round_trip(sequence.build());
+    }
+
+    #[test]
+    fn object_order_affects_encoding_and_is_strict() {
+        let mut first = ObjectBuilder::new();
+        first
+            .insert("a", PortableValue::integer(BigInteger::from(1_i64)))
+            .unwrap();
+        first.insert("b", PortableValue::null()).unwrap();
+        let mut second = ObjectBuilder::new();
+        second.insert("b", PortableValue::null()).unwrap();
+        second
+            .insert("a", PortableValue::integer(BigInteger::from(1_i64)))
+            .unwrap();
+        assert_ne!(encode(&first.build()), encode(&second.build()));
+    }
+
+    #[test]
+    fn object_byte_vector_is_frozen() {
+        let mut object = ObjectBuilder::new();
+        object
+            .insert("a", PortableValue::integer(BigInteger::from(1_i64)))
+            .unwrap();
+        assert_eq!(
+            hex(&encode(&object.build())),
+            "5056434501410a01200201611003010101"
+        );
+    }
+
+    #[test]
+    fn bounded_encode_rejects_each_resource_limit() {
+        let mut sequence = SequenceBuilder::new();
+        sequence.push(PortableValue::string("12345"));
+        sequence.push(PortableValue::string("67890"));
+        sequence.push(PortableValue::string("abcde"));
+        let value = sequence.build();
+        assert_eq!(
+            encode_bounded(
+                &value,
+                EncodeLimits {
+                    max_bytes: 4,
+                    ..EncodeLimits::default()
+                }
+            ),
+            Err(EncodeError::ResourceLimit("stream-bytes"))
+        );
+        assert_eq!(
+            encode_bounded(
+                &value,
+                EncodeLimits {
+                    max_nodes: 2,
+                    ..EncodeLimits::default()
+                }
+            ),
+            Err(EncodeError::ResourceLimit("value-nodes"))
+        );
+        assert_eq!(
+            encode_bounded(
+                &value,
+                EncodeLimits {
+                    max_container_entries: 2,
+                    ..EncodeLimits::default()
+                }
+            ),
+            Err(EncodeError::ResourceLimit("container-entries"))
+        );
+        assert_eq!(
+            encode_bounded(
+                &PortableValue::string("12345"),
+                EncodeLimits {
+                    max_blob_bytes: 4,
+                    ..EncodeLimits::default()
+                }
+            ),
+            Err(EncodeError::ResourceLimit("blob-bytes"))
+        );
+        assert_eq!(
+            encode_bounded(
+                &PortableValue::integer(BigInteger::from(0x0102_i64)),
+                EncodeLimits {
+                    max_integer_bytes: 1,
+                    ..EncodeLimits::default()
+                }
+            ),
+            Err(EncodeError::ResourceLimit("integer-bytes"))
+        );
+        let mut nested = PortableValue::null();
+        for _ in 0..3 {
+            let mut level = SequenceBuilder::new();
+            level.push(nested);
+            nested = level.build();
+        }
+        assert_eq!(
+            encode_bounded(
+                &nested,
+                EncodeLimits {
+                    max_depth: 2,
+                    ..EncodeLimits::default()
+                }
+            ),
+            Err(EncodeError::ResourceLimit("nesting-depth"))
+        );
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        use std::fmt::Write;
+        bytes.iter().fold(String::new(), |mut output, octet| {
+            write!(output, "{octet:02x}").expect("String write");
+            output
+        })
     }
 
     #[test]
