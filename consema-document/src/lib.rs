@@ -1,6 +1,7 @@
 //! Immutable source snapshots, structural locations, and change facts.
 
 use consema_core::{Diagnostic, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity};
+use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -108,6 +109,8 @@ pub enum NodeRole {
     TomlKey,
     /// TOML array or array-of-tables element association.
     TomlArrayElement,
+    /// Format-owned region in an opaque binary document.
+    BinaryRegion,
 }
 
 /// Opaque handle to one structural identity in exactly one snapshot.
@@ -330,6 +333,95 @@ impl LosslessStructuralIndex {
     }
 }
 
+/// One format-owned region in an opaque binary source.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BinaryRegion {
+    node: NodeRef,
+    span: Span,
+    kind: Arc<str>,
+}
+
+impl BinaryRegion {
+    /// Creates a region; its snapshot, role, kind, and coverage are validated by the index.
+    #[must_use]
+    pub fn new(node: NodeRef, span: Span, kind: impl Into<Arc<str>>) -> Self {
+        Self {
+            node,
+            span,
+            kind: kind.into(),
+        }
+    }
+
+    /// Process-local structural identity.
+    #[must_use]
+    pub const fn node_ref(&self) -> NodeRef {
+        self.node
+    }
+
+    /// Exact raw byte range.
+    #[must_use]
+    pub const fn span(&self) -> Span {
+        self.span
+    }
+
+    /// Non-empty stable format-owned kind.
+    #[must_use]
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+}
+
+/// Exhaustive ordered format-owned region coverage for one opaque binary source.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BinaryStructuralIndex {
+    regions: Arc<[BinaryRegion]>,
+}
+
+impl BinaryStructuralIndex {
+    /// Validates exact raw-byte coverage, snapshot binding, roles, kinds, and unique identities.
+    pub fn new(
+        identity: SnapshotIdentity,
+        source_len: usize,
+        regions: Vec<BinaryRegion>,
+    ) -> Result<Self, LocationError> {
+        let mut next = 0;
+        let mut identities = HashSet::with_capacity(regions.len());
+        for region in &regions {
+            if region.span.snapshot != identity || region.node.snapshot != identity {
+                return Err(LocationError::WrongSnapshot);
+            }
+            if region.node.role != NodeRole::BinaryRegion {
+                return Err(LocationError::WrongRole);
+            }
+            if region.kind.is_empty() {
+                return Err(LocationError::InvalidBinaryRegionKind);
+            }
+            if !identities.insert(region.node) {
+                return Err(LocationError::DuplicateStructuralIdentity);
+            }
+            if region.span.start_byte != next
+                || region.span.end_byte <= region.span.start_byte
+                || region.span.end_byte > source_len
+            {
+                return Err(LocationError::IncompleteStructuralCoverage);
+            }
+            next = region.span.end_byte;
+        }
+        if next != source_len {
+            return Err(LocationError::IncompleteStructuralCoverage);
+        }
+        Ok(Self {
+            regions: Arc::from(regions),
+        })
+    }
+
+    /// Ordered exhaustive regions.
+    #[must_use]
+    pub fn regions(&self) -> &[BinaryRegion] {
+        &self.regions
+    }
+}
+
 /// Span, identity, or coverage failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LocationError {
@@ -347,6 +439,12 @@ pub enum LocationError {
     NotDecodedBoundary,
     /// A decoded offset lies inside one scalar's UTF-8 or UTF-16 representation.
     DecodedOffsetNotBoundary,
+    /// A structural handle has a role other than the one required by its index.
+    WrongRole,
+    /// A binary region kind is empty.
+    InvalidBinaryRegionKind,
+    /// More than one structural region reused the same process-local identity.
+    DuplicateStructuralIdentity,
 }
 
 impl Display for LocationError {
@@ -666,5 +764,67 @@ mod tests {
         let second = DocumentAuthority::fresh();
         let node = first.node_ref(0, NodeRole::Value);
         assert_eq!(second.verify(node), Err(LocationError::WrongSnapshot));
+    }
+
+    #[test]
+    fn binary_regions_cover_exact_bytes_without_token_claims() {
+        let authority = DocumentAuthority::fresh();
+        let header = BinaryRegion::new(
+            authority.node_ref(0, NodeRole::BinaryRegion),
+            authority.span(0, 4).unwrap(),
+            "example.header@1",
+        );
+        let payload = BinaryRegion::new(
+            authority.node_ref(1, NodeRole::BinaryRegion),
+            authority.span(4, 9).unwrap(),
+            "example.payload@1",
+        );
+        let index =
+            BinaryStructuralIndex::new(authority.identity(), 9, vec![header, payload]).unwrap();
+        assert_eq!(index.regions().len(), 2);
+        assert_eq!(index.regions()[0].kind(), "example.header@1");
+        assert_eq!(index.regions()[1].span().start_byte(), 4);
+        assert_eq!(index.regions()[0].node_ref().role(), NodeRole::BinaryRegion);
+    }
+
+    #[test]
+    fn binary_regions_reject_wrong_roles_empty_kinds_and_gaps() {
+        let authority = DocumentAuthority::fresh();
+        let wrong_role = BinaryRegion::new(
+            authority.node_ref(0, NodeRole::Token),
+            authority.span(0, 1).unwrap(),
+            "example.byte@1",
+        );
+        assert_eq!(
+            BinaryStructuralIndex::new(authority.identity(), 1, vec![wrong_role]),
+            Err(LocationError::WrongRole)
+        );
+
+        let empty_kind = BinaryRegion::new(
+            authority.node_ref(0, NodeRole::BinaryRegion),
+            authority.span(0, 1).unwrap(),
+            "",
+        );
+        assert_eq!(
+            BinaryStructuralIndex::new(authority.identity(), 1, vec![empty_kind]),
+            Err(LocationError::InvalidBinaryRegionKind)
+        );
+
+        let gap = BinaryRegion::new(
+            authority.node_ref(0, NodeRole::BinaryRegion),
+            authority.span(1, 2).unwrap(),
+            "example.byte@1",
+        );
+        assert_eq!(
+            BinaryStructuralIndex::new(authority.identity(), 2, vec![gap]),
+            Err(LocationError::IncompleteStructuralCoverage)
+        );
+    }
+
+    #[test]
+    fn empty_binary_source_has_an_empty_valid_index() {
+        let authority = DocumentAuthority::fresh();
+        let index = BinaryStructuralIndex::new(authority.identity(), 0, Vec::new()).unwrap();
+        assert!(index.regions().is_empty());
     }
 }
