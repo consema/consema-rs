@@ -424,7 +424,7 @@ fn parse_match(value: &PortableValue, path: &str) -> Result<ProtocolQueryMatch, 
     Ok(ProtocolQueryMatch::Portable(portable))
 }
 
-fn path_value(path: &ValuePath) -> PortableValue {
+pub(crate) fn path_value(path: &ValuePath) -> PortableValue {
     let mut segments = SequenceBuilder::new();
     for segment in path.segments() {
         segments.push(match segment {
@@ -449,7 +449,7 @@ fn path_value(path: &ValuePath) -> PortableValue {
     object(vec![("segments", segments.build())])
 }
 
-fn parse_path(value: &PortableValue, path: &str) -> Result<ValuePath, ProtocolError> {
+pub(crate) fn parse_path(value: &PortableValue, path: &str) -> Result<ValuePath, ProtocolError> {
     let fields = exact_fields(value, &["segments"], path)?;
     let mut result = ValuePath::root();
     for (index, segment) in sequence(fields[0], &format!("{path}.segments"))?
@@ -497,7 +497,7 @@ fn parse_path(value: &PortableValue, path: &str) -> Result<ValuePath, ProtocolEr
     Ok(result)
 }
 
-fn association_value(location: &AssociationLocation) -> PortableValue {
+pub(crate) fn association_value(location: &AssociationLocation) -> PortableValue {
     object(vec![
         ("container", path_value(location.container())),
         ("ordinal", integer_u64(location.ordinal())),
@@ -508,7 +508,7 @@ fn association_value(location: &AssociationLocation) -> PortableValue {
     ])
 }
 
-fn parse_association(
+pub(crate) fn parse_association(
     value: &PortableValue,
     path: &str,
 ) -> Result<AssociationLocation, ProtocolError> {

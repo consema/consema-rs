@@ -10,6 +10,7 @@ mod diagnostic;
 mod error;
 mod execution;
 mod limits;
+mod projection;
 mod query;
 mod registry;
 mod schema;
@@ -24,6 +25,12 @@ pub use diagnostic::{
 pub use error::{ProtocolError, ProtocolErrorKind};
 pub use execution::{CancellationRequest, Completion, CompletionStatus, ExecutionPolicy};
 pub use limits::ProtocolLimits;
+pub use projection::{
+    LossClassification, ProjectedLocationMessage, ProjectionEventMessage, ProjectionFidelity,
+    ProjectionPolicy, ProjectionReportMessage, ProjectionRequestMessage, ProjectionResultMessage,
+    ProjectionRule, ProjectionScope, ProvenanceEntryMessage, ProvenanceMapMessage,
+    ProvenanceRelation, SourceOriginMessage,
+};
 pub use query::{
     NativeMatchLocator, ProtocolQueryMatch, QueryResultMessage, query_definition_from_message,
     query_definition_message,

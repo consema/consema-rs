@@ -75,6 +75,12 @@ pub(crate) fn string<'a>(value: &'a PortableValue, path: &str) -> Result<&'a str
         .ok_or_else(|| ProtocolError::new(ProtocolErrorKind::WrongType, path, "expected String"))
 }
 
+pub(crate) fn boolean(value: &PortableValue, path: &str) -> Result<bool, ProtocolError> {
+    value
+        .as_boolean()
+        .ok_or_else(|| ProtocolError::new(ProtocolErrorKind::WrongType, path, "expected Boolean"))
+}
+
 pub(crate) fn sequence<'a>(
     value: &'a PortableValue,
     path: &str,
@@ -121,6 +127,20 @@ pub(crate) fn integer_u64(value: u64) -> PortableValue {
         BigInteger::from_sign_and_magnitude(i8::from(value != 0), &bytes)
             .expect("u64 has a valid canonical magnitude"),
     )
+}
+
+pub(crate) fn signed_i32(value: &PortableValue, path: &str) -> Result<i32, ProtocolError> {
+    value
+        .as_integer()
+        .and_then(BigInteger::to_i64)
+        .and_then(|number| i32::try_from(number).ok())
+        .ok_or_else(|| {
+            ProtocolError::new(
+                ProtocolErrorKind::InvalidValue,
+                path,
+                "expected a signed 32-bit Integer",
+            )
+        })
 }
 
 pub(crate) fn nullable_string(value: Option<&str>) -> PortableValue {
