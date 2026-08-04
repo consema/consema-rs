@@ -9,11 +9,13 @@ mod change;
 mod contract;
 mod diagnostic;
 mod error;
+mod error_registry;
 mod execution;
 mod limits;
 mod projection;
 mod query;
 mod registry;
+mod registry_manifest;
 mod schema;
 mod value_transport;
 
@@ -24,6 +26,9 @@ pub use diagnostic::{
     DiagnosticMessage, FixApplicability, FixProposal, RelatedSourceLocation, SourceLocation,
 };
 pub use error::{ProtocolError, ProtocolErrorKind};
+pub use error_registry::{
+    ErrorCodeDescriptor, ErrorCodeRegistry, error_code_manifest_value, query_failure_code,
+};
 pub use execution::{CancellationRequest, Completion, CompletionStatus, ExecutionPolicy};
 pub use limits::ProtocolLimits;
 pub use projection::{
@@ -37,6 +42,7 @@ pub use query::{
     query_definition_message,
 };
 pub use registry::{CapabilityDeclaration, ProfileDescriptor, ProfileReference};
+pub use registry_manifest::{ContractManifestEntry, ErrorCodeManifestEntry, RegistryManifest};
 pub use value_transport::{decode_json, decode_pvce, encode_json, encode_pvce};
 
 /// Canonical tagged JSON transport schema.
