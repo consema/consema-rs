@@ -5,6 +5,13 @@ use std::fmt::{self, Display, Formatter};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod source;
+
+pub use source::{
+    BomKind, ContentDigest, DecodedOffset, DecodedPosition, EncodingFacts, EncodingRequest,
+    SourceEncoding, SourceError, SourceLimits, SourceSnapshot, UnsupportedBomKind,
+};
+
 static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(1);
 
 /// Opaque identity of exactly one immutable document snapshot.
@@ -175,65 +182,6 @@ impl Span {
     }
 }
 
-/// Full immutable UTF-8 source bytes.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SourceSnapshot {
-    bytes: Arc<[u8]>,
-}
-
-impl SourceSnapshot {
-    /// Validates UTF-8 and stores all original bytes without normalization.
-    pub fn from_utf8(bytes: impl Into<Arc<[u8]>>) -> Result<Self, SourceError> {
-        let bytes = bytes.into();
-        std::str::from_utf8(&bytes).map_err(|error| SourceError::InvalidUtf8 {
-            valid_up_to: error.valid_up_to(),
-        })?;
-        Ok(Self { bytes })
-    }
-
-    /// Exact source bytes.
-    #[must_use]
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    /// Validated source text.
-    #[must_use]
-    pub fn text(&self) -> &str {
-        std::str::from_utf8(&self.bytes).expect("SourceSnapshot validates UTF-8")
-    }
-
-    /// Source byte length.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.bytes.len()
-    }
-
-    /// Whether the source is empty.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.bytes.is_empty()
-    }
-}
-
-/// Stable source construction failure.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SourceError {
-    /// JSON v1 only accepts UTF-8.
-    InvalidUtf8 {
-        /// Prefix length that was valid UTF-8.
-        valid_up_to: usize,
-    },
-}
-
-impl Display for SourceError {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{self:?}")
-    }
-}
-
-impl std::error::Error for SourceError {}
-
 /// Stable namespaced format family contract.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct FormatFamilyId {
@@ -391,6 +339,14 @@ pub enum LocationError {
     WrongSnapshot,
     /// Pieces had a gap, overlap, empty interval, or wrong final length.
     IncompleteStructuralCoverage,
+    /// Requested coordinate is beyond the source or decoded text.
+    OutOfBounds,
+    /// Binary sources do not have decoded coordinates.
+    NoDecodedText,
+    /// A raw offset lies inside one encoded scalar.
+    NotDecodedBoundary,
+    /// A decoded offset lies inside one scalar's UTF-8 or UTF-16 representation.
+    DecodedOffsetNotBoundary,
 }
 
 impl Display for LocationError {
@@ -458,6 +414,101 @@ impl FatalFormationFailure {
                 }),
                 0,
             )],
+        }
+    }
+
+    /// Converts a source-construction failure into one stable fatal diagnostic.
+    #[must_use]
+    pub fn source_error(error: SourceError) -> Self {
+        if let SourceError::InvalidUtf8 { valid_up_to } = error {
+            return Self::invalid_utf8(valid_up_to);
+        }
+
+        let (code, category, location) = match &error {
+            SourceError::InvalidSequence { byte_offset, .. } => (
+                "core.source.invalid-sequence@1",
+                DiagnosticCategory::Lexical,
+                Some(DiagnosticLocation {
+                    snapshot: None,
+                    start_byte: *byte_offset as u64,
+                    end_byte: *byte_offset as u64,
+                }),
+            ),
+            SourceError::EncodingConflict { .. } => (
+                "core.source.encoding-conflict@1",
+                DiagnosticCategory::Encoding,
+                None,
+            ),
+            SourceError::UnsupportedBom { .. } => (
+                "core.source.unsupported-bom@1",
+                DiagnosticCategory::Encoding,
+                None,
+            ),
+            SourceError::ResourceLimit { .. } | SourceError::OffsetOverflow => (
+                "core.source.resource-limit@1",
+                DiagnosticCategory::Resource,
+                None,
+            ),
+            SourceError::InvalidUtf8 { .. } => unreachable!("handled above"),
+        };
+        let mut diagnostic =
+            Diagnostic::new(code, category, DiagnosticSeverity::Error, location, 0);
+        match error {
+            SourceError::InvalidSequence { encoding, .. } => {
+                diagnostic
+                    .arguments
+                    .insert("encoding".to_owned(), encoding.as_str().to_owned());
+            }
+            SourceError::EncodingConflict {
+                bom,
+                declaration,
+                caller_override,
+            } => {
+                if let Some(encoding) = bom {
+                    diagnostic
+                        .arguments
+                        .insert("bom".to_owned(), encoding.as_str().to_owned());
+                }
+                if let Some(encoding) = declaration {
+                    diagnostic
+                        .arguments
+                        .insert("declaration".to_owned(), encoding.as_str().to_owned());
+                }
+                if let Some(encoding) = caller_override {
+                    diagnostic
+                        .arguments
+                        .insert("caller_override".to_owned(), encoding.as_str().to_owned());
+                }
+            }
+            SourceError::UnsupportedBom { kind } => {
+                diagnostic
+                    .arguments
+                    .insert("bom".to_owned(), format!("{kind:?}"));
+            }
+            SourceError::ResourceLimit {
+                name,
+                observed,
+                limit,
+            } => {
+                diagnostic
+                    .arguments
+                    .insert("name".to_owned(), name.to_owned());
+                diagnostic
+                    .arguments
+                    .insert("observed".to_owned(), observed.to_string());
+                diagnostic
+                    .arguments
+                    .insert("limit".to_owned(), limit.to_string());
+            }
+            SourceError::OffsetOverflow => {
+                diagnostic
+                    .arguments
+                    .insert("name".to_owned(), "coordinate-overflow".to_owned());
+            }
+            SourceError::InvalidUtf8 { .. } => unreachable!("handled above"),
+        }
+        Self {
+            diagnostics: vec![diagnostic],
         }
     }
 

@@ -6,8 +6,8 @@ use consema_core::{
     BinaryFloat64, Diagnostic, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity,
 };
 use consema_document::{
-    DocumentAuthority, FatalFormationFailure, LosslessStructuralIndex, ParseLimits, SourceError,
-    SourceSnapshot, StructuralPiece, StructuralPieceKind,
+    DocumentAuthority, FatalFormationFailure, LosslessStructuralIndex, ParseLimits, SourceSnapshot,
+    StructuralPiece, StructuralPieceKind,
 };
 use std::ops::Range;
 use std::sync::Arc;
@@ -25,17 +25,17 @@ pub(crate) fn parse(
             limits.max_source_bytes,
         ));
     }
-    let source = SourceSnapshot::from_utf8(source_bytes).map_err(|error| match error {
-        SourceError::InvalidUtf8 { valid_up_to } => {
-            FatalFormationFailure::invalid_utf8(valid_up_to)
-        }
-    })?;
+    let source =
+        SourceSnapshot::from_utf8(source_bytes).map_err(FatalFormationFailure::source_error)?;
     let authority = DocumentAuthority::fresh();
-    let pieces = tokenize(source.text(), &authority, limits.max_token_count)?;
-    preflight_delimiter_nesting(source.text(), &pieces, limits.max_nesting_depth)?;
+    let source_text = source
+        .decoded_text()
+        .expect("TOML parser constructs a UTF-8 source");
+    let pieces = tokenize(source_text, &authority, limits.max_token_count)?;
+    preflight_delimiter_nesting(source_text, &pieces, limits.max_nesting_depth)?;
     let structural_index = LosslessStructuralIndex::new(authority.identity(), source.len(), pieces)
         .expect("TOML tokenizer creates exact source coverage");
-    let parsed = ImDocument::parse(source.text().to_owned()).map_err(syntax_failure)?;
+    let parsed = ImDocument::parse(source_text.to_owned()).map_err(syntax_failure)?;
 
     let (root, entities) = {
         let mut builder = EntityBuilder {

@@ -58,11 +58,7 @@ pub(crate) fn parse(
             limits.max_source_bytes,
         ));
     }
-    let source = SourceSnapshot::from_utf8(bytes).map_err(|error| match error {
-        consema_document::SourceError::InvalidUtf8 { valid_up_to } => {
-            FatalFormationFailure::invalid_utf8(valid_up_to)
-        }
-    })?;
+    let source = SourceSnapshot::from_utf8(bytes).map_err(FatalFormationFailure::source_error)?;
     let authority = DocumentAuthority::fresh();
     let mut diagnostics = DiagnosticSink::new(limits.max_diagnostics);
     let Lexed {
@@ -96,7 +92,9 @@ pub(crate) fn parse(
         .expect("lexer partitions every source byte exactly once");
 
     let mut parser = Parser {
-        source: source.text(),
+        source: source
+            .decoded_text()
+            .expect("JSON parser constructs a UTF-8 source"),
         profile,
         authority: &authority,
         tokens: &tokens,

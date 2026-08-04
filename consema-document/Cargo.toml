@@ -8,6 +8,7 @@ description = "Immutable document snapshot primitives"
 
 [dependencies]
 consema-core = { path = "../consema-core", version = "0.3.0" }
+sha2.workspace = true
 
 [lints]
 workspace = true
