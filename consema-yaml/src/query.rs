@@ -653,7 +653,9 @@ fn encoded_text(value: &str, encoding: SourceEncoding) -> Vec<u8> {
         SourceEncoding::Utf8 => value.as_bytes().to_vec(),
         SourceEncoding::Utf16Le => value.encode_utf16().flat_map(u16::to_le_bytes).collect(),
         SourceEncoding::Utf16Be => value.encode_utf16().flat_map(u16::to_be_bytes).collect(),
-        SourceEncoding::Latin1 | SourceEncoding::Binary => Vec::new(),
+        SourceEncoding::Latin1 | SourceEncoding::Binary | SourceEncoding::WindowsCodePage(_) => {
+            Vec::new()
+        }
     }
 }
 

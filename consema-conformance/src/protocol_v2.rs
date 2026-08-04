@@ -154,7 +154,9 @@ fn error_manifest_case(case: &VectorCase<'_>) -> Result<(), String> {
 
 fn snapshot_transport(case: &VectorCase<'_>) -> Result<(), String> {
     let snapshot = source(case, "raw_hex")?;
-    let payload = SourceSnapshotMessage::from_snapshot(&snapshot).to_value();
+    let payload = SourceSnapshotMessage::from_snapshot(&snapshot)
+        .map_err(|error| error.to_string())?
+        .to_value();
     let message = ProtocolMessage::new(
         ContractId::new("core.source-snapshot", 1).unwrap(),
         payload,
@@ -225,7 +227,9 @@ fn reject_source_v1(case: &VectorCase<'_>) -> Result<(), String> {
     let snapshot = source(case, "raw_hex")?;
     let error = ProtocolMessage::new(
         ContractId::new("core.source-snapshot", 1).unwrap(),
-        SourceSnapshotMessage::from_snapshot(&snapshot).to_value(),
+        SourceSnapshotMessage::from_snapshot(&snapshot)
+            .map_err(|error| error.to_string())?
+            .to_value(),
         ContractRegistry::v1(),
     )
     .unwrap_err();
@@ -234,7 +238,9 @@ fn reject_source_v1(case: &VectorCase<'_>) -> Result<(), String> {
 
 fn reject_forged_digest(case: &VectorCase<'_>) -> Result<(), String> {
     let snapshot = source(case, "raw_hex")?;
-    let value = SourceSnapshotMessage::from_snapshot(&snapshot).to_value();
+    let value = SourceSnapshotMessage::from_snapshot(&snapshot)
+        .map_err(|error| error.to_string())?
+        .to_value();
     let digest = ordered_object(&[
         ("algorithm", PortableValue::string("sha256")),
         ("hex", PortableValue::string("00".repeat(32))),
@@ -246,7 +252,9 @@ fn reject_forged_digest(case: &VectorCase<'_>) -> Result<(), String> {
 
 fn reject_forged_encoding(case: &VectorCase<'_>) -> Result<(), String> {
     let snapshot = source(case, "raw_hex")?;
-    let value = SourceSnapshotMessage::from_snapshot(&snapshot).to_value();
+    let value = SourceSnapshotMessage::from_snapshot(&snapshot)
+        .map_err(|error| error.to_string())?
+        .to_value();
     let encoding = value
         .as_object()
         .and_then(|fields| object_field(fields, "encoding"))
@@ -263,7 +271,9 @@ fn reject_forged_encoding(case: &VectorCase<'_>) -> Result<(), String> {
 
 fn snapshot_resource_limit(case: &VectorCase<'_>) -> Result<(), String> {
     let snapshot = source(case, "raw_hex")?;
-    let value = SourceSnapshotMessage::from_snapshot(&snapshot).to_value();
+    let value = SourceSnapshotMessage::from_snapshot(&snapshot)
+        .map_err(|error| error.to_string())?
+        .to_value();
     let limits = SourceLimits {
         max_raw_bytes: input_usize(case, "max_raw_bytes")?,
         ..SourceLimits::default()

@@ -190,7 +190,7 @@ impl CompleteConversion {
         crate::protocol::MaterializationResultMessage::complete(
             self.report.target_profile.clone(),
             target_source_id,
-            crate::protocol::SourceSnapshotMessage::from_snapshot(snapshot),
+            crate::protocol::SourceSnapshotMessage::from_snapshot(snapshot)?,
             self.report.materialization_fidelity,
             report,
             provenance,

@@ -6,7 +6,7 @@ use crate::schema::{
 use crate::{ProtocolError, ProtocolErrorKind};
 use consema_core::{ObjectBuilder, PortableValue, SequenceBuilder};
 use consema_document::{
-    BomKind, ContentDigest, EncodingFacts, EncodingRequest, SourceEncoding, SourceError,
+    BomKind, BomPolicy, ContentDigest, EncodingFacts, EncodingRequest, SourceEncoding, SourceError,
     SourceLimits, SourcePatch, SourcePatchError, SourcePatchLimits, SourceReplacement,
     SourceSnapshot,
 };
@@ -21,11 +21,11 @@ pub struct SourceSnapshotMessage {
 
 impl SourceSnapshotMessage {
     /// Copies one immutable snapshot into a transferable content message.
-    #[must_use]
-    pub fn from_snapshot(snapshot: &SourceSnapshot) -> Self {
-        Self {
+    pub fn from_snapshot(snapshot: &SourceSnapshot) -> Result<Self, ProtocolError> {
+        ensure_v1_encoding_facts(snapshot.encoding_facts(), "$.encoding")?;
+        Ok(Self {
             snapshot: snapshot.clone(),
-        }
+        })
     }
 
     /// Verified immutable source snapshot.
@@ -148,6 +148,7 @@ impl SourcePatchMessage {
 
     /// Encodes the fixed-field PortableValue schema.
     pub fn to_value(&self) -> Result<PortableValue, ProtocolError> {
+        ensure_v1_encoding_facts(self.patch.encoding_facts(), "$.encoding")?;
         let mut replacements = SequenceBuilder::new();
         for replacement in self.patch.replacements() {
             let old_start = u64::try_from(replacement.old_start()).map_err(|_| {
@@ -354,6 +355,32 @@ fn encoding_value(facts: EncodingFacts) -> PortableValue {
     ])
 }
 
+fn ensure_v1_encoding_facts(facts: EncodingFacts, path: &str) -> Result<(), ProtocolError> {
+    if facts.bom_policy() != BomPolicy::DetectUnicode {
+        return Err(crate::schema::invalid(
+            path,
+            "core source v1 requires DetectUnicode BOM policy",
+        ));
+    }
+    for encoding in [
+        Some(facts.profile_default()),
+        facts.declaration(),
+        facts.caller_override(),
+        Some(facts.selected()),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if matches!(encoding, SourceEncoding::WindowsCodePage(_)) {
+            return Err(crate::schema::invalid(
+                path,
+                "core source v1 does not support Windows code pages",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn encoding_from_value(value: &PortableValue, path: &str) -> Result<EncodingFacts, ProtocolError> {
     let fields = exact_fields(
         value,
@@ -376,13 +403,16 @@ fn encoding_from_value(value: &PortableValue, path: &str) -> Result<EncodingFact
         .map_err(|error| source_error(path, error))
 }
 
-const fn encoding_name(encoding: SourceEncoding) -> &'static str {
+fn encoding_name(encoding: SourceEncoding) -> &'static str {
     match encoding {
         SourceEncoding::Binary => "Binary",
         SourceEncoding::Utf8 => "Utf8",
         SourceEncoding::Utf16Le => "Utf16Le",
         SourceEncoding::Utf16Be => "Utf16Be",
         SourceEncoding::Latin1 => "Latin1",
+        SourceEncoding::WindowsCodePage(_) => {
+            unreachable!("core source v1 validation rejects Windows code pages")
+        }
     }
 }
 
@@ -486,7 +516,7 @@ mod tests {
             SourceLimits::default(),
         )
         .unwrap();
-        let message = SourceSnapshotMessage::from_snapshot(&snapshot);
+        let message = SourceSnapshotMessage::from_snapshot(&snapshot).unwrap();
         let value = message.to_value();
         for transported in [
             decode_json(
@@ -507,9 +537,46 @@ mod tests {
     }
 
     #[test]
+    fn source_v1_rejects_v2_code_pages_and_bom_policy() {
+        let code_page = consema_document::WindowsCodePage::from_number(1252).unwrap();
+        let code_page_snapshot = SourceSnapshot::from_raw(
+            Arc::<[u8]>::from([0x80]),
+            EncodingRequest::new(SourceEncoding::WindowsCodePage(code_page))
+                .with_bom_policy(BomPolicy::TreatAsContent),
+            SourceLimits::default(),
+        )
+        .unwrap();
+        let error = SourceSnapshotMessage::from_snapshot(&code_page_snapshot).unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
+
+        let patch = SourcePatch::create(
+            &code_page_snapshot,
+            Vec::new(),
+            BTreeMap::new(),
+            SourcePatchLimits::default(),
+        )
+        .unwrap();
+        let error = SourcePatchMessage::from_patch(&patch)
+            .to_value()
+            .unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
+
+        let content_bom_snapshot = SourceSnapshot::from_raw(
+            Arc::<[u8]>::from(b"plain".as_slice()),
+            EncodingRequest::new(SourceEncoding::Utf8).with_bom_policy(BomPolicy::TreatAsContent),
+            SourceLimits::default(),
+        )
+        .unwrap();
+        let error = SourceSnapshotMessage::from_snapshot(&content_bom_snapshot).unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
+    }
+
+    #[test]
     fn snapshot_decoder_rejects_forged_digest_and_encoding() {
         let snapshot = SourceSnapshot::from_utf8(Arc::<[u8]>::from(b"abc".as_slice())).unwrap();
-        let value = SourceSnapshotMessage::from_snapshot(&snapshot).to_value();
+        let value = SourceSnapshotMessage::from_snapshot(&snapshot)
+            .unwrap()
+            .to_value();
         let entries = value.as_object().unwrap();
         let forged_digest = object(vec![
             ("algorithm", PortableValue::string("sha256")),

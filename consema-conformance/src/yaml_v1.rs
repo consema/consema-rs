@@ -795,6 +795,7 @@ fn source_encoding_name(encoding: SourceEncoding) -> &'static str {
         SourceEncoding::Utf16Be => "Utf16Be",
         SourceEncoding::Latin1 => "Latin1",
         SourceEncoding::Binary => "Binary",
+        SourceEncoding::WindowsCodePage(_) => "WindowsCodePage",
     }
 }
 

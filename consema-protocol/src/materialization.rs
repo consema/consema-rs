@@ -42,6 +42,12 @@ impl MaterializationRequestMessage {
 
     /// Encodes the fixed-field request schema.
     pub fn to_value(&self) -> Result<PortableValue, ProtocolError> {
+        if matches!(self.request.encoding(), SourceEncoding::WindowsCodePage(_)) {
+            return Err(crate::schema::invalid(
+                "$.encoding",
+                "core.materialization-request@1 does not support Windows code pages",
+            ));
+        }
         let limits = self.request.limits();
         Ok(object(vec![
             (
@@ -1267,6 +1273,21 @@ mod tests {
     }
 
     #[test]
+    fn materialization_request_v1_rejects_windows_code_pages() {
+        let request = MaterializationRequest::new(
+            ProfileId::new("ini.windows", 1),
+            MaterializationStyleId::new("ini.preserve", 1),
+        )
+        .with_encoding(SourceEncoding::WindowsCodePage(
+            consema_document::WindowsCodePage::from_number(1252).unwrap(),
+        ));
+        let error = MaterializationRequestMessage::from_request(&request)
+            .to_value()
+            .unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
+    }
+
+    #[test]
     fn provenance_round_trip_keeps_external_identity() {
         let message =
             MaterializationProvenanceMapMessage::new(vec![MaterializationProvenanceEntryMessage {
@@ -1350,7 +1371,7 @@ mod tests {
         let message = MaterializationResultMessage::complete(
             ProfileId::new("json.strict", 1),
             "target:one",
-            SourceSnapshotMessage::from_snapshot(&snapshot),
+            SourceSnapshotMessage::from_snapshot(&snapshot).unwrap(),
             MaterializationFidelity::Exact,
             MaterializationReportMessage::default(),
             MaterializationProvenanceMapMessage::default(),

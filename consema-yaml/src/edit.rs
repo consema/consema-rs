@@ -2494,7 +2494,9 @@ fn standalone_source(fragment: &[u8], encoding: SourceEncoding) -> Result<Vec<u8
         SourceEncoding::Utf8 => &[],
         SourceEncoding::Utf16Le => &[0xff, 0xfe],
         SourceEncoding::Utf16Be => &[0xfe, 0xff],
-        SourceEncoding::Binary | SourceEncoding::Latin1 => return Err(EditFailure::InvalidLiteral),
+        SourceEncoding::Binary | SourceEncoding::Latin1 | SourceEncoding::WindowsCodePage(_) => {
+            return Err(EditFailure::InvalidLiteral);
+        }
     };
     output
         .try_reserve(bom.len().saturating_add(fragment.len()))
@@ -2539,7 +2541,9 @@ fn encode_fragment(
             }
             Ok(output)
         }
-        SourceEncoding::Binary | SourceEncoding::Latin1 => Err(EditFailure::InvalidLiteral),
+        SourceEncoding::Binary | SourceEncoding::Latin1 | SourceEncoding::WindowsCodePage(_) => {
+            Err(EditFailure::InvalidLiteral)
+        }
     }
 }
 

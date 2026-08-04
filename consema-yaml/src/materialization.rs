@@ -812,7 +812,7 @@ fn encode_output(
             }
             Ok(output)
         }
-        SourceEncoding::Binary | SourceEncoding::Latin1 => {
+        SourceEncoding::Binary | SourceEncoding::Latin1 | SourceEncoding::WindowsCodePage(_) => {
             Err(MaterializationFailure::UnsupportedEncoding)
         }
     }

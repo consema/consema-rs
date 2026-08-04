@@ -598,7 +598,9 @@ mod tests {
         let payloads = [
             (
                 ContractId::new("core.source-snapshot", 1).unwrap(),
-                crate::SourceSnapshotMessage::from_snapshot(&snapshot).to_value(),
+                crate::SourceSnapshotMessage::from_snapshot(&snapshot)
+                    .unwrap()
+                    .to_value(),
             ),
             (
                 ContractId::new("core.source-patch", 1).unwrap(),
@@ -639,7 +641,9 @@ mod tests {
         let decoded = crate::SourceSnapshotMessage::from_value(
             ProtocolMessage::new(
                 ContractId::new("core.source-snapshot", 1).unwrap(),
-                crate::SourceSnapshotMessage::from_snapshot(&snapshot).to_value(),
+                crate::SourceSnapshotMessage::from_snapshot(&snapshot)
+                    .unwrap()
+                    .to_value(),
                 ContractRegistry::v2(),
             )
             .unwrap()

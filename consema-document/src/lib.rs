@@ -27,8 +27,9 @@ pub use operation_registry::{
     OperationSupport, OperationTargetRoleId,
 };
 pub use source::{
-    BomKind, ContentDigest, DecodedOffset, DecodedPosition, EncodingFacts, EncodingRequest,
-    SourceEncoding, SourceError, SourceLimits, SourceSnapshot, UnsupportedBomKind,
+    BomKind, BomPolicy, ContentDigest, DecodedOffset, DecodedPosition, EncodingFacts,
+    EncodingRequest, SourceEncoding, SourceError, SourceLimits, SourceSnapshot, UnsupportedBomKind,
+    WindowsCodePage,
 };
 pub use source_patch::{
     SourcePatch, SourcePatchError, SourcePatchLimits, SourcePatchRedactionError, SourceReplacement,
