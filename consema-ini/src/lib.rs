@@ -8,8 +8,15 @@ use consema_document::{
 use std::sync::Arc;
 
 mod parser;
+mod projection;
 mod query;
 
+pub use projection::{
+    CollisionPolicy, CompleteProjection, FailedProjectionAttempt, Fidelity, NameComparison,
+    ProjectedLocation, ProjectionEvent, ProjectionEventKind, ProjectionFailure, ProjectionLimits,
+    ProjectionReport, ProjectionRequest, ProjectionResult, ProjectionTarget, ProvenanceEntry,
+    ProvenanceMap, ProvenanceRelation, SourceOrigin,
+};
 pub use query::{
     IniMatch, IniSyntaxMatch, execute_ini_query, execute_ini_query_cursor,
     execute_ini_syntax_query, execute_ini_syntax_query_cursor,
