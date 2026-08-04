@@ -1,6 +1,6 @@
 //! Audited projection-to-materialization composition.
 
-use crate::{Document, DocumentInner, core, document, ini, json, toml, yaml};
+use crate::{Document, DocumentInner, core, document, ini, json, properties, toml, yaml};
 use core::{OperationKind, PortableValue, StableFailure};
 use document::{
     CompleteMaterialization, MaterializationFidelity, MaterializationProvenanceMap,
@@ -24,6 +24,8 @@ pub enum ConversionFidelity {
 pub enum ConversionProjectionReport {
     /// INI projection report.
     Ini(ini::ProjectionReport),
+    /// Java Properties projection report.
+    Properties(properties::ProjectionReport),
     /// JSON projection report.
     Json(json::ProjectionReport),
     /// TOML projection report.
@@ -37,6 +39,8 @@ pub enum ConversionProjectionReport {
 pub enum ConversionProjectionProvenance {
     /// INI projection provenance.
     Ini(ini::ProvenanceMap),
+    /// Java Properties projection provenance.
+    Properties(properties::ProvenanceMap),
     /// JSON projection provenance.
     Json(json::ProvenanceMap),
     /// TOML projection provenance.
@@ -140,6 +144,10 @@ impl CompleteConversion {
             {
                 crate::protocol::ProjectionReportMessage::default()
             }
+            (
+                ConversionProjectionReport::Properties(report),
+                ConversionProjectionProvenance::Properties(provenance),
+            ) => properties_projection_report_message(report, provenance, source_id)?,
             (ConversionProjectionReport::Toml(report), ConversionProjectionProvenance::Toml(_))
                 if report.events().is_empty() =>
             {
@@ -185,6 +193,7 @@ impl CompleteConversion {
         let snapshot = match &self.document.inner {
             DocumentInner::Ini(document) => document.source(),
             DocumentInner::Json(document) => document.source(),
+            DocumentInner::Properties(document) => document.source(),
             DocumentInner::Toml(document) => document.source(),
             DocumentInner::Yaml(document) => document.source(),
         };
@@ -335,6 +344,32 @@ pub fn convert_ini(
     }
 }
 
+/// Converts one Java Properties document through an explicit duplicate policy.
+#[must_use]
+pub fn convert_properties(
+    source: &properties::Document,
+    projection_request: properties::ProjectionRequest,
+    materialization_request: &MaterializationRequest,
+) -> ConversionResult {
+    match source.project(projection_request) {
+        properties::ProjectionResult::Complete(projection) => complete_conversion(
+            source.profile(),
+            projection.value,
+            properties_fidelity(projection.fidelity),
+            ConversionProjectionReport::Properties(projection.report),
+            ConversionProjectionProvenance::Properties(projection.provenance),
+            materialization_request,
+        ),
+        properties::ProjectionResult::Failed(failure) => {
+            ConversionResult::Failed(ConversionFailure::ProjectionFailed {
+                report: ConversionProjectionReport::Properties(failure.report),
+                diagnostics: failure.diagnostics,
+                partial_analysis: Vec::new(),
+            })
+        }
+    }
+}
+
 /// Converts one TOML document by composing its published projection and a target materializer.
 #[must_use]
 pub fn convert_toml(
@@ -454,6 +489,26 @@ fn materialize_target(
                 }
             }
         }
+        "java-properties.reader" | "java-properties.latin1" => {
+            match properties::materialize(value, request) {
+                document::MaterializationResult::Complete(CompleteMaterialization {
+                    document,
+                    fidelity,
+                    report,
+                    provenance,
+                }) => Ok(MaterializedTarget {
+                    document: Document {
+                        inner: DocumentInner::Properties(Box::new(document)),
+                    },
+                    fidelity,
+                    report,
+                    provenance,
+                }),
+                document::MaterializationResult::Failed(failure) => {
+                    Err(materialization_failure(failure))
+                }
+            }
+        }
         "json.strict" | "jsonc.bounded" | "json5.standard" => {
             match json::materialize(value, request) {
                 document::MaterializationResult::Complete(CompleteMaterialization {
@@ -542,6 +597,14 @@ const fn ini_fidelity(fidelity: ini::Fidelity) -> ConversionFidelity {
     }
 }
 
+const fn properties_fidelity(fidelity: properties::Fidelity) -> ConversionFidelity {
+    match fidelity {
+        properties::Fidelity::Exact => ConversionFidelity::Exact,
+        properties::Fidelity::Transformed => ConversionFidelity::Transformed,
+        properties::Fidelity::Lossy => ConversionFidelity::Lossy,
+    }
+}
+
 const fn toml_fidelity(fidelity: toml::Fidelity) -> ConversionFidelity {
     match fidelity {
         toml::Fidelity::Exact => ConversionFidelity::Exact,
@@ -555,6 +618,105 @@ const fn yaml_fidelity(fidelity: yaml::Fidelity) -> ConversionFidelity {
         yaml::Fidelity::Exact => ConversionFidelity::Exact,
         yaml::Fidelity::Transformed => ConversionFidelity::Transformed,
         yaml::Fidelity::Lossy => ConversionFidelity::Lossy,
+    }
+}
+
+fn properties_projection_report_message(
+    report: &properties::ProjectionReport,
+    provenance: &properties::ProvenanceMap,
+    source_id: &str,
+) -> Result<crate::protocol::ProjectionReportMessage, crate::protocol::ProtocolError> {
+    let events = report
+        .events()
+        .iter()
+        .enumerate()
+        .map(|(index, event)| {
+            let projected = properties::ProjectedLocation::Association(event.projected.clone());
+            let origins = provenance
+                .entries()
+                .iter()
+                .find(|entry| entry.projected == projected)
+                .map(|entry| entry.origins.as_slice())
+                .unwrap_or_default();
+            let mut locations = Vec::new();
+            for origin in origins
+                .iter()
+                .filter(|origin| origin.node == event.discarded || origin.node == event.retained)
+            {
+                let start = u64::try_from(origin.span.start_byte()).map_err(|_| {
+                    crate::protocol::ProtocolError::new(
+                        crate::protocol::ProtocolErrorKind::InvalidValue,
+                        format!("$.projection_report.events[{index}].source_locations"),
+                        "source offset exceeds u64",
+                    )
+                })?;
+                let end = u64::try_from(origin.span.end_byte()).map_err(|_| {
+                    crate::protocol::ProtocolError::new(
+                        crate::protocol::ProtocolErrorKind::InvalidValue,
+                        format!("$.projection_report.events[{index}].source_locations"),
+                        "source offset exceeds u64",
+                    )
+                })?;
+                if !locations
+                    .iter()
+                    .any(|location: &crate::protocol::SourceLocation| {
+                        location.start_byte() == start && location.end_byte() == end
+                    })
+                {
+                    locations.push(crate::protocol::SourceLocation::new(source_id, start, end)?);
+                }
+            }
+            if locations.len() != 2 {
+                return Err(crate::protocol::ProtocolError::new(
+                    crate::protocol::ProtocolErrorKind::ProcessLocalHandle,
+                    format!("$.projection_report.events[{index}].source_locations"),
+                    "duplicate collapse requires retained and discarded external provenance",
+                ));
+            }
+            let mut arguments = BTreeMap::new();
+            arguments.insert("event_kind".to_owned(), "DuplicateCollapsed".to_owned());
+            arguments.insert(
+                "policy".to_owned(),
+                properties_duplicate_policy_name(event.policy).to_owned(),
+            );
+            Ok(crate::protocol::ProjectionEventMessage {
+                code: event.code.to_owned(),
+                policy_rule_id: Some(properties_duplicate_policy_rule_id(event.policy).to_owned()),
+                source_locations: locations,
+                projected_location: Some(crate::protocol::ProjectedLocationMessage::Association(
+                    event.projected.clone(),
+                )),
+                old_category: Some("PropertiesPropertyOccurrence".to_owned()),
+                new_category: Some("Collapsed".to_owned()),
+                reversible: false,
+                loss_classification: crate::protocol::LossClassification::Lossy,
+                arguments,
+            })
+        })
+        .collect::<Result<Vec<_>, crate::protocol::ProtocolError>>()?;
+    crate::protocol::ProjectionReportMessage::new_with_registry(
+        events,
+        crate::protocol::ErrorCodeRegistry::v6(),
+    )
+}
+
+const fn properties_duplicate_policy_name(policy: properties::DuplicatePolicy) -> &'static str {
+    match policy {
+        properties::DuplicatePolicy::RequireUnique => "RequireUnique",
+        properties::DuplicatePolicy::FirstWins => "FirstWins",
+        properties::DuplicatePolicy::LastWinsJdkTable => "LastWinsJdkTable",
+    }
+}
+
+const fn properties_duplicate_policy_rule_id(policy: properties::DuplicatePolicy) -> &'static str {
+    match policy {
+        properties::DuplicatePolicy::RequireUnique => {
+            "java-properties.duplicate-key.require-unique@1"
+        }
+        properties::DuplicatePolicy::FirstWins => "java-properties.duplicate-key.first-wins@1",
+        properties::DuplicatePolicy::LastWinsJdkTable => {
+            "java-properties.duplicate-key.last-wins-jdk-table@1"
+        }
     }
 }
 
@@ -687,6 +849,7 @@ mod tests {
         match &complete.projection_provenance {
             ConversionProjectionProvenance::Json(provenance) => provenance.entries(),
             ConversionProjectionProvenance::Ini(_)
+            | ConversionProjectionProvenance::Properties(_)
             | ConversionProjectionProvenance::Toml(_)
             | ConversionProjectionProvenance::Yaml(_) => &[],
         }
@@ -729,6 +892,15 @@ mod tests {
             ProfileId::new("yaml.1.2-core", 1),
             MaterializationStyleId::new("yaml.canonical-flow", 1),
         )
+        .with_newline(NewlinePolicy::Lf)
+    }
+
+    fn properties_reader_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("java-properties.reader", 1),
+            MaterializationStyleId::new("java-properties.reader-canonical", 1),
+        )
+        .with_encoding(document::SourceEncoding::Utf8)
         .with_newline(NewlinePolicy::Lf)
     }
 
@@ -1210,6 +1382,150 @@ mod tests {
             &ProfileId::new("ini.portable", 1)
         );
         assert_eq!(ini_target.document.as_ini().unwrap().entries().len(), 2);
+    }
+
+    #[test]
+    fn properties_and_json_convert_exactly_in_both_directions() {
+        let properties_source = properties::parse_reader(
+            b"name=api\nport=8080\n".as_slice(),
+            document::SourceEncoding::Utf8,
+            properties::PropertiesParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(json_target) = convert_properties(
+            &properties_source,
+            properties::ProjectionRequest::best_exact_entry_mapping(),
+            &json_request(),
+        ) else {
+            panic!("Properties to JSON should complete exactly")
+        };
+        assert_eq!(
+            json_target.document.render(),
+            br#"{"name":"api","port":"8080"}"#
+        );
+        assert_eq!(
+            json_target.report.overall_fidelity(),
+            ConversionFidelity::Exact
+        );
+        assert!(matches!(
+            json_target.projection_provenance,
+            ConversionProjectionProvenance::Properties(_)
+        ));
+        assert_eq!(
+            json_target
+                .protocol_report("source:properties", "target:json")
+                .unwrap()
+                .overall_fidelity(),
+            protocol::ConversionFidelityMessage::Exact
+        );
+
+        let json_source = json::parse(
+            br#"{"name":"api","port":"8080"}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection = ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        let ConversionResult::Complete(properties_target) =
+            convert_json(&json_source, &projection, &properties_reader_request())
+        else {
+            panic!("JSON to Properties should complete exactly")
+        };
+        assert_eq!(
+            properties_target.document.render(),
+            b"name=api\nport=8080\n"
+        );
+        assert_eq!(
+            properties_target.report.target_profile(),
+            &ProfileId::new("java-properties.reader", 1)
+        );
+        assert_eq!(
+            properties_target
+                .document
+                .as_properties()
+                .unwrap()
+                .properties()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn properties_duplicate_collapse_is_audited_as_authorized_loss() {
+        let source = properties::parse_reader(
+            b"a=first\na=last\n".as_slice(),
+            document::SourceEncoding::Utf8,
+            properties::PropertiesParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(converted) = convert_properties(
+            &source,
+            properties::ProjectionRequest::require_object(properties::DuplicatePolicy::FirstWins),
+            &json_request(),
+        ) else {
+            panic!("explicit first-wins conversion should complete")
+        };
+        assert_eq!(converted.document.render(), br#"{"a":"first"}"#);
+        assert_eq!(
+            converted.report.overall_fidelity(),
+            ConversionFidelity::Lossy
+        );
+        let report = converted
+            .protocol_report("source:properties", "target:json")
+            .unwrap();
+        assert_eq!(
+            report.overall_fidelity(),
+            protocol::ConversionFidelityMessage::Lossy
+        );
+        assert_eq!(report.projection_report().events().len(), 1);
+        let event = &report.projection_report().events()[0];
+        assert_eq!(
+            event.code,
+            "java-properties.projection.duplicate-collapsed@1"
+        );
+        assert_eq!(event.source_locations.len(), 2);
+        assert!(!event.reversible);
+        assert_eq!(
+            event.loss_classification,
+            protocol::LossClassification::Lossy
+        );
+    }
+
+    #[test]
+    fn properties_conversion_failures_publish_no_partial_target() {
+        let unpaired = properties::parse_reader(
+            br"a=\uD800".as_slice(),
+            document::SourceEncoding::Utf8,
+            properties::PropertiesParseLimits::default(),
+        )
+        .unwrap();
+        assert!(matches!(
+            convert_properties(
+                &unpaired,
+                properties::ProjectionRequest::best_exact_entry_mapping(),
+                &json_request(),
+            ),
+            ConversionResult::Failed(ConversionFailure::ProjectionFailed { .. })
+        ));
+
+        let json_source = json::parse(
+            br#"{"port":8080}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection = ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        assert!(matches!(
+            convert_json(&json_source, &projection, &properties_reader_request()),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::Unrepresentable { .. },
+                ..
+            })
+        ));
     }
 
     #[test]

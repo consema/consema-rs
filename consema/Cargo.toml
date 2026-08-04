@@ -13,6 +13,7 @@ consema-graph = { path = "../consema-graph", version = "0.7.0" }
 consema-ini = { path = "../consema-ini", version = "0.7.0" }
 consema-json = { path = "../consema-json", version = "0.7.0" }
 consema-protocol = { path = "../consema-protocol", version = "0.7.0" }
+consema-properties = { path = "../consema-properties", version = "0.7.0" }
 consema-pvce = { path = "../consema-pvce", version = "0.7.0" }
 consema-toml = { path = "../consema-toml", version = "0.7.0" }
 consema-yaml = { path = "../consema-yaml", version = "0.7.0" }

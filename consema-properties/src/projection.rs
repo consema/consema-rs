@@ -110,9 +110,9 @@ impl Default for ProjectionLimits {
 pub enum Fidelity {
     /// Target directly represents every native association.
     Exact,
-    /// An explicit duplicate policy transformed associations.
+    /// Complete semantics survive an explicit reversible re-encoding.
     Transformed,
-    /// Source facts were omitted without a retained source relation.
+    /// At least one source fact cannot be recovered from the projected value and report.
     Lossy,
 }
 
@@ -407,8 +407,8 @@ impl Context<'_> {
         if self.report.events.len() >= self.request.limits.max_report_entries {
             return Err(ProjectionFailure::ResourceLimit("max_report_entries"));
         }
+        self.fidelity = self.fidelity.max(event.impact);
         self.report.events.push(event);
-        self.fidelity = self.fidelity.max(Fidelity::Transformed);
         Ok(())
     }
 
@@ -551,7 +551,7 @@ fn project_object(
             discarded: property.node_ref(),
             retained: document.properties[retained_index].node_ref(),
             projected: location.clone(),
-            impact: Fidelity::Transformed,
+            impact: Fidelity::Lossy,
         })?;
         context.add_origin(
             ProjectedLocation::Association(location),
@@ -819,7 +819,8 @@ mod tests {
         ) else {
             panic!("first wins");
         };
-        assert_eq!(first.fidelity, Fidelity::Transformed);
+        assert_eq!(first.fidelity, Fidelity::Lossy);
+        assert_eq!(first.report.events()[0].impact, Fidelity::Lossy);
         assert_eq!(first.report.events().len(), 1);
         assert_eq!(
             first.report.events()[0].code,

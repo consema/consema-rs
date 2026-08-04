@@ -1,11 +1,11 @@
-//! Consema public facade for core semantics, protocol, INI, JSON, TOML, YAML, and PVCE.
+//! Consema public facade for core semantics, protocol, INI, Java Properties, JSON, TOML, YAML, and PVCE.
 
 mod conversion;
 
 pub use conversion::{
     CompleteConversion, ConversionFailure, ConversionFidelity, ConversionProjectionProvenance,
     ConversionProjectionReport, ConversionReport, ConversionResult, convert_ini, convert_json,
-    convert_toml, convert_yaml,
+    convert_properties, convert_toml, convert_yaml,
 };
 
 pub use consema_core as core;
@@ -13,6 +13,7 @@ pub use consema_document as document;
 pub use consema_graph as graph;
 pub use consema_ini as ini;
 pub use consema_json as json;
+pub use consema_properties as properties;
 pub use consema_protocol as protocol;
 pub use consema_pvce as pvce;
 pub use consema_toml as toml;
@@ -25,6 +26,8 @@ use std::sync::Arc;
 pub enum FormatMismatch {
     /// The snapshot is not an INI document.
     Ini,
+    /// The snapshot is not a Java Properties document.
+    Properties,
     /// The snapshot is not a JSON document.
     Json,
     /// The snapshot is not a TOML document.
@@ -46,6 +49,7 @@ pub struct Document {
 enum DocumentInner {
     Ini(Box<ini::Document>),
     Json(json::Document),
+    Properties(Box<properties::Document>),
     Toml(toml::Document),
     Yaml(Box<yaml::Document>),
 }
@@ -60,6 +64,20 @@ impl Document {
     ) -> Result<Self, document::FatalFormationFailure> {
         Ok(Self {
             inner: DocumentInner::Ini(Box::new(ini::parse(source, profile, encoding, limits)?)),
+        })
+    }
+
+    /// Parses one Java Properties snapshot under an exact profile and source contract.
+    pub fn parse_properties(
+        source: impl Into<Arc<[u8]>>,
+        profile: properties::PropertiesProfile,
+        encoding: properties::PropertiesEncodingSelection,
+        limits: properties::PropertiesParseLimits,
+    ) -> Result<Self, document::FatalFormationFailure> {
+        Ok(Self {
+            inner: DocumentInner::Properties(Box::new(properties::parse(
+                source, profile, encoding, limits,
+            )?)),
         })
     }
 
@@ -102,6 +120,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Ini(document) => document.render(),
             DocumentInner::Json(document) => document.render(),
+            DocumentInner::Properties(document) => document.render(),
             DocumentInner::Toml(document) => document.render(),
             DocumentInner::Yaml(document) => document.render(),
         }
@@ -113,6 +132,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Ini(document) => document.formation_status(),
             DocumentInner::Json(document) => document.formation_status(),
+            DocumentInner::Properties(document) => document.formation_status(),
             DocumentInner::Toml(document) => document.formation_status(),
             DocumentInner::Yaml(document) => document.formation_status(),
         }
@@ -124,6 +144,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Ini(document) => document.diagnostics(),
             DocumentInner::Json(document) => document.diagnostics(),
+            DocumentInner::Properties(document) => document.diagnostics(),
             DocumentInner::Toml(document) => document.diagnostics(),
             DocumentInner::Yaml(document) => document.diagnostics(),
         }
@@ -135,6 +156,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Ini(document) => document.snapshot_identity(),
             DocumentInner::Json(document) => document.snapshot_identity(),
+            DocumentInner::Properties(document) => document.snapshot_identity(),
             DocumentInner::Toml(document) => document.snapshot_identity(),
             DocumentInner::Yaml(document) => document.snapshot_identity(),
         }
@@ -146,6 +168,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Ini(document) => document.profile(),
             DocumentInner::Json(document) => document.profile(),
+            DocumentInner::Properties(document) => document.profile(),
             DocumentInner::Toml(document) => document.profile(),
             DocumentInner::Yaml(document) => document.profile(),
         }
@@ -155,9 +178,10 @@ impl Document {
     pub fn as_json(&self) -> Result<&json::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Json(document) => Ok(document),
-            DocumentInner::Ini(_) | DocumentInner::Toml(_) | DocumentInner::Yaml(_) => {
-                Err(FormatMismatch::Json)
-            }
+            DocumentInner::Ini(_)
+            | DocumentInner::Properties(_)
+            | DocumentInner::Toml(_)
+            | DocumentInner::Yaml(_) => Err(FormatMismatch::Json),
         }
     }
 
@@ -165,18 +189,20 @@ impl Document {
     pub fn as_toml(&self) -> Result<&toml::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Toml(document) => Ok(document),
-            DocumentInner::Ini(_) | DocumentInner::Json(_) | DocumentInner::Yaml(_) => {
-                Err(FormatMismatch::Toml)
-            }
+            DocumentInner::Ini(_)
+            | DocumentInner::Json(_)
+            | DocumentInner::Properties(_)
+            | DocumentInner::Yaml(_) => Err(FormatMismatch::Toml),
         }
     }
 
     /// Typed YAML adapter; fails only when the snapshot is not YAML.
     pub fn as_yaml(&self) -> Result<&yaml::Document, FormatMismatch> {
         match &self.inner {
-            DocumentInner::Ini(_) | DocumentInner::Json(_) | DocumentInner::Toml(_) => {
-                Err(FormatMismatch::Yaml)
-            }
+            DocumentInner::Ini(_)
+            | DocumentInner::Json(_)
+            | DocumentInner::Properties(_)
+            | DocumentInner::Toml(_) => Err(FormatMismatch::Yaml),
             DocumentInner::Yaml(document) => Ok(document),
         }
     }
@@ -185,9 +211,21 @@ impl Document {
     pub fn as_ini(&self) -> Result<&ini::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Ini(document) => Ok(document),
-            DocumentInner::Json(_) | DocumentInner::Toml(_) | DocumentInner::Yaml(_) => {
-                Err(FormatMismatch::Ini)
-            }
+            DocumentInner::Json(_)
+            | DocumentInner::Properties(_)
+            | DocumentInner::Toml(_)
+            | DocumentInner::Yaml(_) => Err(FormatMismatch::Ini),
+        }
+    }
+
+    /// Typed Java Properties adapter; fails only when the snapshot is not Properties.
+    pub fn as_properties(&self) -> Result<&properties::Document, FormatMismatch> {
+        match &self.inner {
+            DocumentInner::Properties(document) => Ok(document),
+            DocumentInner::Ini(_)
+            | DocumentInner::Json(_)
+            | DocumentInner::Toml(_)
+            | DocumentInner::Yaml(_) => Err(FormatMismatch::Properties),
         }
     }
 }
@@ -212,6 +250,10 @@ mod tests {
         );
         assert!(matches!(json.as_toml(), Err(FormatMismatch::Toml)));
         assert!(matches!(json.as_ini(), Err(FormatMismatch::Ini)));
+        assert!(matches!(
+            json.as_properties(),
+            Err(FormatMismatch::Properties)
+        ));
 
         let toml = Document::parse_toml(
             b"value = 1".as_slice(),
@@ -257,6 +299,24 @@ mod tests {
         assert_eq!(ini.as_ini().unwrap().entries()[0].value(), "1");
         assert!(matches!(ini.as_json(), Err(FormatMismatch::Json)));
 
+        let properties = Document::parse_properties(
+            b"name=api\nport=8080\n".as_slice(),
+            properties::PropertiesProfile::ReaderV1,
+            properties::PropertiesEncodingSelection::Reader(document::SourceEncoding::Utf8),
+            properties::PropertiesParseLimits::default(),
+        )
+        .expect("Properties facade");
+        assert_eq!(properties.render(), b"name=api\nport=8080\n");
+        assert_eq!(properties.profile().id(), "java-properties.reader");
+        assert_eq!(
+            properties.as_properties().unwrap().properties()[0]
+                .value()
+                .to_unicode()
+                .unwrap(),
+            "api"
+        );
+        assert!(matches!(properties.as_ini(), Err(FormatMismatch::Ini)));
+
         let other = Document::parse_json(
             b"{}".as_slice(),
             json::JsonProfile::StrictV1,
@@ -294,10 +354,17 @@ mod tests {
             ini::IniParseLimits::default(),
         )
         .expect("INI through facade");
+        let properties = properties::parse_reader(
+            b"value=1\n".as_slice(),
+            document::SourceEncoding::Utf8,
+            properties::PropertiesParseLimits::default(),
+        )
+        .expect("Properties through facade");
         assert_eq!(json.render(), b"{\"value\":1}");
         assert_eq!(toml.render(), b"value = 1");
         assert_eq!(yaml.render(), b"value: 1\n");
         assert_eq!(ini.render(), b"[section]\nvalue=1\n");
+        assert_eq!(properties.render(), b"value=1\n");
     }
 
     #[test]
