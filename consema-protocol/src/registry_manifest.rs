@@ -36,10 +36,30 @@ pub struct RegistryManifest {
 }
 
 impl RegistryManifest {
+    /// Builds the frozen Consema 0.3 `core.semantic-model@1` manifest.
+    #[must_use]
+    pub fn v1() -> Self {
+        Self::from_registries(1, ContractRegistry::v1(), ErrorCodeRegistry::v1())
+    }
+
+    /// Builds the Consema 0.4 `core.semantic-model@2` manifest.
+    #[must_use]
+    pub fn v2() -> Self {
+        Self::from_registries(2, ContractRegistry::v2(), ErrorCodeRegistry::v2())
+    }
+
     /// Builds the exact current Rust semantic-model manifest.
     #[must_use]
     pub fn current() -> Self {
-        let contracts = ContractRegistry::v1()
+        Self::v2()
+    }
+
+    fn from_registries(
+        semantic_model_version: u32,
+        contract_registry: ContractRegistry,
+        error_code_registry: ErrorCodeRegistry,
+    ) -> Self {
+        let contracts = contract_registry
             .contracts()
             .iter()
             .map(|descriptor| ContractManifestEntry {
@@ -48,7 +68,7 @@ impl RegistryManifest {
                 stability: descriptor.stability,
             })
             .collect();
-        let error_codes = ErrorCodeRegistry::v1()
+        let error_codes = error_code_registry
             .codes()
             .iter()
             .map(|descriptor| ErrorCodeManifestEntry {
@@ -59,7 +79,7 @@ impl RegistryManifest {
             })
             .collect();
         Self {
-            semantic_model: ContractId::new("core.semantic-model", 1)
+            semantic_model: ContractId::new("core.semantic-model", semantic_model_version)
                 .expect("static semantic model is valid"),
             contracts,
             error_codes,
@@ -272,18 +292,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn current_registry_manifest_round_trips_and_is_self_consistent() {
-        let current = RegistryManifest::current();
-        assert!(!current.contracts().is_empty());
-        assert!(!current.error_codes().is_empty());
-        let decoded = RegistryManifest::from_value(&current.to_value()).unwrap();
-        assert_eq!(decoded, current);
-        assert!(decoded.is_current());
-        assert!(
-            decoded
-                .error_codes()
-                .iter()
-                .all(|entry| { ErrorCodeRegistry::v1().contains(&entry.code) })
-        );
+    fn versioned_registry_manifests_round_trip_and_are_self_consistent() {
+        let versions = [
+            (
+                RegistryManifest::v1(),
+                ContractRegistry::v1(),
+                ErrorCodeRegistry::v1(),
+                16,
+                55,
+                false,
+            ),
+            (
+                RegistryManifest::v2(),
+                ContractRegistry::v2(),
+                ErrorCodeRegistry::v2(),
+                18,
+                62,
+                true,
+            ),
+        ];
+        for (manifest, contracts, error_codes, contract_count, code_count, current) in versions {
+            assert_eq!(manifest.contracts().len(), contract_count);
+            assert_eq!(manifest.error_codes().len(), code_count);
+            assert_eq!(manifest.is_current(), current);
+            let decoded = RegistryManifest::from_value(&manifest.to_value()).unwrap();
+            assert_eq!(decoded, manifest);
+            assert_eq!(decoded.is_current(), current);
+            assert!(
+                decoded
+                    .contracts()
+                    .iter()
+                    .all(|entry| contracts.recognizes(&entry.contract))
+            );
+            assert!(
+                decoded
+                    .error_codes()
+                    .iter()
+                    .all(|entry| error_codes.contains(&entry.code))
+            );
+        }
+        assert_eq!(RegistryManifest::current(), RegistryManifest::v2());
     }
 }

@@ -68,7 +68,7 @@ pub struct ContractDescriptor {
     pub stability: ContractStability,
 }
 
-const CONTRACTS: &[ContractDescriptor] = &[
+const CONTRACTS_V1: &[ContractDescriptor] = &[
     descriptor("core.cancellation-request", ContractStability::Stable),
     descriptor("core.capability-declaration", ContractStability::Stable),
     descriptor("core.change-set", ContractStability::Stable),
@@ -87,6 +87,27 @@ const CONTRACTS: &[ContractDescriptor] = &[
     descriptor("core.registry-manifest", ContractStability::Stable),
 ];
 
+const CONTRACTS_V2: &[ContractDescriptor] = &[
+    descriptor("core.cancellation-request", ContractStability::Stable),
+    descriptor("core.capability-declaration", ContractStability::Stable),
+    descriptor("core.change-set", ContractStability::Stable),
+    descriptor("core.completion", ContractStability::Stable),
+    descriptor("core.diagnostic", ContractStability::Stable),
+    descriptor("core.error-code-registry", ContractStability::Stable),
+    descriptor("core.execution-policy", ContractStability::Stable),
+    descriptor("core.profile-descriptor", ContractStability::Stable),
+    descriptor("core.projection-report", ContractStability::Stable),
+    descriptor("core.projection-request", ContractStability::Stable),
+    descriptor("core.projection-result", ContractStability::Stable),
+    descriptor("core.protocol-message", ContractStability::Transport),
+    descriptor("core.provenance-map", ContractStability::Stable),
+    descriptor("core.query-definition", ContractStability::Stable),
+    descriptor("core.query-result", ContractStability::Stable),
+    descriptor("core.registry-manifest", ContractStability::Stable),
+    descriptor("core.source-patch", ContractStability::Stable),
+    descriptor("core.source-snapshot", ContractStability::Stable),
+];
+
 const fn descriptor(id: &'static str, stability: ContractStability) -> ContractDescriptor {
     ContractDescriptor {
         id,
@@ -96,20 +117,47 @@ const fn descriptor(id: &'static str, stability: ContractStability) -> ContractD
 }
 
 /// Closed Consema 0.3 protocol contract registry.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ContractRegistry;
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ContractRegistry {
+    version: RegistryVersion,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RegistryVersion {
+    V1,
+    V2,
+}
+
+impl Default for ContractRegistry {
+    fn default() -> Self {
+        Self::v1()
+    }
+}
 
 impl ContractRegistry {
-    /// Current immutable registry.
+    /// Frozen Consema 0.3 semantic-model v1 registry.
     #[must_use]
     pub const fn v1() -> Self {
-        Self
+        Self {
+            version: RegistryVersion::V1,
+        }
+    }
+
+    /// Consema 0.4 semantic-model v2 registry.
+    #[must_use]
+    pub const fn v2() -> Self {
+        Self {
+            version: RegistryVersion::V2,
+        }
     }
 
     /// Sorted registered contracts.
     #[must_use]
     pub const fn contracts(self) -> &'static [ContractDescriptor] {
-        CONTRACTS
+        match self.version {
+            RegistryVersion::V1 => CONTRACTS_V1,
+            RegistryVersion::V2 => CONTRACTS_V2,
+        }
     }
 
     /// Whether an exact ID/version pair is registered.
@@ -295,6 +343,9 @@ fn validate_identifier(identifier: &str, path: &str) -> Result<(), ProtocolError
 #[cfg(test)]
 mod tests {
     use super::*;
+    use consema_document::{SourceLimits, SourcePatch, SourcePatchLimits, SourceSnapshot};
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
 
     fn completion_payload() -> PortableValue {
         crate::Completion::new(crate::CompletionStatus::Success, 1, 1, None, None)
@@ -383,13 +434,89 @@ mod tests {
 
     #[test]
     fn registry_is_sorted_and_identifiers_are_strict() {
-        let contracts = ContractRegistry::v1().contracts();
+        for registry in [ContractRegistry::v1(), ContractRegistry::v2()] {
+            assert!(
+                registry
+                    .contracts()
+                    .windows(2)
+                    .all(|pair| { (pair[0].id, pair[0].version) < (pair[1].id, pair[1].version) })
+            );
+        }
+        assert_eq!(ContractRegistry::v1().contracts().len(), 16);
+        assert_eq!(ContractRegistry::v2().contracts().len(), 18);
         assert!(
-            contracts
-                .windows(2)
-                .all(|pair| { (pair[0].id, pair[0].version) < (pair[1].id, pair[1].version) })
+            !ContractRegistry::v1()
+                .recognizes(&ContractId::new("core.source-snapshot", 1).unwrap())
+        );
+        assert!(
+            ContractRegistry::v2().recognizes(&ContractId::new("core.source-snapshot", 1).unwrap())
         );
         assert!(ContractId::new("Core.Bad", 1).is_err());
         assert!(ContractId::new("core.bad", 0).is_err());
+    }
+
+    #[test]
+    fn v2_envelopes_source_snapshots_and_patches_without_changing_v1() {
+        let snapshot = SourceSnapshot::from_utf8(Arc::<[u8]>::from(b"source".as_slice())).unwrap();
+        let patch = SourcePatch::create(
+            &snapshot,
+            Vec::new(),
+            BTreeMap::new(),
+            SourcePatchLimits::default(),
+        )
+        .unwrap();
+        let payloads = [
+            (
+                ContractId::new("core.source-snapshot", 1).unwrap(),
+                crate::SourceSnapshotMessage::from_snapshot(&snapshot).to_value(),
+            ),
+            (
+                ContractId::new("core.source-patch", 1).unwrap(),
+                crate::SourcePatchMessage::from_patch(&patch)
+                    .to_value()
+                    .unwrap(),
+            ),
+        ];
+        for (contract, payload) in payloads {
+            assert_eq!(
+                ProtocolMessage::new(contract.clone(), payload.clone(), ContractRegistry::v1())
+                    .unwrap_err()
+                    .kind(),
+                ProtocolErrorKind::UnknownContract
+            );
+            let message = ProtocolMessage::new(contract, payload, ContractRegistry::v2()).unwrap();
+            let limits = ProtocolLimits::default();
+            assert_eq!(
+                ProtocolMessage::from_json(
+                    &message.to_json(limits).unwrap(),
+                    limits,
+                    ContractRegistry::v2(),
+                )
+                .unwrap(),
+                message
+            );
+            assert_eq!(
+                ProtocolMessage::from_pvce(
+                    &message.to_pvce(limits).unwrap(),
+                    limits,
+                    ContractRegistry::v2(),
+                )
+                .unwrap(),
+                message
+            );
+        }
+
+        let decoded = crate::SourceSnapshotMessage::from_value(
+            ProtocolMessage::new(
+                ContractId::new("core.source-snapshot", 1).unwrap(),
+                crate::SourceSnapshotMessage::from_snapshot(&snapshot).to_value(),
+                ContractRegistry::v2(),
+            )
+            .unwrap()
+            .payload(),
+            SourceLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(decoded.snapshot(), &snapshot);
     }
 }

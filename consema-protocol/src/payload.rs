@@ -4,9 +4,11 @@ use crate::{
     CancellationRequest, CapabilityDeclaration, ChangeSetMessage, Completion, ContractId,
     DiagnosticMessage, ExecutionPolicy, ProfileDescriptor, ProjectionReportMessage,
     ProjectionRequestMessage, ProjectionResultMessage, ProtocolError, ProtocolErrorKind,
-    ProvenanceMapMessage, QueryResultMessage, RegistryManifest, validate_error_code_manifest_value,
+    ProvenanceMapMessage, QueryResultMessage, RegistryManifest, SourcePatchMessage,
+    SourceSnapshotMessage, validate_error_code_manifest_value,
 };
 use consema_core::{PortableValue, QueryDefinition};
+use consema_document::{SourceLimits, SourcePatchLimits};
 
 pub(crate) fn validate_registered_payload(
     contract: &ContractId,
@@ -36,6 +38,12 @@ pub(crate) fn validate_registered_payload(
             }),
         "core.query-result" => QueryResultMessage::from_value(payload).map(drop),
         "core.registry-manifest" => RegistryManifest::from_value(payload).map(drop),
+        "core.source-patch" => {
+            SourcePatchMessage::from_value(payload, SourcePatchLimits::default()).map(drop)
+        }
+        "core.source-snapshot" => {
+            SourceSnapshotMessage::from_value(payload, SourceLimits::default()).map(drop)
+        }
         _ => Err(ProtocolError::new(
             ProtocolErrorKind::UnknownContract,
             "$.contract",

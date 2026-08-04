@@ -363,7 +363,7 @@ fn all_payloads_dual_transport() -> Result<(), String> {
         ),
         (
             ContractId::new("core.registry-manifest", 1).unwrap(),
-            RegistryManifest::current().to_value(),
+            RegistryManifest::v1().to_value(),
         ),
     ];
     let expected = registry
@@ -725,10 +725,11 @@ fn change_set_roundtrip() -> Result<(), String> {
 }
 
 fn registry_roundtrip() -> Result<(), String> {
-    let manifest = RegistryManifest::current();
+    let manifest = RegistryManifest::v1();
     let decoded = RegistryManifest::from_value(&manifest.to_value()).unwrap();
     ensure(
-        decoded.is_current()
+        decoded == manifest
+            && decoded.semantic_model() == &ContractId::new("core.semantic-model", 1).unwrap()
             && decoded.contracts().windows(2).all(|pair| pair[0] < pair[1])
             && decoded
                 .error_codes()

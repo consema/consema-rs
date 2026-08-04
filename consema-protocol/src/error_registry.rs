@@ -28,7 +28,7 @@ macro_rules! code {
     };
 }
 
-const ERROR_CODES: &[ErrorCodeDescriptor] = &[
+const ERROR_CODES_V1: &[ErrorCodeDescriptor] = &[
     code!(
         "core.diagnostic.truncated@1",
         Resource,
@@ -361,21 +361,130 @@ const ERROR_CODES: &[ErrorCodeDescriptor] = &[
     ),
 ];
 
-/// Closed error-code registry for the current semantic model.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ErrorCodeRegistry;
+const SOURCE_CODES_V2_BEFORE_UTF8: &[ErrorCodeDescriptor] = &[
+    code!(
+        "core.source.encoding-conflict@1",
+        Encoding,
+        "0.4.0",
+        "Source encoding facts conflict"
+    ),
+    code!(
+        "core.source.invalid-sequence@1",
+        Lexical,
+        "0.4.0",
+        "Source bytes are invalid for the selected encoding"
+    ),
+];
+
+const SOURCE_CODES_V2_AFTER_UTF8: &[ErrorCodeDescriptor] = &[
+    code!(
+        "core.source.patch-base-mismatch@1",
+        Edit,
+        "0.4.0",
+        "SourcePatch base digest does not match"
+    ),
+    code!(
+        "core.source.patch-original-mismatch@1",
+        Edit,
+        "0.4.0",
+        "SourcePatch original-byte precondition does not match"
+    ),
+    code!(
+        "core.source.patch-target-mismatch@1",
+        Edit,
+        "0.4.0",
+        "SourcePatch target digest does not match"
+    ),
+    code!(
+        "core.source.resource-limit@1",
+        Resource,
+        "0.4.0",
+        "Source construction or patch limit was reached"
+    ),
+    code!(
+        "core.source.unsupported-bom@1",
+        Encoding,
+        "0.4.0",
+        "Source begins with an unsupported byte-order mark"
+    ),
+];
+
+const ERROR_CODES_V2: [ErrorCodeDescriptor; 62] = build_v2_codes();
+
+const fn build_v2_codes() -> [ErrorCodeDescriptor; 62] {
+    let mut output = [ERROR_CODES_V1[0]; 62];
+    let mut source = 0;
+    let mut target = 0;
+    while source < 29 {
+        output[target] = ERROR_CODES_V1[source];
+        source += 1;
+        target += 1;
+    }
+    let mut extra = 0;
+    while extra < SOURCE_CODES_V2_BEFORE_UTF8.len() {
+        output[target] = SOURCE_CODES_V2_BEFORE_UTF8[extra];
+        extra += 1;
+        target += 1;
+    }
+    output[target] = ERROR_CODES_V1[29];
+    source = 30;
+    target += 1;
+    extra = 0;
+    while extra < SOURCE_CODES_V2_AFTER_UTF8.len() {
+        output[target] = SOURCE_CODES_V2_AFTER_UTF8[extra];
+        extra += 1;
+        target += 1;
+    }
+    while source < ERROR_CODES_V1.len() {
+        output[target] = ERROR_CODES_V1[source];
+        source += 1;
+        target += 1;
+    }
+    output
+}
+
+/// Closed, explicitly versioned error-code registry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ErrorCodeRegistry {
+    version: RegistryVersion,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RegistryVersion {
+    V1,
+    V2,
+}
+
+impl Default for ErrorCodeRegistry {
+    fn default() -> Self {
+        Self::v1()
+    }
+}
 
 impl ErrorCodeRegistry {
-    /// Current registry.
+    /// Frozen Consema 0.3 semantic-model v1 registry.
     #[must_use]
     pub const fn v1() -> Self {
-        Self
+        Self {
+            version: RegistryVersion::V1,
+        }
+    }
+
+    /// Consema 0.4 semantic-model v2 error registry.
+    #[must_use]
+    pub const fn v2() -> Self {
+        Self {
+            version: RegistryVersion::V2,
+        }
     }
 
     /// Sorted immutable descriptors.
     #[must_use]
     pub const fn codes(self) -> &'static [ErrorCodeDescriptor] {
-        ERROR_CODES
+        match self.version {
+            RegistryVersion::V1 => ERROR_CODES_V1,
+            RegistryVersion::V2 => &ERROR_CODES_V2,
+        }
     }
 
     /// Whether a full exact code is registered.
@@ -387,10 +496,11 @@ impl ErrorCodeRegistry {
     /// Returns the exact registered descriptor.
     #[must_use]
     pub fn descriptor(self, candidate: &str) -> Option<&'static ErrorCodeDescriptor> {
-        ERROR_CODES
+        let codes = self.codes();
+        codes
             .binary_search_by_key(&candidate, |descriptor| descriptor.code)
             .ok()
-            .map(|index| &ERROR_CODES[index])
+            .map(|index| &codes[index])
     }
 
     /// Validates an exact registered code.
@@ -432,8 +542,18 @@ pub const fn query_failure_code(failure: &QueryFailure) -> &'static str {
 /// Encodes `core.error-code-registry@1`.
 #[must_use]
 pub fn error_code_manifest_value() -> PortableValue {
+    error_code_manifest_value_for(ErrorCodeRegistry::v1())
+}
+
+/// Encodes the semantic-model v2 `core.error-code-registry@1` payload.
+#[must_use]
+pub fn error_code_manifest_value_v2() -> PortableValue {
+    error_code_manifest_value_for(ErrorCodeRegistry::v2())
+}
+
+fn error_code_manifest_value_for(registry: ErrorCodeRegistry) -> PortableValue {
     let mut codes = SequenceBuilder::new();
-    for descriptor in ERROR_CODES {
+    for descriptor in registry.codes() {
         codes.push(object(vec![
             ("code", PortableValue::string(descriptor.code)),
             (
@@ -555,8 +675,18 @@ mod tests {
 
     #[test]
     fn registry_is_sorted_unique_and_contains_every_protocol_code() {
-        let codes = ErrorCodeRegistry::v1().codes();
-        assert!(codes.windows(2).all(|pair| pair[0].code < pair[1].code));
+        for registry in [ErrorCodeRegistry::v1(), ErrorCodeRegistry::v2()] {
+            assert!(
+                registry
+                    .codes()
+                    .windows(2)
+                    .all(|pair| pair[0].code < pair[1].code)
+            );
+        }
+        assert_eq!(ErrorCodeRegistry::v1().codes().len(), 55);
+        assert_eq!(ErrorCodeRegistry::v2().codes().len(), 62);
+        assert!(!ErrorCodeRegistry::v1().contains("core.source.patch-base-mismatch@1"));
+        assert!(ErrorCodeRegistry::v2().contains("core.source.patch-base-mismatch@1"));
         let protocol_kinds = [
             ProtocolErrorKind::InvalidJson,
             ProtocolErrorKind::NonCanonicalJson,
@@ -599,5 +729,6 @@ mod tests {
     #[test]
     fn published_error_code_manifest_is_strictly_valid() {
         validate_error_code_manifest_value(&error_code_manifest_value()).unwrap();
+        validate_error_code_manifest_value(&error_code_manifest_value_v2()).unwrap();
     }
 }
