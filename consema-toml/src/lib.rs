@@ -1,6 +1,7 @@
 //! Lossless `toml.1.0@1` documents and native semantics.
 
 mod edit;
+mod materialization;
 mod operation_registry;
 mod parser;
 mod projection;
@@ -18,6 +19,7 @@ pub use edit::{
     EditCommit, EditFailure, EditTransaction, EditTransactionBuilder, RepresentationPolicy,
     ScalarReplacement,
 };
+pub use materialization::materialize;
 pub use operation_registry::format_operation_registry;
 pub use projection::{
     CompleteProjection, FailedProjectionAttempt, Fidelity, ProjectedLocation, ProjectionFailure,
