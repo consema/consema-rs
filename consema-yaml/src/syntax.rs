@@ -120,7 +120,9 @@ impl<'a> Scanner<'a> {
                 && !self.plain_line_active
                 && self.plain_parent_indent.is_some()
             {
-                if self.line_indent() > self.plain_parent_indent.expect("checked above") {
+                if self.line_indent() > self.plain_parent_indent.expect("checked above")
+                    && !self.starts_indented_structure()
+                {
                     self.take_until_break();
                     self.push(start, self.offset, YamlSyntaxKind::PlainScalar)?;
                     self.plain_line_active = true;
@@ -246,6 +248,33 @@ impl<'a> Scanner<'a> {
     fn end_plain_scalar(&mut self) {
         self.plain_line_active = false;
         self.plain_parent_indent = None;
+    }
+
+    fn starts_indented_structure(&self) -> bool {
+        if matches!(self.chars[self.offset], '-' | '?')
+            && self
+                .chars
+                .get(self.offset + 1)
+                .is_none_or(|character| is_separation(*character))
+        {
+            return true;
+        }
+        let mut cursor = self.offset;
+        while let Some(character) = self.chars.get(cursor) {
+            if matches!(character, '\r' | '\n' | '#') {
+                return false;
+            }
+            if *character == ':'
+                && self
+                    .chars
+                    .get(cursor + 1)
+                    .is_none_or(|next| is_separation(*next))
+            {
+                return true;
+            }
+            cursor += 1;
+        }
+        false
     }
 
     fn scan_quoted(&mut self, quote: char) {
@@ -487,6 +516,27 @@ mod tests {
             result
                 .iter()
                 .filter(|kind| **kind == YamlSyntaxKind::Tag)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn nested_mapping_after_plain_value_retains_node_properties() {
+        let result = kinds(
+            "items:\n  - name: first\n    settings: &defaults {retries: 3}\n    copy: *defaults\n",
+        );
+        assert_eq!(
+            result
+                .iter()
+                .filter(|kind| **kind == YamlSyntaxKind::Anchor)
+                .count(),
+            1
+        );
+        assert_eq!(
+            result
+                .iter()
+                .filter(|kind| **kind == YamlSyntaxKind::Alias)
                 .count(),
             1
         );
