@@ -50,10 +50,11 @@ pub use graph_query::{GraphQueryMatchMessage, GraphQueryResultMessage};
 pub use limits::ProtocolLimits;
 pub use materialization::{
     MaterializationFailureMessage, MaterializationInputLocationMessage,
-    MaterializationOutcomeMessage, MaterializationProvenanceEntryMessage,
-    MaterializationProvenanceMapMessage, MaterializationRelationMessage,
-    MaterializationReportMessage, MaterializationRequestMessage, MaterializationRequestMessageV2,
-    MaterializationResultMessage, MaterializedOriginMessage,
+    MaterializationOutcomeMessage, MaterializationOutcomeMessageV2,
+    MaterializationProvenanceEntryMessage, MaterializationProvenanceMapMessage,
+    MaterializationRelationMessage, MaterializationReportMessage, MaterializationRequestMessage,
+    MaterializationRequestMessageV2, MaterializationResultMessage, MaterializationResultMessageV2,
+    MaterializedOriginMessage,
 };
 pub use operation::{EditOperationSummaryMessage, EditPlanMessage, FormatOperationRegistryMessage};
 pub use portable_graph::PortableGraphMessage;

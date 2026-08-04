@@ -6,7 +6,7 @@ use crate::schema::{
 };
 use crate::{
     ContractId, DiagnosticMessage, ErrorCodeRegistry, ProtocolError, ProtocolErrorKind,
-    SourceEncodingMessage, SourceSnapshotMessage,
+    SourceEncodingMessage, SourceSnapshotMessage, SourceSnapshotMessageV2,
 };
 use consema_core::{
     AssociationLocation, PortableValue, PortableValueKind, SequenceBuilder, ValuePath,
@@ -684,40 +684,16 @@ impl MaterializationResultMessage {
                 report,
                 provenance,
             } => {
-                validate_source_id(target_source_id, "$.outcome.target_source_id")?;
-                validate_report_source(report, Some(target_source_id))?;
-                let output_len =
-                    u64::try_from(snapshot.snapshot().bytes().len()).map_err(|_| {
-                        crate::schema::invalid("$.outcome.snapshot", "snapshot length exceeds u64")
-                    })?;
-                for (entry_index, entry) in provenance.entries().iter().enumerate() {
-                    for (output_index, output) in entry.outputs.iter().enumerate() {
-                        if output.target_source_id != *target_source_id
-                            || output.end_byte > output_len
-                        {
-                            return Err(crate::schema::invalid(
-                                &format!(
-                                    "$.outcome.provenance.entries[{entry_index}].outputs[{output_index}]"
-                                ),
-                                "provenance target binding or range contradicts the snapshot",
-                            ));
-                        }
-                    }
-                }
-                if *fidelity == MaterializationFidelity::Transformed
-                    && !report
-                        .events()
-                        .iter()
-                        .any(|event| event.code == "core.materialization.mapping-transformed@1")
-                {
-                    return Err(crate::schema::invalid(
-                        "$.outcome.report",
-                        "Transformed fidelity requires an explicit transformation event",
-                    ));
-                }
+                validate_complete_materialization(
+                    target_source_id,
+                    snapshot.snapshot().bytes().len(),
+                    *fidelity,
+                    report,
+                    provenance,
+                )?;
             }
             MaterializationOutcomeMessage::Failed { report, .. } => {
-                validate_report_source(report, None)?;
+                validate_failed_materialization(report)?;
             }
         }
         Ok(Self {
@@ -826,6 +802,243 @@ impl MaterializationResultMessage {
     }
 }
 
+/// Closed transferable materialization-v2 completion algebra.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MaterializationOutcomeMessageV2 {
+    /// Complete target snapshot and every required audit fact.
+    Complete {
+        /// Caller-stable target source identity.
+        target_source_id: String,
+        /// Verified immutable source-v2 target.
+        snapshot: SourceSnapshotMessageV2,
+        /// Whole-operation semantic fidelity.
+        fidelity: MaterializationFidelity,
+        /// Ordered materialization report.
+        report: MaterializationReportMessage,
+        /// Complete externally bound input-to-target provenance.
+        provenance: MaterializationProvenanceMapMessage,
+    },
+    /// Failed attempt with no target bytes or partial provenance.
+    Failed {
+        /// Stable failure detail.
+        failure: MaterializationFailureMessage,
+        /// Ordered events discovered before failure.
+        report: MaterializationReportMessage,
+        /// Stable input paths analyzed before failure.
+        analyzed_input_paths: Vec<ValuePath>,
+    },
+}
+
+/// Transferable `core.materialization-result@2`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MaterializationResultMessageV2 {
+    target_profile: ProfileId,
+    outcome: MaterializationOutcomeMessageV2,
+}
+
+impl MaterializationResultMessageV2 {
+    /// Validates a complete source-v2 result and every target binding.
+    pub fn complete(
+        target_profile: ProfileId,
+        target_source_id: impl Into<String>,
+        snapshot: SourceSnapshotMessageV2,
+        fidelity: MaterializationFidelity,
+        report: MaterializationReportMessage,
+        provenance: MaterializationProvenanceMapMessage,
+    ) -> Result<Self, ProtocolError> {
+        Self::new(
+            target_profile,
+            MaterializationOutcomeMessageV2::Complete {
+                target_source_id: target_source_id.into(),
+                snapshot,
+                fidelity,
+                report,
+                provenance,
+            },
+        )
+    }
+
+    /// Validates a failed result which cannot carry target bytes or provenance.
+    pub fn failed(
+        target_profile: ProfileId,
+        failure: MaterializationFailureMessage,
+        report: MaterializationReportMessage,
+        analyzed_input_paths: Vec<ValuePath>,
+    ) -> Result<Self, ProtocolError> {
+        Self::new(
+            target_profile,
+            MaterializationOutcomeMessageV2::Failed {
+                failure,
+                report,
+                analyzed_input_paths,
+            },
+        )
+    }
+
+    fn new(
+        target_profile: ProfileId,
+        outcome: MaterializationOutcomeMessageV2,
+    ) -> Result<Self, ProtocolError> {
+        match &outcome {
+            MaterializationOutcomeMessageV2::Complete {
+                target_source_id,
+                snapshot,
+                fidelity,
+                report,
+                provenance,
+            } => validate_complete_materialization(
+                target_source_id,
+                snapshot.snapshot().bytes().len(),
+                *fidelity,
+                report,
+                provenance,
+            )?,
+            MaterializationOutcomeMessageV2::Failed { report, .. } => {
+                validate_failed_materialization(report)?;
+            }
+        }
+        Ok(Self {
+            target_profile,
+            outcome,
+        })
+    }
+
+    /// Exact target Profile.
+    #[must_use]
+    pub const fn target_profile(&self) -> &ProfileId {
+        &self.target_profile
+    }
+
+    /// Complete or explicitly failed outcome.
+    #[must_use]
+    pub const fn outcome(&self) -> &MaterializationOutcomeMessageV2 {
+        &self.outcome
+    }
+
+    /// Encodes the fixed, explicitly tagged result-v2 schema.
+    #[must_use]
+    pub fn to_value(&self) -> PortableValue {
+        object(vec![
+            (
+                "schema",
+                PortableValue::string("core.materialization-result@2"),
+            ),
+            ("target_profile", profile_value(&self.target_profile)),
+            ("outcome", outcome_value_v2(&self.outcome)),
+        ])
+    }
+
+    /// Strictly decodes reports under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
+        let fields = schema_fields(
+            value,
+            "core.materialization-result@2",
+            &["schema", "target_profile", "outcome"],
+            "$",
+        )?;
+        let target_profile = parse_profile(fields[1], "$.target_profile")?;
+        let outcome_fields = fields[2].as_object().ok_or_else(|| {
+            ProtocolError::new(ProtocolErrorKind::WrongType, "$.outcome", "expected Object")
+        })?;
+        let kind = outcome_fields
+            .iter()
+            .find(|entry| entry.key() == "kind")
+            .ok_or_else(|| crate::schema::invalid("$.outcome", "missing kind"))?;
+        match string(kind.value(), "$.outcome.kind")? {
+            "Complete" => {
+                let fields = exact_fields(
+                    fields[2],
+                    &[
+                        "kind",
+                        "target_source_id",
+                        "snapshot",
+                        "fidelity",
+                        "report",
+                        "provenance",
+                    ],
+                    "$.outcome",
+                )?;
+                Self::complete(
+                    target_profile,
+                    string(fields[1], "$.outcome.target_source_id")?,
+                    SourceSnapshotMessageV2::from_value(fields[2], SourceLimits::default())?,
+                    parse_fidelity(string(fields[3], "$.outcome.fidelity")?)?,
+                    MaterializationReportMessage::from_value_with_registry(fields[4], registry)?,
+                    MaterializationProvenanceMapMessage::from_value(fields[5])?,
+                )
+            }
+            "Failed" => {
+                let fields = exact_fields(
+                    fields[2],
+                    &["kind", "failure", "report", "analyzed_input_paths"],
+                    "$.outcome",
+                )?;
+                let analyzed_input_paths = sequence(fields[3], "$.outcome.analyzed_input_paths")?
+                    .iter()
+                    .enumerate()
+                    .map(|(index, path)| {
+                        parse_path(path, &format!("$.outcome.analyzed_input_paths[{index}]"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Self::failed(
+                    target_profile,
+                    parse_failure(fields[1], "$.outcome.failure")?,
+                    MaterializationReportMessage::from_value_with_registry(fields[2], registry)?,
+                    analyzed_input_paths,
+                )
+            }
+            _ => Err(crate::schema::invalid(
+                "$.outcome.kind",
+                "unknown materialization outcome",
+            )),
+        }
+    }
+}
+
+fn validate_complete_materialization(
+    target_source_id: &str,
+    snapshot_len: usize,
+    fidelity: MaterializationFidelity,
+    report: &MaterializationReportMessage,
+    provenance: &MaterializationProvenanceMapMessage,
+) -> Result<(), ProtocolError> {
+    validate_source_id(target_source_id, "$.outcome.target_source_id")?;
+    validate_report_source(report, Some(target_source_id))?;
+    let output_len = u64::try_from(snapshot_len)
+        .map_err(|_| crate::schema::invalid("$.outcome.snapshot", "snapshot length exceeds u64"))?;
+    for (entry_index, entry) in provenance.entries().iter().enumerate() {
+        for (output_index, output) in entry.outputs.iter().enumerate() {
+            if output.target_source_id != target_source_id || output.end_byte > output_len {
+                return Err(crate::schema::invalid(
+                    &format!("$.outcome.provenance.entries[{entry_index}].outputs[{output_index}]"),
+                    "provenance target binding or range contradicts the snapshot",
+                ));
+            }
+        }
+    }
+    if fidelity == MaterializationFidelity::Transformed
+        && !report
+            .events()
+            .iter()
+            .any(|event| event.code == "core.materialization.mapping-transformed@1")
+    {
+        return Err(crate::schema::invalid(
+            "$.outcome.report",
+            "Transformed fidelity requires an explicit transformation event",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_failed_materialization(
+    report: &MaterializationReportMessage,
+) -> Result<(), ProtocolError> {
+    validate_report_source(report, None)
+}
+
 fn outcome_value(outcome: &MaterializationOutcomeMessage) -> PortableValue {
     match outcome {
         MaterializationOutcomeMessage::Complete {
@@ -846,6 +1059,44 @@ fn outcome_value(outcome: &MaterializationOutcomeMessage) -> PortableValue {
             ("provenance", provenance.to_value()),
         ]),
         MaterializationOutcomeMessage::Failed {
+            failure,
+            report,
+            analyzed_input_paths,
+        } => {
+            let mut paths = SequenceBuilder::new();
+            for path in analyzed_input_paths {
+                paths.push(path_value(path));
+            }
+            object(vec![
+                ("kind", PortableValue::string("Failed")),
+                ("failure", failure_value(failure)),
+                ("report", report.to_value()),
+                ("analyzed_input_paths", paths.build()),
+            ])
+        }
+    }
+}
+
+fn outcome_value_v2(outcome: &MaterializationOutcomeMessageV2) -> PortableValue {
+    match outcome {
+        MaterializationOutcomeMessageV2::Complete {
+            target_source_id,
+            snapshot,
+            fidelity,
+            report,
+            provenance,
+        } => object(vec![
+            ("kind", PortableValue::string("Complete")),
+            (
+                "target_source_id",
+                PortableValue::string(target_source_id.as_str()),
+            ),
+            ("snapshot", snapshot.to_value()),
+            ("fidelity", PortableValue::string(fidelity_name(*fidelity))),
+            ("report", report.to_value()),
+            ("provenance", provenance.to_value()),
+        ]),
+        MaterializationOutcomeMessageV2::Failed {
             failure,
             report,
             analyzed_input_paths,
@@ -1311,7 +1562,7 @@ fn parse_output(
 mod tests {
     use super::*;
     use crate::{ProtocolLimits, decode_json, decode_pvce, encode_json, encode_pvce};
-    use consema_document::SourceSnapshot;
+    use consema_document::{BomPolicy, EncodingRequest, SourceSnapshot};
 
     #[test]
     fn request_round_trip_keeps_every_explicit_field() {
@@ -1505,6 +1756,112 @@ mod tests {
         assert_eq!(
             MaterializationResultMessage::from_value(&value).unwrap(),
             message
+        );
+    }
+
+    #[test]
+    fn complete_result_v2_round_trips_code_page_snapshot() {
+        let snapshot = SourceSnapshot::from_raw(
+            [0x80, b'=', b'1'],
+            EncodingRequest::new(SourceEncoding::WindowsCodePage(
+                consema_document::WindowsCodePage::from_number(1252).unwrap(),
+            ))
+            .with_bom_policy(BomPolicy::TreatAsContent),
+            SourceLimits::default(),
+        )
+        .unwrap();
+        let message = MaterializationResultMessageV2::complete(
+            ProfileId::new("ini.windows", 1),
+            "target:windows-ini",
+            SourceSnapshotMessageV2::from_snapshot(&snapshot),
+            MaterializationFidelity::Exact,
+            MaterializationReportMessage::default(),
+            MaterializationProvenanceMapMessage::default(),
+        )
+        .unwrap();
+        let value = message.to_value();
+        for transported in [
+            decode_json(
+                &encode_json(&value, ProtocolLimits::default()).unwrap(),
+                ProtocolLimits::default(),
+            )
+            .unwrap(),
+            decode_pvce(
+                &encode_pvce(&value, ProtocolLimits::default()).unwrap(),
+                ProtocolLimits::default(),
+            )
+            .unwrap(),
+        ] {
+            let decoded = MaterializationResultMessageV2::from_value_with_registry(
+                &transported,
+                ErrorCodeRegistry::v5(),
+            )
+            .unwrap();
+            assert_eq!(decoded, message);
+            assert_eq!(decoded.to_value(), value);
+        }
+        assert!(MaterializationResultMessage::from_value(&value).is_err());
+    }
+
+    #[test]
+    fn result_v2_rejects_snapshot_v1_and_failed_result_has_no_target() {
+        let snapshot = SourceSnapshot::from_utf8(b"ok".as_slice()).unwrap();
+        let message = MaterializationResultMessageV2::complete(
+            ProfileId::new("json.strict", 1),
+            "target:json",
+            SourceSnapshotMessageV2::from_snapshot(&snapshot),
+            MaterializationFidelity::Exact,
+            MaterializationReportMessage::default(),
+            MaterializationProvenanceMapMessage::default(),
+        )
+        .unwrap();
+        let value = message.to_value();
+        let fields = value.as_object().unwrap();
+        let outcome = fields[2].value().as_object().unwrap();
+        let forged_outcome = object(vec![
+            ("kind", outcome[0].value().clone()),
+            ("target_source_id", outcome[1].value().clone()),
+            (
+                "snapshot",
+                SourceSnapshotMessage::from_snapshot(&snapshot)
+                    .unwrap()
+                    .to_value(),
+            ),
+            ("fidelity", outcome[3].value().clone()),
+            ("report", outcome[4].value().clone()),
+            ("provenance", outcome[5].value().clone()),
+        ]);
+        let forged = object(vec![
+            ("schema", fields[0].value().clone()),
+            ("target_profile", fields[1].value().clone()),
+            ("outcome", forged_outcome),
+        ]);
+        assert!(
+            MaterializationResultMessageV2::from_value_with_registry(
+                &forged,
+                ErrorCodeRegistry::v5(),
+            )
+            .is_err()
+        );
+
+        let failed = MaterializationResultMessageV2::failed(
+            ProfileId::new("ini.portable", 1),
+            MaterializationFailureMessage::UnsupportedEncoding,
+            MaterializationReportMessage::default(),
+            vec![ValuePath::root()],
+        )
+        .unwrap();
+        let failed_value = failed.to_value();
+        let encoded = format!("{failed_value:?}");
+        assert!(!encoded.contains("raw_bytes"));
+        assert!(!encoded.contains("target_source_id"));
+        assert_eq!(
+            MaterializationResultMessageV2::from_value_with_registry(
+                &failed_value,
+                ErrorCodeRegistry::v5(),
+            )
+            .unwrap(),
+            failed
         );
     }
 }
