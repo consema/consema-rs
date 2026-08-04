@@ -6,12 +6,14 @@ use std::fmt::{self, Display, Formatter};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod edit_plan;
 mod materialization;
 mod operation_registry;
 mod source;
 mod source_patch;
 mod untouched_proof;
 
+pub use edit_plan::{EditOperationSummary, EditPlan, EditPlanError, EditPlanSourceId};
 pub use materialization::{
     CompleteMaterialization, FailedMaterializationAttempt, MappingPolicy, MaterializationFailure,
     MaterializationFidelity, MaterializationInputLocation, MaterializationLimits,
@@ -28,7 +30,9 @@ pub use source::{
     BomKind, ContentDigest, DecodedOffset, DecodedPosition, EncodingFacts, EncodingRequest,
     SourceEncoding, SourceError, SourceLimits, SourceSnapshot, UnsupportedBomKind,
 };
-pub use source_patch::{SourcePatch, SourcePatchError, SourcePatchLimits, SourceReplacement};
+pub use source_patch::{
+    SourcePatch, SourcePatchError, SourcePatchLimits, SourcePatchRedactionError, SourceReplacement,
+};
 pub use untouched_proof::{UntouchedByteProof, UntouchedByteProofError, UntouchedByteRegion};
 
 static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(1);

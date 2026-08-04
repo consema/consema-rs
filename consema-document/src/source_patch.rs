@@ -308,7 +308,81 @@ impl SourcePatch {
     pub const fn metadata(&self) -> &BTreeMap<String, String> {
         &self.metadata
     }
+
+    /// Marks every replacement payload for redacted review/debug presentation.
+    ///
+    /// Exact bytes remain present for digest and original-byte precondition checks.
+    pub fn with_all_replacements_redacted(
+        self,
+        redact_original: bool,
+        redact_replacement: bool,
+    ) -> Result<Self, SourcePatchRedactionError> {
+        let mut replacements = Vec::new();
+        replacements
+            .try_reserve_exact(self.replacements.len())
+            .map_err(|_| SourcePatchRedactionError::AllocationFailed)?;
+        replacements.extend(self.replacements.iter().cloned().map(|replacement| {
+            replacement
+                .with_original_redacted(redact_original)
+                .with_replacement_redacted(redact_replacement)
+        }));
+        Ok(Self {
+            base_digest: self.base_digest,
+            target_digest: self.target_digest,
+            encoding: self.encoding,
+            replacements: Arc::from(replacements),
+            metadata: self.metadata,
+        })
+    }
+
+    /// Marks one exact replacement payload for redacted review/debug presentation.
+    pub fn with_replacement_redacted(
+        self,
+        index: usize,
+        redact_original: bool,
+        redact_replacement: bool,
+    ) -> Result<Self, SourcePatchRedactionError> {
+        if index >= self.replacements.len() {
+            return Err(SourcePatchRedactionError::UnknownReplacement { index });
+        }
+        let mut replacements = Vec::new();
+        replacements
+            .try_reserve_exact(self.replacements.len())
+            .map_err(|_| SourcePatchRedactionError::AllocationFailed)?;
+        replacements.extend(self.replacements.iter().cloned());
+        replacements[index] = replacements[index]
+            .clone()
+            .with_original_redacted(redact_original)
+            .with_replacement_redacted(redact_replacement);
+        Ok(Self {
+            base_digest: self.base_digest,
+            target_digest: self.target_digest,
+            encoding: self.encoding,
+            replacements: Arc::from(replacements),
+            metadata: self.metadata,
+        })
+    }
 }
+
+/// Review-redaction selection failure; patch bytes and application facts are unchanged.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SourcePatchRedactionError {
+    /// Redacted review view could not allocate its replacement index.
+    AllocationFailed,
+    /// Requested replacement index does not exist.
+    UnknownReplacement {
+        /// Requested zero-based replacement index.
+        index: usize,
+    },
+}
+
+impl std::fmt::Display for SourcePatchRedactionError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{self:?}")
+    }
+}
+
+impl std::error::Error for SourcePatchRedactionError {}
 
 /// Stable source patch construction or application failure.
 #[derive(Clone, Debug, Eq, PartialEq)]

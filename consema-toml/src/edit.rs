@@ -4,9 +4,9 @@ use consema_core::{
     LocalDateTime, OffsetDateTime, PortableValue, PortableValueKind, Time,
 };
 use consema_document::{
-    AssociationPlacement, ChangeSet, MaterializationLimits, NodeMapping, NodeMappingStatus,
-    NodeRef, NodeRole, SnapshotIdentity, SourceEdit, SourceLimits, SourcePatch, SourcePatchLimits,
-    UntouchedByteProof,
+    AssociationPlacement, ChangeSet, EditOperationSummary, EditPlan, EditPlanSourceId,
+    FormatOperationId, MaterializationLimits, NodeMapping, NodeMappingStatus, NodeRef, NodeRole,
+    SnapshotIdentity, SourceEdit, SourceLimits, SourcePatch, SourcePatchLimits, UntouchedByteProof,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
@@ -429,6 +429,23 @@ impl Document {
         })
     }
 
+    /// Fully validates and plans an edit without returning a new Document.
+    pub fn dry_run(
+        &self,
+        transaction: &EditTransaction,
+        source_id: EditPlanSourceId,
+    ) -> Result<EditPlan, EditFailure> {
+        let commit = self.commit(transaction)?;
+        EditPlan::new(
+            source_id,
+            self.profile(),
+            operation_summaries(transaction)?,
+            commit.source_patch,
+            commit.change_set.diagnostics().to_vec(),
+        )
+        .map_err(|_| EditFailure::NewDocumentFormationFailed)
+    }
+
     fn prepare_operation(
         &self,
         operation: &EditOperation,
@@ -475,9 +492,13 @@ impl Document {
                 validate_exact_scalar(literal)?;
                 literal.to_vec()
             }
-            ScalarReplacement::Semantic { value, policy, .. } => {
-                semantic_literal(value, old_kind, *policy, target, diagnostics)?
-            }
+            ScalarReplacement::Semantic { value, policy, .. } => semantic_literal(
+                value,
+                old_kind,
+                *policy,
+                self.entity(index).span,
+                diagnostics,
+            )?,
         };
         Ok(PreparedEdit {
             old_span: self.entity(index).span,
@@ -1132,6 +1153,130 @@ fn operation_metadata(transaction: &EditTransaction) -> BTreeMap<String, String>
         .collect()
 }
 
+fn operation_summaries(
+    transaction: &EditTransaction,
+) -> Result<Vec<EditOperationSummary>, EditFailure> {
+    transaction
+        .operations
+        .iter()
+        .map(|operation| {
+            let (id, target_role, mut arguments) = match operation {
+                EditOperation::ReplaceScalar(ScalarReplacement::Semantic {
+                    value, policy, ..
+                }) => (
+                    "toml.edit.replace-scalar-semantic",
+                    "toml.scalar-item@1",
+                    BTreeMap::from([
+                        (
+                            "representation_policy".to_owned(),
+                            toml_policy_name(*policy).to_owned(),
+                        ),
+                        (
+                            "value_kind".to_owned(),
+                            value_kind_name(value.kind()).to_owned(),
+                        ),
+                    ]),
+                ),
+                EditOperation::ReplaceScalar(ScalarReplacement::Literal { literal, .. }) => (
+                    "toml.edit.replace-scalar-literal",
+                    "toml.scalar-item@1",
+                    BTreeMap::from([("literal_bytes".to_owned(), literal.len().to_string())]),
+                ),
+                EditOperation::InsertEntry {
+                    key,
+                    value,
+                    placement,
+                    ..
+                } => (
+                    "toml.edit.insert-entry",
+                    "toml.table-item@1",
+                    BTreeMap::from([
+                        ("key_bytes".to_owned(), key.len().to_string()),
+                        (
+                            "placement".to_owned(),
+                            placement_name(*placement).to_owned(),
+                        ),
+                        (
+                            "value_kind".to_owned(),
+                            value_kind_name(value.kind()).to_owned(),
+                        ),
+                    ]),
+                ),
+                EditOperation::RemoveEntry { .. } => {
+                    ("toml.edit.remove-entry", "toml.entry@1", BTreeMap::new())
+                }
+                EditOperation::RenameEntry { key, .. } => (
+                    "toml.edit.rename-entry",
+                    "toml.entry@1",
+                    BTreeMap::from([("key_bytes".to_owned(), key.len().to_string())]),
+                ),
+                EditOperation::InsertArrayElement {
+                    value, placement, ..
+                } => (
+                    "toml.edit.insert-array-element",
+                    "toml.array-item@1",
+                    BTreeMap::from([
+                        (
+                            "placement".to_owned(),
+                            placement_name(*placement).to_owned(),
+                        ),
+                        (
+                            "value_kind".to_owned(),
+                            value_kind_name(value.kind()).to_owned(),
+                        ),
+                    ]),
+                ),
+                EditOperation::RemoveArrayElement { .. } => (
+                    "toml.edit.remove-array-element",
+                    "toml.array-element@1",
+                    BTreeMap::new(),
+                ),
+            };
+            arguments.insert("target_role".to_owned(), target_role.to_owned());
+            EditOperationSummary::new(FormatOperationId::new(id, 1), arguments)
+                .map_err(|_| EditFailure::NewDocumentFormationFailed)
+        })
+        .collect()
+}
+
+const fn placement_name(placement: AssociationPlacement) -> &'static str {
+    match placement {
+        AssociationPlacement::Start => "start",
+        AssociationPlacement::End => "end",
+        AssociationPlacement::Before(_) => "before",
+        AssociationPlacement::After(_) => "after",
+    }
+}
+
+const fn toml_policy_name(policy: RepresentationPolicy) -> &'static str {
+    match policy {
+        RepresentationPolicy::ExactLiteral => "exact-literal",
+        RepresentationPolicy::PreserveCompatible => "preserve-compatible",
+        RepresentationPolicy::CanonicalForProfile => "canonical-for-profile",
+        RepresentationPolicy::PreserveElseCanonical => "preserve-else-canonical",
+    }
+}
+
+const fn value_kind_name(kind: PortableValueKind) -> &'static str {
+    match kind {
+        PortableValueKind::Null => "null",
+        PortableValueKind::Boolean => "boolean",
+        PortableValueKind::Integer => "integer",
+        PortableValueKind::Decimal => "decimal",
+        PortableValueKind::BinaryFloat32 => "binary-float32",
+        PortableValueKind::BinaryFloat64 => "binary-float64",
+        PortableValueKind::String => "string",
+        PortableValueKind::Bytes => "bytes",
+        PortableValueKind::Date => "date",
+        PortableValueKind::Time => "time",
+        PortableValueKind::LocalDateTime => "local-date-time",
+        PortableValueKind::OffsetDateTime => "offset-date-time",
+        PortableValueKind::Sequence => "sequence",
+        PortableValueKind::Object => "object",
+        PortableValueKind::EntryMapping => "entry-mapping",
+    }
+}
+
 impl consema_core::StableFailure for EditFailure {
     fn operation_kind(&self) -> consema_core::OperationKind {
         consema_core::OperationKind::Edit
@@ -1271,7 +1416,7 @@ fn semantic_literal(
     value: &PortableValue,
     old_kind: TomlItemKind,
     policy: RepresentationPolicy,
-    target: NodeRef,
+    target_span: consema_document::Span,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<Vec<u8>, EditFailure> {
     if policy == RepresentationPolicy::ExactLiteral {
@@ -1289,12 +1434,9 @@ fn semantic_literal(
                 "toml.edit.representation-fallback@1",
                 DiagnosticCategory::Edit,
                 DiagnosticSeverity::Warning,
-                None,
+                Some(target_span.diagnostic_location()),
                 diagnostics.len() as u64,
             );
-            diagnostic
-                .arguments
-                .insert("target".to_owned(), format!("{target:?}"));
             diagnostic
                 .arguments
                 .insert("old_kind".to_owned(), format!("{old_kind:?}"));
@@ -1974,6 +2116,41 @@ mod tests {
                 .item()
                 .as_boolean(),
             Some(true)
+        );
+    }
+
+    #[test]
+    fn dry_run_and_commit_have_identical_patch_and_target_digest() {
+        let document = document(b"value = 1\n");
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.insert_entry(
+            document.root().node_ref(),
+            "secret-key",
+            PortableValue::string("secret-value"),
+            AssociationPlacement::End,
+        );
+        let transaction = builder.build();
+        let plan = document
+            .dry_run(&transaction, EditPlanSourceId::new("config.toml").unwrap())
+            .unwrap();
+        let commit = document.commit(&transaction).unwrap();
+        assert_eq!(plan.replacements(), commit.source_patch.replacements());
+        assert_eq!(plan.target_digest(), commit.source_patch.target_digest());
+        assert!(
+            plan.operations()[0]
+                .arguments()
+                .values()
+                .all(|value| !value.contains("secret"))
+        );
+        assert_eq!(
+            plan.source_patch()
+                .apply(
+                    document.source(),
+                    source_patch_limits(document.parse_limits, 1)
+                )
+                .unwrap()
+                .bytes(),
+            commit.document.render()
         );
     }
 }

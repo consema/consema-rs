@@ -6,9 +6,9 @@ use consema_core::{
     Diagnostic, DiagnosticCategory, DiagnosticSeverity, PortableValue, PortableValueKind,
 };
 use consema_document::{
-    AssociationPlacement, ChangeSet, MaterializationLimits, NodeMapping, NodeMappingStatus,
-    NodeRef, NodeRole, SnapshotIdentity, SourceEdit, SourceLimits, SourcePatch, SourcePatchLimits,
-    UntouchedByteProof,
+    AssociationPlacement, ChangeSet, EditOperationSummary, EditPlan, EditPlanSourceId,
+    FormatOperationId, MaterializationLimits, NodeMapping, NodeMappingStatus, NodeRef, NodeRole,
+    SnapshotIdentity, SourceEdit, SourceLimits, SourcePatch, SourcePatchLimits, UntouchedByteProof,
 };
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -427,6 +427,23 @@ impl Document {
             untouched_proof,
         })
     }
+
+    /// Fully validates and plans an edit without returning a new Document.
+    pub fn dry_run(
+        &self,
+        transaction: &EditTransaction,
+        source_id: EditPlanSourceId,
+    ) -> Result<EditPlan, EditFailure> {
+        let commit = self.commit(transaction)?;
+        EditPlan::new(
+            source_id,
+            self.profile(),
+            operation_summaries(transaction)?,
+            commit.source_patch,
+            commit.change_set.diagnostics().to_vec(),
+        )
+        .map_err(|_| EditFailure::NewDocumentFormationFailed)
+    }
 }
 
 impl Document {
@@ -500,7 +517,7 @@ impl Document {
                     &entity.kind,
                     old_literal,
                     *policy,
-                    target,
+                    old_span,
                     diagnostics,
                 )?
             }
@@ -997,6 +1014,132 @@ fn operation_metadata(transaction: &EditTransaction) -> BTreeMap<String, String>
         .collect()
 }
 
+fn operation_summaries(
+    transaction: &EditTransaction,
+) -> Result<Vec<EditOperationSummary>, EditFailure> {
+    transaction
+        .operations
+        .iter()
+        .map(|operation| {
+            let (id, target_role, mut arguments) = match operation {
+                EditOperation::ReplaceScalar(ScalarReplacement::Semantic {
+                    value, policy, ..
+                }) => (
+                    "json.edit.replace-scalar-semantic",
+                    "json.scalar@1",
+                    BTreeMap::from([
+                        (
+                            "representation_policy".to_owned(),
+                            json_policy_name(*policy).to_owned(),
+                        ),
+                        (
+                            "value_kind".to_owned(),
+                            value_kind_name(value.kind()).to_owned(),
+                        ),
+                    ]),
+                ),
+                EditOperation::ReplaceScalar(ScalarReplacement::Literal { literal, .. }) => (
+                    "json.edit.replace-scalar-literal",
+                    "json.scalar@1",
+                    BTreeMap::from([("literal_bytes".to_owned(), literal.len().to_string())]),
+                ),
+                EditOperation::InsertMember {
+                    name,
+                    value,
+                    placement,
+                    ..
+                } => (
+                    "json.edit.insert-member",
+                    "json.object@1",
+                    BTreeMap::from([
+                        ("name_bytes".to_owned(), name.len().to_string()),
+                        (
+                            "placement".to_owned(),
+                            placement_name(*placement).to_owned(),
+                        ),
+                        (
+                            "value_kind".to_owned(),
+                            value_kind_name(value.kind()).to_owned(),
+                        ),
+                    ]),
+                ),
+                EditOperation::RemoveMember { .. } => (
+                    "json.edit.remove-member",
+                    "json.object-member@1",
+                    BTreeMap::new(),
+                ),
+                EditOperation::RenameMember { name, .. } => (
+                    "json.edit.rename-member",
+                    "json.object-member@1",
+                    BTreeMap::from([("name_bytes".to_owned(), name.len().to_string())]),
+                ),
+                EditOperation::InsertArrayElement {
+                    value, placement, ..
+                } => (
+                    "json.edit.insert-array-element",
+                    "json.array@1",
+                    BTreeMap::from([
+                        (
+                            "placement".to_owned(),
+                            placement_name(*placement).to_owned(),
+                        ),
+                        (
+                            "value_kind".to_owned(),
+                            value_kind_name(value.kind()).to_owned(),
+                        ),
+                    ]),
+                ),
+                EditOperation::RemoveArrayElement { .. } => (
+                    "json.edit.remove-array-element",
+                    "json.array-element@1",
+                    BTreeMap::new(),
+                ),
+            };
+            arguments.insert("target_role".to_owned(), target_role.to_owned());
+            EditOperationSummary::new(FormatOperationId::new(id, 1), arguments)
+                .map_err(|_| EditFailure::NewDocumentFormationFailed)
+        })
+        .collect()
+}
+
+const fn placement_name(placement: AssociationPlacement) -> &'static str {
+    match placement {
+        AssociationPlacement::Start => "start",
+        AssociationPlacement::End => "end",
+        AssociationPlacement::Before(_) => "before",
+        AssociationPlacement::After(_) => "after",
+    }
+}
+
+const fn json_policy_name(policy: RepresentationPolicy) -> &'static str {
+    match policy {
+        RepresentationPolicy::ExactLiteral => "exact-literal",
+        RepresentationPolicy::PreserveCompatible => "preserve-compatible",
+        RepresentationPolicy::CanonicalForProfile => "canonical-for-profile",
+        RepresentationPolicy::PreserveElseCanonical => "preserve-else-canonical",
+    }
+}
+
+const fn value_kind_name(kind: PortableValueKind) -> &'static str {
+    match kind {
+        PortableValueKind::Null => "null",
+        PortableValueKind::Boolean => "boolean",
+        PortableValueKind::Integer => "integer",
+        PortableValueKind::Decimal => "decimal",
+        PortableValueKind::BinaryFloat32 => "binary-float32",
+        PortableValueKind::BinaryFloat64 => "binary-float64",
+        PortableValueKind::String => "string",
+        PortableValueKind::Bytes => "bytes",
+        PortableValueKind::Date => "date",
+        PortableValueKind::Time => "time",
+        PortableValueKind::LocalDateTime => "local-date-time",
+        PortableValueKind::OffsetDateTime => "offset-date-time",
+        PortableValueKind::Sequence => "sequence",
+        PortableValueKind::Object => "object",
+        PortableValueKind::EntryMapping => "entry-mapping",
+    }
+}
+
 impl consema_core::StableFailure for EditFailure {
     fn operation_kind(&self) -> consema_core::OperationKind {
         consema_core::OperationKind::Edit
@@ -1077,7 +1220,7 @@ fn semantic_literal(
     old: &InternalValueKind,
     old_literal: &[u8],
     policy: RepresentationPolicy,
-    target: NodeRef,
+    target_span: consema_document::Span,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<Vec<u8>, EditFailure> {
     if policy == RepresentationPolicy::ExactLiteral {
@@ -1095,16 +1238,13 @@ fn semantic_literal(
             if let Some(bytes) = preserved {
                 Ok(bytes)
             } else {
-                let mut diagnostic = Diagnostic::new(
+                let diagnostic = Diagnostic::new(
                     "json.edit.representation-fallback@1",
                     DiagnosticCategory::Edit,
                     DiagnosticSeverity::Warning,
-                    None,
+                    Some(target_span.diagnostic_location()),
                     diagnostics.len() as u64,
                 );
-                diagnostic
-                    .arguments
-                    .insert("target".to_owned(), format!("{target:?}"));
                 diagnostics.push(diagnostic);
                 canonical_literal(value)
             }
@@ -1706,6 +1846,69 @@ mod tests {
             EditFailure::AncestorDescendantConflict
         );
         assert_eq!(document.render(), b"{\"a\":1,\"b\":2}");
+    }
+
+    #[test]
+    fn dry_run_and_commit_have_identical_patch_and_target_digest() {
+        let document = parse(
+            b"{\"a\":1}".as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.insert_member(
+            document.root().node_ref(),
+            "secret-name",
+            PortableValue::string("secret-value"),
+            AssociationPlacement::End,
+        );
+        let transaction = builder.build();
+        let plan = document
+            .dry_run(&transaction, EditPlanSourceId::new("config.json").unwrap())
+            .unwrap();
+        let commit = document.commit(&transaction).unwrap();
+        assert_eq!(plan.replacements(), commit.source_patch.replacements());
+        assert_eq!(plan.target_digest(), commit.source_patch.target_digest());
+        assert_eq!(plan.operations().len(), 1);
+        assert!(
+            plan.operations()[0]
+                .arguments()
+                .values()
+                .all(|value| !value.contains("secret"))
+        );
+        assert_eq!(
+            plan.source_patch()
+                .apply(
+                    document.source(),
+                    source_patch_limits(document.parse_limits, 1)
+                )
+                .unwrap()
+                .bytes(),
+            commit.document.render()
+        );
+        let redacted = plan
+            .clone()
+            .with_all_replacements_redacted(true, true)
+            .unwrap();
+        assert!(!format!("{redacted:?}").contains("secret"));
+        assert!(
+            redacted.replacements()[0]
+                .replacement()
+                .windows(b"secret-value".len())
+                .any(|window| window == b"secret-value")
+        );
+        assert_eq!(
+            redacted
+                .source_patch()
+                .apply(
+                    document.source(),
+                    source_patch_limits(document.parse_limits, 1)
+                )
+                .unwrap()
+                .bytes(),
+            commit.document.render()
+        );
     }
 
     #[test]
