@@ -16,7 +16,7 @@ pub(crate) fn tokenize(
     source: &SourceSnapshot,
     authority: &DocumentAuthority,
     max_tokens: usize,
-) -> Result<(LosslessStructuralIndex, Vec<YamlSyntaxKind>), FatalFormationFailure> {
+) -> Result<Tokenized, FatalFormationFailure> {
     let text = source
         .decoded_text()
         .expect("YAML source always has decoded text");
@@ -24,6 +24,8 @@ pub(crate) fn tokenize(
     let lexemes = Scanner::new(&chars, max_tokens).scan()?;
     let mut pieces = Vec::with_capacity(lexemes.len());
     let mut kinds = Vec::with_capacity(lexemes.len());
+    let mut anchor_names = Vec::new();
+    let mut alias_names = Vec::new();
     for lexeme in lexemes {
         let start = source
             .raw_byte_at(DecodedOffset::UnicodeScalar(lexeme.start))
@@ -44,10 +46,32 @@ pub(crate) fn tokenize(
             },
         ));
         kinds.push(lexeme.kind);
+        if matches!(lexeme.kind, YamlSyntaxKind::Anchor | YamlSyntaxKind::Alias) {
+            let name = chars[lexeme.start + 1..lexeme.end]
+                .iter()
+                .collect::<String>();
+            if lexeme.kind == YamlSyntaxKind::Anchor {
+                anchor_names.push(name);
+            } else {
+                alias_names.push(name);
+            }
+        }
     }
     let index = LosslessStructuralIndex::new(authority.identity(), source.len(), pieces)
         .expect("YAML scanner partitions every raw source byte exactly once");
-    Ok((index, kinds))
+    Ok(Tokenized {
+        index,
+        kinds,
+        anchor_names,
+        alias_names,
+    })
+}
+
+pub(crate) struct Tokenized {
+    pub(crate) index: LosslessStructuralIndex,
+    pub(crate) kinds: Vec<YamlSyntaxKind>,
+    pub(crate) anchor_names: Vec<String>,
+    pub(crate) alias_names: Vec<String>,
 }
 
 struct Scanner<'a> {
@@ -373,7 +397,7 @@ mod tests {
         .unwrap();
         tokenize(&source, &DocumentAuthority::fresh(), 100)
             .unwrap()
-            .1
+            .kinds
     }
 
     #[test]

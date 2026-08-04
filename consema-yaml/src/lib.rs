@@ -14,10 +14,13 @@ use consema_document::{
 };
 
 mod backend;
+mod native;
 mod syntax;
 
 use backend::{BackendError, BackendEventKind, parse_events};
-use syntax::tokenize;
+pub use native::GraphProjectionError;
+use native::{NativeContent, NativeStream, node_ref};
+use syntax::{Tokenized, tokenize};
 
 /// Frozen YAML language profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -81,6 +84,53 @@ pub enum YamlSyntaxKind {
     BlockScalarContent,
     /// Bytes retained after bounded syntax recovery.
     ErrorRegion,
+}
+
+/// YAML native representation node kind.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum YamlNodeKind {
+    /// Tagged scalar.
+    Scalar,
+    /// Ordered sequence associations.
+    Sequence,
+    /// Ordered arbitrary key/value associations.
+    Mapping,
+}
+
+/// Exact scalar presentation style.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum YamlScalarStyle {
+    /// Plain style.
+    Plain,
+    /// Single-quoted style.
+    SingleQuoted,
+    /// Double-quoted style.
+    DoubleQuoted,
+    /// Literal block style.
+    Literal,
+    /// Folded block style.
+    Folded,
+}
+
+/// Resolved native scalar semantic category.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum YamlScalarKind {
+    /// Null.
+    Null,
+    /// Boolean.
+    Boolean,
+    /// Arbitrary-precision integer.
+    Integer,
+    /// Exact decimal or frozen non-finite float spelling.
+    Float,
+    /// String.
+    String,
+    /// YAML 1.1-compatible timestamp.
+    Timestamp,
+    /// Validated YAML binary scalar.
+    Binary,
+    /// Scalar carrying an uninterpreted custom tag.
+    Custom,
 }
 
 impl YamlSyntaxKind {
@@ -176,13 +226,20 @@ pub fn parse(
         .filter(|event| matches!(event.kind, BackendEventKind::DocumentStart { .. }))
         .count();
     let authority = DocumentAuthority::fresh();
-    let (structural_index, syntax_kinds) = tokenize(&source, &authority, limits.max_token_count)?;
+    let Tokenized {
+        index: structural_index,
+        kinds: syntax_kinds,
+        anchor_names,
+        alias_names,
+    } = tokenize(&source, &authority, limits.max_token_count)?;
+    let native = native::compose(&events, text, profile, anchor_names, alias_names, limits)?;
     Ok(Document {
         authority,
         source,
         profile,
         structural_index,
         syntax_kinds: Arc::from(syntax_kinds),
+        native,
         stream_documents: document_count,
         parse_limits: limits,
     })
@@ -196,6 +253,7 @@ pub struct Document {
     profile: YamlProfile,
     structural_index: LosslessStructuralIndex,
     syntax_kinds: Arc<[YamlSyntaxKind]>,
+    native: NativeStream,
     stream_documents: usize,
     parse_limits: ParseLimits,
 }
@@ -249,6 +307,51 @@ impl Document {
         &self.syntax_kinds
     }
 
+    /// Returns one independent YAML document by stream ordinal.
+    #[must_use]
+    pub fn document(&self, ordinal: usize) -> Option<YamlDocument<'_>> {
+        self.native
+            .roots
+            .get(ordinal)
+            .copied()
+            .map(|root| YamlDocument {
+                owner: self,
+                ordinal,
+                root,
+            })
+    }
+
+    /// Number of alias serialization occurrences; aliases are never expanded.
+    #[must_use]
+    pub fn alias_count(&self) -> usize {
+        self.native.aliases.len()
+    }
+
+    /// Returns one alias occurrence in serialization order.
+    #[must_use]
+    pub fn alias(&self, ordinal: usize) -> Option<YamlAlias<'_>> {
+        self.native
+            .aliases
+            .get(ordinal)
+            .map(|alias| YamlAlias { owner: self, alias })
+    }
+
+    /// Projects all document roots to one exact PortableGraph.
+    ///
+    /// Unknown/custom and non-portable standard tags fail instead of being
+    /// treated as application constructors or untyped strings.
+    pub fn project_graph(&self) -> Result<consema_graph::PortableGraph, GraphProjectionError> {
+        self.project_graph_bounded(consema_graph::GraphLimits::default())
+    }
+
+    /// Projects all document roots with caller-supplied graph resource limits.
+    pub fn project_graph_bounded(
+        &self,
+        limits: consema_graph::GraphLimits,
+    ) -> Result<consema_graph::PortableGraph, GraphProjectionError> {
+        self.native.project_graph(limits)
+    }
+
     /// Number of independent YAML documents in this stream.
     #[must_use]
     pub const fn document_count(&self) -> usize {
@@ -259,6 +362,246 @@ impl Document {
     #[must_use]
     pub const fn parse_limits(&self) -> ParseLimits {
         self.parse_limits
+    }
+}
+
+/// One independent document in a YAML stream.
+#[derive(Clone, Copy, Debug)]
+pub struct YamlDocument<'a> {
+    owner: &'a Document,
+    ordinal: usize,
+    root: usize,
+}
+
+impl<'a> YamlDocument<'a> {
+    /// Zero-based stream ordinal.
+    #[must_use]
+    pub const fn ordinal(self) -> usize {
+        self.ordinal
+    }
+
+    /// Representation root. Alias occurrences already share target identity.
+    #[must_use]
+    pub const fn root(self) -> YamlNode<'a> {
+        YamlNode {
+            owner: self.owner,
+            index: self.root,
+        }
+    }
+}
+
+/// Snapshot-bound YAML representation node.
+#[derive(Clone, Copy, Debug)]
+pub struct YamlNode<'a> {
+    owner: &'a Document,
+    index: usize,
+}
+
+impl<'a> YamlNode<'a> {
+    /// Process-local stable identity within this snapshot.
+    #[must_use]
+    pub fn node_ref(self) -> consema_document::NodeRef {
+        node_ref(&self.owner.authority, self.index)
+    }
+
+    /// Resolved tag identifier.
+    #[must_use]
+    pub fn tag(self) -> &'a str {
+        &self.owner.native.nodes[self.index].tag
+    }
+
+    /// Exact anchor name on the defining occurrence, if present.
+    #[must_use]
+    pub fn anchor(self) -> Option<&'a str> {
+        self.owner.native.nodes[self.index].anchor.as_deref()
+    }
+
+    /// Native node kind.
+    #[must_use]
+    pub fn kind(self) -> YamlNodeKind {
+        match self.owner.native.nodes[self.index].content {
+            NativeContent::Scalar(_) => YamlNodeKind::Scalar,
+            NativeContent::Sequence(_) => YamlNodeKind::Sequence,
+            NativeContent::Mapping(_) => YamlNodeKind::Mapping,
+        }
+    }
+
+    /// Scalar facts, when this is a scalar node.
+    #[must_use]
+    pub fn scalar(self) -> Option<YamlScalar<'a>> {
+        match &self.owner.native.nodes[self.index].content {
+            NativeContent::Scalar(scalar) => Some(YamlScalar { scalar }),
+            NativeContent::Sequence(_) | NativeContent::Mapping(_) => None,
+        }
+    }
+
+    /// Ordered sequence association count.
+    #[must_use]
+    pub fn sequence_len(self) -> Option<usize> {
+        match &self.owner.native.nodes[self.index].content {
+            NativeContent::Sequence(items) => Some(items.len()),
+            NativeContent::Scalar(_) | NativeContent::Mapping(_) => None,
+        }
+    }
+
+    /// One exact sequence association.
+    #[must_use]
+    pub fn sequence_item(self, ordinal: usize) -> Option<YamlSequenceItem<'a>> {
+        match &self.owner.native.nodes[self.index].content {
+            NativeContent::Sequence(items) => items.get(ordinal).map(|item| YamlSequenceItem {
+                owner: self.owner,
+                item,
+            }),
+            NativeContent::Scalar(_) | NativeContent::Mapping(_) => None,
+        }
+    }
+
+    /// Ordered mapping association count.
+    #[must_use]
+    pub fn mapping_len(self) -> Option<usize> {
+        match &self.owner.native.nodes[self.index].content {
+            NativeContent::Mapping(entries) => Some(entries.len()),
+            NativeContent::Scalar(_) | NativeContent::Sequence(_) => None,
+        }
+    }
+
+    /// One exact arbitrary key/value association.
+    #[must_use]
+    pub fn mapping_entry(self, ordinal: usize) -> Option<YamlMappingEntry<'a>> {
+        match &self.owner.native.nodes[self.index].content {
+            NativeContent::Mapping(entries) => entries.get(ordinal).map(|entry| YamlMappingEntry {
+                owner: self.owner,
+                entry,
+            }),
+            NativeContent::Scalar(_) | NativeContent::Sequence(_) => None,
+        }
+    }
+}
+
+/// Native scalar facts with exact decoded and canonical content.
+#[derive(Clone, Copy, Debug)]
+pub struct YamlScalar<'a> {
+    scalar: &'a native::NativeScalar,
+}
+
+impl<'a> YamlScalar<'a> {
+    /// Decoded YAML scalar content before schema canonicalization.
+    #[must_use]
+    pub fn decoded(self) -> &'a str {
+        &self.scalar.decoded
+    }
+
+    /// Profile-defined canonical scalar content.
+    #[must_use]
+    pub fn canonical(self) -> &'a str {
+        &self.scalar.canonical
+    }
+
+    /// Resolved scalar category.
+    #[must_use]
+    pub const fn kind(self) -> YamlScalarKind {
+        self.scalar.kind
+    }
+
+    /// Source presentation style.
+    #[must_use]
+    pub const fn style(self) -> YamlScalarStyle {
+        self.scalar.style
+    }
+}
+
+/// One ordered sequence association.
+#[derive(Clone, Copy, Debug)]
+pub struct YamlSequenceItem<'a> {
+    owner: &'a Document,
+    item: &'a native::NativeSequenceItem,
+}
+
+impl<'a> YamlSequenceItem<'a> {
+    /// Snapshot-bound association identity.
+    #[must_use]
+    pub fn node_ref(self) -> consema_document::NodeRef {
+        self.owner.authority.node_ref(
+            self.item.identity,
+            consema_document::NodeRole::YamlSequenceElement,
+        )
+    }
+
+    /// Referenced representation node.
+    #[must_use]
+    pub const fn node(self) -> YamlNode<'a> {
+        YamlNode {
+            owner: self.owner,
+            index: self.item.node,
+        }
+    }
+}
+
+/// One ordered YAML mapping association with an arbitrary key node.
+#[derive(Clone, Copy, Debug)]
+pub struct YamlMappingEntry<'a> {
+    owner: &'a Document,
+    entry: &'a native::NativeMappingEntry,
+}
+
+impl<'a> YamlMappingEntry<'a> {
+    /// Snapshot-bound association identity.
+    #[must_use]
+    pub fn node_ref(self) -> consema_document::NodeRef {
+        self.owner.authority.node_ref(
+            self.entry.identity,
+            consema_document::NodeRole::YamlMappingEntry,
+        )
+    }
+
+    /// Arbitrary key node.
+    #[must_use]
+    pub const fn key(self) -> YamlNode<'a> {
+        YamlNode {
+            owner: self.owner,
+            index: self.entry.key,
+        }
+    }
+
+    /// Value node.
+    #[must_use]
+    pub const fn value(self) -> YamlNode<'a> {
+        YamlNode {
+            owner: self.owner,
+            index: self.entry.value,
+        }
+    }
+}
+
+/// One alias serialization occurrence pointing at an existing representation node.
+#[derive(Clone, Copy, Debug)]
+pub struct YamlAlias<'a> {
+    owner: &'a Document,
+    alias: &'a native::NativeAlias,
+}
+
+impl<'a> YamlAlias<'a> {
+    /// Snapshot-bound occurrence identity.
+    #[must_use]
+    pub fn node_ref(self) -> consema_document::NodeRef {
+        self.owner
+            .authority
+            .node_ref(self.alias.identity, consema_document::NodeRole::YamlAlias)
+    }
+
+    /// Exact alias name without `*`.
+    #[must_use]
+    pub fn name(self) -> &'a str {
+        &self.alias.name
+    }
+
+    /// Shared target representation node; no expansion occurs.
+    #[must_use]
+    pub const fn target(self) -> YamlNode<'a> {
+        YamlNode {
+            owner: self.owner,
+            index: self.alias.target,
+        }
     }
 }
 
@@ -417,5 +760,153 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(limited.diagnostics()[0].code, "core.parse.resource-limit@1");
+    }
+
+    #[test]
+    fn aliases_compose_to_shared_cycles_without_expansion() {
+        let document = parse(
+            b"&self [*self]\n".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let root = document.document(0).unwrap().root();
+        assert_eq!(root.anchor(), Some("self"));
+        assert_eq!(root.sequence_len(), Some(1));
+        assert_eq!(
+            root.sequence_item(0).unwrap().node().node_ref(),
+            root.node_ref()
+        );
+        assert_eq!(document.alias_count(), 1);
+        assert_eq!(document.alias(0).unwrap().name(), "self");
+        assert_eq!(
+            document.alias(0).unwrap().target().node_ref(),
+            root.node_ref()
+        );
+
+        let graph = document.project_graph().unwrap();
+        let graph_root = graph.roots()[0];
+        assert_eq!(
+            graph.node(graph_root).unwrap().sequence_items(),
+            Some([graph_root].as_slice())
+        );
+    }
+
+    #[test]
+    fn mappings_keep_arbitrary_keys_duplicates_and_order() {
+        let document = parse(
+            b"? [a, b]\n: one\n? [a, b]\n: two\n".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let root = document.document(0).unwrap().root();
+        assert_eq!(root.mapping_len(), Some(2));
+        assert_eq!(
+            root.mapping_entry(0).unwrap().key().kind(),
+            YamlNodeKind::Sequence
+        );
+        assert_ne!(
+            root.mapping_entry(0).unwrap().key().node_ref(),
+            root.mapping_entry(1).unwrap().key().node_ref()
+        );
+        assert_eq!(
+            root.mapping_entry(0)
+                .unwrap()
+                .value()
+                .scalar()
+                .unwrap()
+                .decoded(),
+            "one"
+        );
+        assert_eq!(document.project_graph().unwrap().node_count(), 9);
+    }
+
+    #[test]
+    fn profiles_resolve_plain_scalars_but_never_construct_custom_tags() {
+        let source = b"flag: yes\nnumber: 017\n";
+        let core = parse(
+            source.as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let compat = parse(
+            source.as_slice(),
+            YamlProfile::Yaml11CompatV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let core_root = core.document(0).unwrap().root();
+        let compat_root = compat.document(0).unwrap().root();
+        assert_eq!(
+            core_root
+                .mapping_entry(0)
+                .unwrap()
+                .value()
+                .scalar()
+                .unwrap()
+                .kind(),
+            YamlScalarKind::String
+        );
+        assert_eq!(
+            compat_root
+                .mapping_entry(0)
+                .unwrap()
+                .value()
+                .scalar()
+                .unwrap()
+                .canonical(),
+            "true"
+        );
+        assert_eq!(
+            compat_root
+                .mapping_entry(1)
+                .unwrap()
+                .value()
+                .scalar()
+                .unwrap()
+                .canonical(),
+            "15"
+        );
+
+        let custom = parse(
+            b"!application/object payload\n".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let root = custom.document(0).unwrap().root();
+        assert_eq!(root.tag(), "!application/object");
+        assert_eq!(root.scalar().unwrap().kind(), YamlScalarKind::Custom);
+        assert!(matches!(
+            custom.project_graph(),
+            Err(GraphProjectionError::UnsupportedTag(tag)) if tag == "!application/object"
+        ));
+    }
+
+    #[test]
+    fn explicit_standard_tags_are_kind_and_grammar_checked() {
+        let invalid_scalar = parse(
+            b"!!int nope\n".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            invalid_scalar.diagnostics()[0].code,
+            "yaml.scalar.invalid-explicit-tag@1"
+        );
+
+        let invalid_kind = parse(
+            b"!!seq {a: b}\n".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            invalid_kind.diagnostics()[0].code,
+            "yaml.tag.kind-mismatch@1"
+        );
     }
 }

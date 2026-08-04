@@ -137,6 +137,14 @@ pub enum NodeRole {
     JsonSyntaxPiece,
     /// One TOML lossless syntax piece.
     TomlSyntaxPiece,
+    /// YAML representation node.
+    YamlNode,
+    /// YAML ordered sequence association.
+    YamlSequenceElement,
+    /// YAML ordered mapping association.
+    YamlMappingEntry,
+    /// YAML alias serialization occurrence.
+    YamlAlias,
 }
 
 /// Opaque handle to one structural identity in exactly one snapshot.
