@@ -1,0 +1,12 @@
+[package]
+name = "consema-graph"
+description = "Immutable PortableGraph values and PGCE for Consema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
