@@ -14,6 +14,7 @@ mod error_registry;
 mod execution;
 mod graph_projection;
 mod graph_query;
+mod java_utf16;
 mod limits;
 mod materialization;
 mod operation;
@@ -47,6 +48,7 @@ pub use graph_projection::{
     GraphProvenanceMapMessage, GraphProvenanceRelationMessage, GraphSourceOriginMessage,
 };
 pub use graph_query::{GraphQueryMatchMessage, GraphQueryResultMessage};
+pub use java_utf16::{JavaUnicodeStatus, JavaUtf16String};
 pub use limits::ProtocolLimits;
 pub use materialization::{
     MaterializationFailureMessage, MaterializationInputLocationMessage,
