@@ -14,6 +14,7 @@ use consema_document::{
 };
 
 mod backend;
+mod edit;
 mod materialization;
 mod native;
 mod projection;
@@ -21,6 +22,10 @@ mod query;
 mod syntax;
 
 use backend::{BackendError, BackendEventKind, parse_events};
+pub use edit::{
+    EditCommit, EditFailure, EditOperation, EditTransaction, EditTransactionBuilder,
+    RepresentationPolicy, ScalarReplacement,
+};
 pub use materialization::{
     CompleteGraphMaterialization, FailedGraphMaterializationAttempt, GraphMaterializationFailure,
     GraphMaterializationInputLocation, GraphMaterializationProvenanceEntry,
