@@ -6,6 +6,7 @@ mod portable_graph_v1;
 mod protocol_v1;
 mod protocol_v2;
 mod semantic_model_v5;
+mod semantic_model_v6;
 mod source_v1;
 mod syntax_query_v1;
 mod toml_v1;
@@ -40,6 +41,9 @@ pub use protocol_v1::{PROTOCOL_V1_VECTORS_JSON, run_protocol_v1};
 pub use protocol_v2::{PROTOCOL_V2_VECTORS_JSON, run_protocol_v2, run_protocol_v2_json};
 pub use semantic_model_v5::{
     SEMANTIC_MODEL_V5_VECTORS_JSON, run_semantic_model_v5, run_semantic_model_v5_json,
+};
+pub use semantic_model_v6::{
+    SEMANTIC_MODEL_V6_VECTORS_JSON, run_semantic_model_v6, run_semantic_model_v6_json,
 };
 pub use source_v1::{SOURCE_V1_VECTORS_JSON, run_source_v1, run_source_v1_json};
 pub use syntax_query_v1::{
