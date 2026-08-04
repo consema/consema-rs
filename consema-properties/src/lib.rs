@@ -8,12 +8,16 @@ use consema_document::{
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+mod edit;
 mod materialization;
+mod operation_registry;
 mod parser;
 mod projection;
 mod query;
 
+pub use edit::{EditCommit, EditFailure, EditOperation, EditTransaction, EditTransactionBuilder};
 pub use materialization::materialize;
+pub use operation_registry::format_operation_registry;
 pub use projection::{
     CompleteProjection, DuplicatePolicy, FailedProjectionAttempt, Fidelity, ProjectedLocation,
     ProjectionEvent, ProjectionLimits, ProjectionReport, ProjectionRequest, ProjectionResult,

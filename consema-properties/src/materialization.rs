@@ -546,7 +546,7 @@ fn encode_text(
     Ok(output)
 }
 
-fn encode_fragment(
+pub(crate) fn encode_fragment(
     text: &str,
     encoding: SourceEncoding,
     max_output_bytes: usize,
