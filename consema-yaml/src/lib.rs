@@ -9,12 +9,15 @@ use std::sync::Arc;
 use consema_core::{Diagnostic, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity};
 use consema_document::{
     DecodedOffset, DocumentAuthority, EncodingRequest, FatalFormationFailure, FormatFamilyId,
-    ParseLimits, ProfileId, SnapshotIdentity, SourceEncoding, SourceLimits, SourceSnapshot,
+    FormationStatus, LosslessStructuralIndex, ParseLimits, ProfileId, SnapshotIdentity,
+    SourceEncoding, SourceLimits, SourceSnapshot,
 };
 
 mod backend;
+mod syntax;
 
 use backend::{BackendError, BackendEventKind, parse_events};
+use syntax::tokenize;
 
 /// Frozen YAML language profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -23,6 +26,102 @@ pub enum YamlProfile {
     Yaml12CoreV1,
     /// Safe YAML 1.2-compatible presentation with frozen YAML 1.1 scalar resolution.
     Yaml11CompatV1,
+}
+
+/// Closed YAML lossless presentation-piece classification.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum YamlSyntaxKind {
+    /// Unicode byte-order mark retained in the decoded stream.
+    Bom,
+    /// Horizontal separation.
+    Whitespace,
+    /// LF, CRLF, or bare CR line break.
+    Newline,
+    /// Comment excluding its line break.
+    Comment,
+    /// `%YAML`, `%TAG`, or reserved directive line.
+    Directive,
+    /// `---` document start.
+    DocumentStart,
+    /// `...` document end.
+    DocumentEnd,
+    /// Block sequence `-` indicator.
+    SequenceEntry,
+    /// Explicit mapping key `?` indicator.
+    ExplicitKey,
+    /// Mapping value `:` indicator.
+    MappingValue,
+    /// `[`.
+    FlowSequenceStart,
+    /// `]`.
+    FlowSequenceEnd,
+    /// `{`.
+    FlowMappingStart,
+    /// `}`.
+    FlowMappingEnd,
+    /// Flow `,` separator.
+    FlowEntry,
+    /// Anchor spelling beginning with `&`.
+    Anchor,
+    /// Alias spelling beginning with `*`.
+    Alias,
+    /// Tag spelling beginning with `!`.
+    Tag,
+    /// Plain scalar presentation fragment.
+    PlainScalar,
+    /// Complete single-quoted scalar presentation.
+    SingleQuotedScalar,
+    /// Complete double-quoted scalar presentation.
+    DoubleQuotedScalar,
+    /// Literal block-scalar header beginning with `|`.
+    LiteralBlockHeader,
+    /// Folded block-scalar header beginning with `>`.
+    FoldedBlockHeader,
+    /// Exact indented block-scalar content region.
+    BlockScalarContent,
+    /// Bytes retained after bounded syntax recovery.
+    ErrorRegion,
+}
+
+impl YamlSyntaxKind {
+    /// Stable query/protocol name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Bom => "Bom",
+            Self::Whitespace => "Whitespace",
+            Self::Newline => "Newline",
+            Self::Comment => "Comment",
+            Self::Directive => "Directive",
+            Self::DocumentStart => "DocumentStart",
+            Self::DocumentEnd => "DocumentEnd",
+            Self::SequenceEntry => "SequenceEntry",
+            Self::ExplicitKey => "ExplicitKey",
+            Self::MappingValue => "MappingValue",
+            Self::FlowSequenceStart => "FlowSequenceStart",
+            Self::FlowSequenceEnd => "FlowSequenceEnd",
+            Self::FlowMappingStart => "FlowMappingStart",
+            Self::FlowMappingEnd => "FlowMappingEnd",
+            Self::FlowEntry => "FlowEntry",
+            Self::Anchor => "Anchor",
+            Self::Alias => "Alias",
+            Self::Tag => "Tag",
+            Self::PlainScalar => "PlainScalar",
+            Self::SingleQuotedScalar => "SingleQuotedScalar",
+            Self::DoubleQuotedScalar => "DoubleQuotedScalar",
+            Self::LiteralBlockHeader => "LiteralBlockHeader",
+            Self::FoldedBlockHeader => "FoldedBlockHeader",
+            Self::BlockScalarContent => "BlockScalarContent",
+            Self::ErrorRegion => "ErrorRegion",
+        }
+    }
+
+    const fn is_trivia(self) -> bool {
+        matches!(
+            self,
+            Self::Bom | Self::Whitespace | Self::Newline | Self::Comment
+        )
+    }
 }
 
 impl YamlProfile {
@@ -76,10 +175,14 @@ pub fn parse(
         .iter()
         .filter(|event| matches!(event.kind, BackendEventKind::DocumentStart { .. }))
         .count();
+    let authority = DocumentAuthority::fresh();
+    let (structural_index, syntax_kinds) = tokenize(&source, &authority, limits.max_token_count)?;
     Ok(Document {
-        authority: DocumentAuthority::fresh(),
+        authority,
         source,
         profile,
+        structural_index,
+        syntax_kinds: Arc::from(syntax_kinds),
         stream_documents: document_count,
         parse_limits: limits,
     })
@@ -91,6 +194,8 @@ pub struct Document {
     authority: DocumentAuthority,
     source: SourceSnapshot,
     profile: YamlProfile,
+    structural_index: LosslessStructuralIndex,
+    syntax_kinds: Arc<[YamlSyntaxKind]>,
     stream_documents: usize,
     parse_limits: ParseLimits,
 }
@@ -124,6 +229,24 @@ impl Document {
     #[must_use]
     pub fn profile(&self) -> ProfileId {
         self.profile.id()
+    }
+
+    /// Complete valid streams require no recovered semantic claims.
+    #[must_use]
+    pub const fn formation_status(&self) -> FormationStatus {
+        FormationStatus::Complete
+    }
+
+    /// Exhaustive token/trivia byte coverage.
+    #[must_use]
+    pub const fn lossless_structural_index(&self) -> &LosslessStructuralIndex {
+        &self.structural_index
+    }
+
+    /// Format-specific kind for each structural piece in source order.
+    #[must_use]
+    pub fn lossless_syntax_kinds(&self) -> &[YamlSyntaxKind] {
+        &self.syntax_kinds
     }
 
     /// Number of independent YAML documents in this stream.
@@ -235,6 +358,13 @@ mod tests {
         assert_eq!(document.render(), &source);
         assert_eq!(document.source().decoded_text(), Some("\u{feff}a: 1"));
         assert_eq!(document.document_count(), 1);
+        assert_eq!(
+            document.lossless_structural_index().pieces()[0]
+                .span()
+                .end_byte(),
+            2
+        );
+        assert_eq!(document.lossless_syntax_kinds()[0], YamlSyntaxKind::Bom);
     }
 
     #[test]
