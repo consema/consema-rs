@@ -1,6 +1,7 @@
 //! Lossless `json.strict@1` and `jsonc.bounded@1` documents.
 
 mod edit;
+mod operation_registry;
 mod parser;
 mod projection;
 mod query;
@@ -17,6 +18,7 @@ pub use edit::{
     EditCommit, EditFailure, EditTransaction, EditTransactionBuilder, RepresentationPolicy,
     ScalarReplacement,
 };
+pub use operation_registry::format_operation_registry;
 pub use projection::{
     CompleteProjection, DuplicateKeyPolicy, FailedProjectionAttempt, Fidelity, ProjectedLocation,
     ProjectionEvent, ProjectionEventKind, ProjectionFailure, ProjectionLimits,
