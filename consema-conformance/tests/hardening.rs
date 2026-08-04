@@ -4,14 +4,14 @@ use consema_core::{
     ExecutableQuery, ObjectBuilder, PortableValue, QueryDefinition, QueryExecution, QueryLimits,
 };
 use consema_document::{
-    AssociationPlacement, ChangeSet, EncodingRequest, MaterializationLimits,
+    AssociationPlacement, ChangeSet, EncodingRequest, FormationStatus, MaterializationLimits,
     MaterializationRequest, MaterializationResult, MaterializationStyleId, NewlinePolicy,
     ParseLimits, ProfileId, SourceEncoding, SourceLimits, SourcePatch, SourcePatchError,
     SourcePatchLimits, SourceReplacement, SourceSnapshot,
 };
 use consema_json::{
     CompleteProjection, Document, EditTransactionBuilder as JsonEditBuilder, JsonProfile,
-    ProjectionRequest, ProjectionResult, parse,
+    ProjectionRequest, ProjectionRequestBuilder, ProjectionResult, ProjectionTarget, parse,
 };
 use consema_protocol::{
     CapabilityDeclaration, ChangeSetMessage, ContractId, ContractRegistry, ConversionReportMessage,
@@ -459,6 +459,184 @@ fn bounded_utf8_malicious_corpus_never_panics_or_fakes_completion() {
     };
     assert!(parse(b"[[[[0]]]]".as_slice(), JsonProfile::StrictV1, limited).is_err());
     assert!(parse(b"[0,1,2]".as_slice(), JsonProfile::StrictV1, limited).is_err());
+}
+
+#[test]
+fn bounded_json5_mutation_corpus_never_panics_or_fakes_completion() {
+    let fragments = [
+        "",
+        "// comment only",
+        "/* unterminated",
+        r"{a\u0021:1}",
+        r"{π\u0021:1}",
+        r"{\u0030bad:1}",
+        r"{a:'\uD800'}",
+        r"{a:'\x0g'}",
+        r"{a:'\01'}",
+        "{a:01}",
+        "{a:0x}",
+        "{a:1e+}",
+        "{a:+Infinity,b:-NaN,c:0xFFFFFFFFFFFFFFFFFFFFFFFF}",
+        "{a:[[[[[[[[[[0]]]]]]]]]]}",
+        "{a:1,a:2,a:3,}",
+        "{a:'line\\\ncontinuation'}",
+        "{a:'\u{2028}\u{2029}'}",
+        "\u{00a0}\u{1680}\u{2003}[1,2,]\u{3000}",
+        "😀",
+        "[,,,,,,,,]",
+    ];
+    for fragment in fragments {
+        if let Ok(document) = parse(
+            fragment.as_bytes(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        ) {
+            assert_eq!(document.render(), fragment.as_bytes());
+            assert!(document.diagnostics().len() <= ParseLimits::default().max_diagnostics);
+            let pieces = document.lossless_structural_index().pieces();
+            assert!(
+                pieces
+                    .windows(2)
+                    .all(|pair| pair[0].span().end_byte() == pair[1].span().start_byte())
+            );
+            assert_eq!(
+                pieces.last().map_or(0, |piece| piece.span().end_byte()),
+                fragment.len()
+            );
+            if document.formation_status() == FormationStatus::Complete {
+                let request = ProjectionRequestBuilder::new(ProjectionTarget::Json5BestExactCoreV1)
+                    .build()
+                    .unwrap();
+                assert!(matches!(
+                    document.project(&request),
+                    ProjectionResult::Complete(_)
+                ));
+            }
+        }
+    }
+
+    let seed = br"{key:'value',hex:+0Xf,nf:-Infinity,list:[1,2,],}";
+    for end in 0..seed.len() {
+        if let Ok(document) = parse(
+            &seed[..end],
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        ) {
+            assert_eq!(document.render(), &seed[..end]);
+        }
+    }
+    for index in 0..seed.len() {
+        for mask in [0x01, 0x20, 0x80, 0xff] {
+            let mut mutated = seed.to_vec();
+            mutated[index] ^= mask;
+            if let Ok(document) = parse(
+                mutated.as_slice(),
+                JsonProfile::Json5StandardV1,
+                ParseLimits::default(),
+            ) {
+                assert_eq!(document.render(), mutated);
+            }
+        }
+    }
+
+    let nested = b"{a:[[[[0]]]]}";
+    assert!(
+        parse(
+            nested.as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits {
+                max_nesting_depth: 2,
+                ..ParseLimits::default()
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        parse(
+            b"[0,1,2,3]".as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits {
+                max_token_count: 4,
+                ..ParseLimits::default()
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        parse(
+            b"{a:1,b:2}".as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits {
+                max_node_count: 3,
+                ..ParseLimits::default()
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        parse(
+            b"{longName:'long value'}".as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits {
+                max_source_bytes: 8,
+                ..ParseLimits::default()
+            }
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn real_project_json_family_fixtures_close_through_strict_json() {
+    let fixtures: &[(&[u8], JsonProfile, ProjectionTarget)] = &[
+        (
+            include_bytes!("../../../conformance/fixtures/real-world/package.json"),
+            JsonProfile::StrictV1,
+            ProjectionTarget::BestExactCoreV1,
+        ),
+        (
+            include_bytes!("../../../conformance/fixtures/real-world/tsconfig.jsonc"),
+            JsonProfile::JsoncBoundedV1,
+            ProjectionTarget::BestExactCoreV1,
+        ),
+        (
+            include_bytes!("../../../conformance/fixtures/real-world/vscode-settings.jsonc"),
+            JsonProfile::JsoncBoundedV1,
+            ProjectionTarget::BestExactCoreV1,
+        ),
+        (
+            include_bytes!("../../../conformance/fixtures/real-world/application.json5"),
+            JsonProfile::Json5StandardV1,
+            ProjectionTarget::Json5BestExactCoreV1,
+        ),
+    ];
+
+    for (source, profile, target) in fixtures {
+        let document = parse(*source, *profile, ParseLimits::default()).unwrap();
+        assert_eq!(document.formation_status(), FormationStatus::Complete);
+        assert_eq!(document.render(), *source);
+        let request = ProjectionRequestBuilder::new(*target).build().unwrap();
+        let ProjectionResult::Complete(projected) = document.project(&request) else {
+            panic!("fixture projection failed");
+        };
+        let MaterializationResult::Complete(materialized) = consema_json::materialize(
+            &projected.value,
+            &json_materialization_request(MaterializationLimits::default()),
+        ) else {
+            panic!("finite fixture did not materialize to strict JSON");
+        };
+        assert_eq!(
+            materialized.document.formation_status(),
+            FormationStatus::Complete
+        );
+        let strict_projection = ProjectionRequestBuilder::new(ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        assert!(matches!(
+            materialized.document.project(&strict_projection),
+            ProjectionResult::Complete(ref result) if result.value == projected.value
+        ));
+    }
 }
 
 #[test]
