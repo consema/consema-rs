@@ -189,7 +189,10 @@ impl ConversionReportMessage {
                 string(fields[3], "$.projection_fidelity")?,
                 "$.projection_fidelity",
             )?,
-            ProjectionReportMessage::from_value(fields[4])?,
+            ProjectionReportMessage::from_value_with_registry(
+                fields[4],
+                crate::ErrorCodeRegistry::v3(),
+            )?,
             parse_materialization_fidelity(string(fields[5], "$.materialization_fidelity")?)?,
             MaterializationReportMessage::from_value(fields[6])?,
             parse_fidelity(

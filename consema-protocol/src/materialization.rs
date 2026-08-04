@@ -17,6 +17,7 @@ use consema_document::{
     MaterializationReport, MaterializationRequest, MaterializationStyleId, NewlinePolicy, NodeRef,
     ProfileId, RepresentabilityPolicy, SourceEncoding, SourceLimits,
 };
+use std::collections::HashMap;
 
 /// Transferable `core.materialization-request@1`.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -247,6 +248,7 @@ impl MaterializationProvenanceMapMessage {
     /// Validates stable identities, non-empty outputs, range order, and locator uniqueness.
     pub fn new(entries: Vec<MaterializationProvenanceEntryMessage>) -> Result<Self, ProtocolError> {
         let mut source_id = None::<&str>;
+        let mut locator_ranges = HashMap::<&str, (u64, u64)>::new();
         for (entry_index, entry) in entries.iter().enumerate() {
             if entry.outputs.is_empty() {
                 return Err(crate::schema::invalid(
@@ -271,6 +273,16 @@ impl MaterializationProvenanceMapMessage {
                     ));
                 }
                 source_id = Some(&output.target_source_id);
+                let range = (output.start_byte, output.end_byte);
+                if locator_ranges
+                    .insert(output.target_node_locator.as_str(), range)
+                    .is_some_and(|previous| previous != range)
+                {
+                    return Err(crate::schema::invalid(
+                        &path,
+                        "one target node locator cannot identify contradictory ranges",
+                    ));
+                }
             }
         }
         Ok(Self { entries })
@@ -291,6 +303,8 @@ impl MaterializationProvenanceMapMessage {
                 "target source ID is invalid",
             ));
         }
+        let mut locator_by_node = HashMap::<NodeRef, String>::new();
+        let mut node_by_locator = HashMap::<String, NodeRef>::new();
         let entries = provenance
             .entries()
             .iter()
@@ -318,6 +332,20 @@ impl MaterializationProvenanceMapMessage {
                                 "target node requires an external locator",
                             )
                         })?;
+                        if locator_by_node
+                            .insert(output.node, target_node_locator.clone())
+                            .is_some_and(|previous| previous != target_node_locator)
+                            || node_by_locator
+                                .insert(target_node_locator.clone(), output.node)
+                                .is_some_and(|previous| previous != output.node)
+                        {
+                            return Err(crate::schema::invalid(
+                                &format!(
+                                    "$.entries[{entry_index}].outputs[{output_index}].target_node_locator"
+                                ),
+                                "node locators must form a stable one-to-one identity mapping",
+                            ));
+                        }
                         Ok(MaterializedOriginMessage {
                             target_source_id: target_source_id.to_owned(),
                             target_node_locator,
@@ -1215,7 +1243,7 @@ mod tests {
     }
 
     #[test]
-    fn provenance_rejects_missing_external_node_locator() {
+    fn provenance_round_trip_keeps_external_identity() {
         let message =
             MaterializationProvenanceMapMessage::new(vec![MaterializationProvenanceEntryMessage {
                 input: MaterializationInputLocationMessage::Value(ValuePath::root()),
@@ -1231,6 +1259,64 @@ mod tests {
         assert_eq!(
             MaterializationProvenanceMapMessage::from_value(&message.to_value()).unwrap(),
             message
+        );
+    }
+
+    #[test]
+    fn provenance_rejects_missing_or_ambiguous_external_node_locators() {
+        use consema_document::{
+            DocumentAuthority, MaterializationProvenanceEntry, MaterializedOrigin, NodeRole,
+        };
+
+        let authority = DocumentAuthority::fresh();
+        let provenance = MaterializationProvenanceMap::new(
+            vec![MaterializationProvenanceEntry {
+                input: MaterializationInputLocation::Value(ValuePath::root()),
+                outputs: vec![MaterializedOrigin {
+                    snapshot: authority.identity(),
+                    node: authority.node_ref(0, NodeRole::Value),
+                    span: authority.span(0, 1).unwrap(),
+                    relation: MaterializationRelation::Direct,
+                }],
+            }],
+            authority.identity(),
+            MaterializationLimits::default(),
+        )
+        .unwrap();
+        assert!(
+            MaterializationProvenanceMapMessage::from_provenance(&provenance, "target:one", |_| {
+                None
+            },)
+            .is_err_and(|error| error.kind() == ProtocolErrorKind::ProcessLocalHandle)
+        );
+
+        let two_nodes = MaterializationProvenanceMap::new(
+            vec![MaterializationProvenanceEntry {
+                input: MaterializationInputLocation::Value(ValuePath::root()),
+                outputs: vec![
+                    MaterializedOrigin {
+                        snapshot: authority.identity(),
+                        node: authority.node_ref(0, NodeRole::Value),
+                        span: authority.span(0, 1).unwrap(),
+                        relation: MaterializationRelation::Direct,
+                    },
+                    MaterializedOrigin {
+                        snapshot: authority.identity(),
+                        node: authority.node_ref(1, NodeRole::Value),
+                        span: authority.span(1, 1).unwrap(),
+                        relation: MaterializationRelation::Generated,
+                    },
+                ],
+            }],
+            authority.identity(),
+            MaterializationLimits::default(),
+        )
+        .unwrap();
+        assert!(
+            MaterializationProvenanceMapMessage::from_provenance(&two_nodes, "target:one", |_| {
+                Some("same-locator".to_owned())
+            },)
+            .is_err()
         );
     }
 

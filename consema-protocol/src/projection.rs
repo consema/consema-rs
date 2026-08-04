@@ -445,8 +445,16 @@ pub struct ProjectionReportMessage {
 impl ProjectionReportMessage {
     /// Validates event cross-field invariants.
     pub fn new(events: Vec<ProjectionEventMessage>) -> Result<Self, ProtocolError> {
+        Self::new_with_registry(events, ErrorCodeRegistry::v1())
+    }
+
+    /// Validates events under one explicit semantic-model error registry.
+    pub fn new_with_registry(
+        events: Vec<ProjectionEventMessage>,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         for event in &events {
-            ErrorCodeRegistry::v1().validate_at(&event.code, "$.events.code")?;
+            registry.validate_at(&event.code, "$.events.code")?;
         }
         if events.iter().any(|event| {
             event.code.is_empty()
@@ -483,6 +491,14 @@ impl ProjectionReportMessage {
 
     /// Strictly decodes `core.projection-report@1`.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes a report under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.projection-report@1",
@@ -494,7 +510,7 @@ impl ProjectionReportMessage {
             .enumerate()
             .map(|(index, event)| parse_event(event, &format!("$.events[{index}]")))
             .collect::<Result<Vec<_>, _>>()?;
-        Self::new(events)
+        Self::new_with_registry(events, registry)
     }
 }
 
@@ -1211,6 +1227,34 @@ mod tests {
                 arguments: BTreeMap::new(),
             }])
             .is_err()
+        );
+    }
+
+    #[test]
+    fn v3_projection_event_codes_do_not_change_the_v1_contract() {
+        let event = ProjectionEventMessage {
+            code: "json.projection.structure-reencoded@1".to_owned(),
+            policy_rule_id: None,
+            source_locations: Vec::new(),
+            projected_location: None,
+            old_category: Some("JsonObject".to_owned()),
+            new_category: Some("EntryMapping".to_owned()),
+            reversible: true,
+            loss_classification: LossClassification::Reversible,
+            arguments: BTreeMap::new(),
+        };
+        assert!(ProjectionReportMessage::new(vec![event.clone()]).is_err());
+        let report =
+            ProjectionReportMessage::new_with_registry(vec![event], ErrorCodeRegistry::v3())
+                .unwrap();
+        assert!(ProjectionReportMessage::from_value(&report.to_value()).is_err());
+        assert_eq!(
+            ProjectionReportMessage::from_value_with_registry(
+                &report.to_value(),
+                ErrorCodeRegistry::v3(),
+            )
+            .unwrap(),
+            report
         );
     }
 }

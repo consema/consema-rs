@@ -606,12 +606,18 @@ const NEW_CODES_V3: &[ErrorCodeDescriptor] = &[
         "0.5.0",
         "Requested materialization style is unavailable"
     ),
+    code!(
+        "json.projection.structure-reencoded@1",
+        Projection,
+        "0.5.0",
+        "JSON object structure was reversibly represented as an entry mapping"
+    ),
 ];
 
-const ERROR_CODES_V3: [ErrorCodeDescriptor; 89] = build_v3_codes();
+const ERROR_CODES_V3: [ErrorCodeDescriptor; 90] = build_v3_codes();
 
-const fn build_v3_codes() -> [ErrorCodeDescriptor; 89] {
-    let mut output = [ERROR_CODES_V2[0]; 89];
+const fn build_v3_codes() -> [ErrorCodeDescriptor; 90] {
+    let mut output = [ERROR_CODES_V2[0]; 90];
     let mut old = 0;
     let mut new = 0;
     let mut target = 0;
@@ -920,7 +926,7 @@ mod tests {
         }
         assert_eq!(ErrorCodeRegistry::v1().codes().len(), 55);
         assert_eq!(ErrorCodeRegistry::v2().codes().len(), 62);
-        assert_eq!(ErrorCodeRegistry::v3().codes().len(), 89);
+        assert_eq!(ErrorCodeRegistry::v3().codes().len(), 90);
         assert!(!ErrorCodeRegistry::v1().contains("core.source.patch-base-mismatch@1"));
         assert!(ErrorCodeRegistry::v2().contains("core.source.patch-base-mismatch@1"));
         assert!(!ErrorCodeRegistry::v2().contains("core.materialization.unrepresentable@1"));

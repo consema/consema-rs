@@ -6,6 +6,7 @@ use document::{
     CompleteMaterialization, MaterializationFidelity, MaterializationProvenanceMap,
     MaterializationReport, MaterializationRequest, ProfileId,
 };
+use std::collections::BTreeMap;
 
 /// Whole-conversion semantic fidelity.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -105,6 +106,86 @@ pub struct CompleteConversion {
     pub materialization_provenance: MaterializationProvenanceMap,
     /// Complete two-stage report.
     pub report: ConversionReport,
+}
+
+impl CompleteConversion {
+    /// Externalizes the complete two-stage report under semantic-model v3.
+    ///
+    /// Caller-assigned source IDs replace process-local snapshot identities;
+    /// an event whose source node cannot be resolved from complete projection
+    /// provenance fails instead of losing its location.
+    pub fn protocol_report(
+        &self,
+        source_id: &str,
+        target_source_id: &str,
+    ) -> Result<crate::protocol::ConversionReportMessage, crate::protocol::ProtocolError> {
+        crate::protocol::SourceLocation::new(source_id, 0, 0)?;
+        crate::protocol::SourceLocation::new(target_source_id, 0, 0)?;
+        let projection_report = match (&self.report.projection_report, &self.projection_provenance)
+        {
+            (
+                ConversionProjectionReport::Json(report),
+                ConversionProjectionProvenance::Json(provenance),
+            ) => json_projection_report_message(report, provenance, source_id)?,
+            (ConversionProjectionReport::Toml(report), ConversionProjectionProvenance::Toml(_))
+                if report.events().is_empty() =>
+            {
+                crate::protocol::ProjectionReportMessage::default()
+            }
+            _ => {
+                return Err(crate::protocol::ProtocolError::new(
+                    crate::protocol::ProtocolErrorKind::InvalidValue,
+                    "$.projection_report",
+                    "projection report and provenance variants do not match the source profile",
+                ));
+            }
+        };
+        let materialization_report = crate::protocol::MaterializationReportMessage::from_report(
+            &self.report.materialization_report,
+            Some(target_source_id),
+        )?;
+        crate::protocol::ConversionReportMessage::new(
+            self.report.source_profile.clone(),
+            self.report.target_profile.clone(),
+            conversion_fidelity_message(self.report.projection_fidelity),
+            projection_report,
+            self.report.materialization_fidelity,
+            materialization_report,
+            conversion_fidelity_message(self.report.overall_fidelity),
+        )
+    }
+
+    /// Externalizes the completed target snapshot, report, and provenance.
+    pub fn protocol_materialization_result<F>(
+        &self,
+        target_source_id: &str,
+        locator: F,
+    ) -> Result<crate::protocol::MaterializationResultMessage, crate::protocol::ProtocolError>
+    where
+        F: FnMut(document::NodeRef) -> Option<String>,
+    {
+        let snapshot = match &self.document.inner {
+            DocumentInner::Json(document) => document.source(),
+            DocumentInner::Toml(document) => document.source(),
+        };
+        let report = crate::protocol::MaterializationReportMessage::from_report(
+            &self.report.materialization_report,
+            Some(target_source_id),
+        )?;
+        let provenance = crate::protocol::MaterializationProvenanceMapMessage::from_provenance(
+            &self.materialization_provenance,
+            target_source_id,
+            locator,
+        )?;
+        crate::protocol::MaterializationResultMessage::complete(
+            self.report.target_profile.clone(),
+            target_source_id,
+            crate::protocol::SourceSnapshotMessage::from_snapshot(snapshot),
+            self.report.materialization_fidelity,
+            report,
+            provenance,
+        )
+    }
 }
 
 /// Conversion failure without a partial target document.
@@ -346,11 +427,130 @@ const fn toml_fidelity(fidelity: toml::Fidelity) -> ConversionFidelity {
     }
 }
 
+fn json_projection_report_message(
+    report: &json::ProjectionReport,
+    provenance: &json::ProvenanceMap,
+    source_id: &str,
+) -> Result<crate::protocol::ProjectionReportMessage, crate::protocol::ProtocolError> {
+    let events = report
+        .events()
+        .iter()
+        .enumerate()
+        .map(|(index, event)| {
+            let mut locations = Vec::new();
+            for origin in provenance
+                .entries()
+                .iter()
+                .flat_map(|entry| entry.origins.iter())
+                .filter(|origin| origin.node == event.source)
+            {
+                let start = u64::try_from(origin.span.start_byte()).map_err(|_| {
+                    crate::protocol::ProtocolError::new(
+                        crate::protocol::ProtocolErrorKind::InvalidValue,
+                        format!("$.projection_report.events[{index}].source_locations"),
+                        "source offset exceeds u64",
+                    )
+                })?;
+                let end = u64::try_from(origin.span.end_byte()).map_err(|_| {
+                    crate::protocol::ProtocolError::new(
+                        crate::protocol::ProtocolErrorKind::InvalidValue,
+                        format!("$.projection_report.events[{index}].source_locations"),
+                        "source offset exceeds u64",
+                    )
+                })?;
+                if !locations
+                    .iter()
+                    .any(|location: &crate::protocol::SourceLocation| {
+                        location.start_byte() == start && location.end_byte() == end
+                    })
+                {
+                    locations.push(crate::protocol::SourceLocation::new(source_id, start, end)?);
+                }
+            }
+            if locations.is_empty() {
+                return Err(crate::protocol::ProtocolError::new(
+                    crate::protocol::ProtocolErrorKind::ProcessLocalHandle,
+                    format!("$.projection_report.events[{index}].source"),
+                    "projection event source requires complete external provenance",
+                ));
+            }
+            let projected_location = event.projected.as_ref().map(|location| match location {
+                json::ProjectedLocation::Value(path) => {
+                    crate::protocol::ProjectedLocationMessage::Value(path.clone())
+                }
+                json::ProjectedLocation::Association(association) => {
+                    crate::protocol::ProjectedLocationMessage::Association(association.clone())
+                }
+            });
+            let (code, event_kind) = match event.kind {
+                json::ProjectionEventKind::StructureReencoded => (
+                    "json.projection.structure-reencoded@1",
+                    "StructureReencoded",
+                ),
+                json::ProjectionEventKind::DuplicateCollapsed => {
+                    ("json.object.duplicate-member@1", "DuplicateCollapsed")
+                }
+                json::ProjectionEventKind::TypeMapped
+                | json::ProjectionEventKind::KeyStringified
+                | json::ProjectionEventKind::ValueRounded
+                | json::ProjectionEventKind::FieldDropped => {
+                    return Err(crate::protocol::ProtocolError::new(
+                        crate::protocol::ProtocolErrorKind::InvalidValue,
+                        format!("$.projection_report.events[{index}].kind"),
+                        "event kind has no frozen semantic-model v3 wire code",
+                    ));
+                }
+            };
+            let mut arguments = BTreeMap::new();
+            arguments.insert("event_kind".to_owned(), event_kind.to_owned());
+            Ok(crate::protocol::ProjectionEventMessage {
+                code: code.to_owned(),
+                policy_rule_id: event.policy.map(json_policy_rule_id).map(str::to_owned),
+                source_locations: locations,
+                projected_location,
+                old_category: Some(event.old_category.clone()),
+                new_category: Some(event.new_category.clone()),
+                reversible: event.reversible,
+                loss_classification: match event.loss {
+                    json::Fidelity::Exact => crate::protocol::LossClassification::None,
+                    json::Fidelity::Transformed => crate::protocol::LossClassification::Reversible,
+                    json::Fidelity::Lossy => crate::protocol::LossClassification::Lossy,
+                },
+                arguments,
+            })
+        })
+        .collect::<Result<Vec<_>, crate::protocol::ProtocolError>>()?;
+    crate::protocol::ProjectionReportMessage::new_with_registry(
+        events,
+        crate::protocol::ErrorCodeRegistry::v3(),
+    )
+}
+
+const fn json_policy_rule_id(policy: json::DuplicateKeyPolicy) -> &'static str {
+    match policy {
+        json::DuplicateKeyPolicy::Reject => "json.duplicate-key.reject@1",
+        json::DuplicateKeyPolicy::FirstWins => "json.duplicate-key.first-wins@1",
+        json::DuplicateKeyPolicy::LastWins => "json.duplicate-key.last-wins@1",
+    }
+}
+
+const fn conversion_fidelity_message(
+    fidelity: ConversionFidelity,
+) -> crate::protocol::ConversionFidelityMessage {
+    match fidelity {
+        ConversionFidelity::Exact => crate::protocol::ConversionFidelityMessage::Exact,
+        ConversionFidelity::Transformed => crate::protocol::ConversionFidelityMessage::Transformed,
+        ConversionFidelity::Lossy => crate::protocol::ConversionFidelityMessage::Lossy,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol;
     use document::{MappingPolicy, MaterializationStyleId, NewlinePolicy, ParseLimits};
     use json::{DuplicateKeyPolicy, ProjectionRequestBuilder};
+    use std::collections::HashMap;
 
     fn projection_provenance_json(complete: &CompleteConversion) -> &[json::ProvenanceEntry] {
         match &complete.projection_provenance {
@@ -410,6 +610,35 @@ mod tests {
         );
         assert!(!projection_provenance_json(&complete).is_empty());
         assert!(!complete.materialization_provenance.entries().is_empty());
+
+        let protocol_report = complete
+            .protocol_report("source:json", "target:toml")
+            .unwrap();
+        assert_eq!(
+            protocol::ConversionReportMessage::from_value(&protocol_report.to_value()).unwrap(),
+            protocol_report
+        );
+        let mut locators = HashMap::new();
+        let mut next_locator = 0_u64;
+        let materialization = complete
+            .protocol_materialization_result("target:toml", |node| {
+                Some(
+                    locators
+                        .entry(node)
+                        .or_insert_with(|| {
+                            let locator = format!("toml:node:{next_locator}");
+                            next_locator += 1;
+                            locator
+                        })
+                        .clone(),
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            protocol::MaterializationResultMessage::from_value(&materialization.to_value())
+                .unwrap(),
+            materialization
+        );
     }
 
     #[test]
@@ -475,5 +704,39 @@ mod tests {
             panic!("JSON report expected")
         };
         assert_eq!(report.events().len(), 1);
+    }
+
+    #[test]
+    fn transformed_conversion_report_externalizes_both_authorized_events() {
+        let source = json::parse(
+            br#"{"name":"api"}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection =
+            ProjectionRequestBuilder::new(json::ProjectionTarget::ProjectAsEntryMappingV1)
+                .build()
+                .unwrap();
+        let ConversionResult::Complete(complete) =
+            convert_json(&source, &projection, &toml_request())
+        else {
+            panic!("complete transformed conversion expected")
+        };
+        let report = complete
+            .protocol_report("source:json", "target:toml")
+            .unwrap();
+        assert_eq!(
+            report.overall_fidelity(),
+            protocol::ConversionFidelityMessage::Transformed
+        );
+        assert_eq!(
+            report.projection_report().events()[0].code,
+            "json.projection.structure-reencoded@1"
+        );
+        assert_eq!(
+            report.materialization_report().events()[0].code,
+            "core.materialization.mapping-transformed@1"
+        );
     }
 }
