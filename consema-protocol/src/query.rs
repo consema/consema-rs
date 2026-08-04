@@ -544,6 +544,8 @@ const fn role_name(role: MatchRole) -> &'static str {
         MatchRole::TomlItem => "TomlItem",
         MatchRole::TomlEntry => "TomlEntry",
         MatchRole::TomlArrayElement => "TomlArrayElement",
+        MatchRole::JsonSyntaxPiece => "JsonSyntaxPiece",
+        MatchRole::TomlSyntaxPiece => "TomlSyntaxPiece",
     }
 }
 
@@ -558,6 +560,8 @@ fn parse_role(value: &str) -> Result<MatchRole, ProtocolError> {
         "TomlItem" => Ok(MatchRole::TomlItem),
         "TomlEntry" => Ok(MatchRole::TomlEntry),
         "TomlArrayElement" => Ok(MatchRole::TomlArrayElement),
+        "JsonSyntaxPiece" => Ok(MatchRole::JsonSyntaxPiece),
+        "TomlSyntaxPiece" => Ok(MatchRole::TomlSyntaxPiece),
         _ => Err(crate::schema::invalid("$.role", "unknown query match role")),
     }
 }
@@ -571,6 +575,8 @@ const fn is_native_role(role: MatchRole) -> bool {
             | MatchRole::TomlItem
             | MatchRole::TomlEntry
             | MatchRole::TomlArrayElement
+            | MatchRole::JsonSyntaxPiece
+            | MatchRole::TomlSyntaxPiece
     )
 }
 
