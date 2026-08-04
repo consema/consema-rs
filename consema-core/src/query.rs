@@ -1118,11 +1118,11 @@ impl Producer for ApplyProducer {
             if self.done {
                 return Ok(None);
             }
-            if let Some(iter) = &mut self.pending
-                && let Some(item) = iter.next()
-            {
-                self.count(context)?;
-                return Ok(Some(item));
+            if let Some(iter) = &mut self.pending {
+                if let Some(item) = iter.next() {
+                    self.count(context)?;
+                    return Ok(Some(item));
+                }
             }
             self.pending = None;
             let Some(item) = self.input.next(context)? else {
@@ -1405,26 +1405,26 @@ fn apply_portable_operator_items(
     match operator.id() {
         "core.try-object-entries" => {
             for item in input {
-                if let PortableMatch::Value { path, value } = item
-                    && let Some(entries) = value.as_object()
-                {
-                    for (ordinal, entry) in entries
-                        .iter()
-                        .take(max_results.saturating_add(1))
-                        .enumerate()
-                    {
-                        let value_path =
-                            path.child(ValuePathSegment::ObjectValue(entry.key().to_owned()));
-                        output.push(PortableMatch::ObjectEntry {
-                            location: AssociationLocation::new(
-                                path.clone(),
-                                ordinal as u64,
-                                AssociationRole::ObjectEntry,
-                            ),
-                            key: entry.key().to_owned(),
-                            value_path,
-                            value: entry.value().clone(),
-                        });
+                if let PortableMatch::Value { path, value } = item {
+                    if let Some(entries) = value.as_object() {
+                        for (ordinal, entry) in entries
+                            .iter()
+                            .take(max_results.saturating_add(1))
+                            .enumerate()
+                        {
+                            let value_path =
+                                path.child(ValuePathSegment::ObjectValue(entry.key().to_owned()));
+                            output.push(PortableMatch::ObjectEntry {
+                                location: AssociationLocation::new(
+                                    path.clone(),
+                                    ordinal as u64,
+                                    AssociationRole::ObjectEntry,
+                                ),
+                                key: entry.key().to_owned(),
+                                value_path,
+                                value: entry.value().clone(),
+                            });
+                        }
                     }
                 }
             }
@@ -1452,25 +1452,26 @@ fn apply_portable_operator_items(
         }
         "core.try-entry-mapping-entries" => {
             for item in input {
-                if let PortableMatch::Value { path, value } = item
-                    && let Some(entries) = value.as_entry_mapping()
-                {
-                    for (ordinal, entry) in entries
-                        .iter()
-                        .take(max_results.saturating_add(1))
-                        .enumerate()
-                    {
-                        output.push(PortableMatch::EntryMappingEntry {
-                            location: AssociationLocation::new(
-                                path.clone(),
-                                ordinal as u64,
-                                AssociationRole::EntryMappingEntry,
-                            ),
-                            key_path: path.child(ValuePathSegment::EntryKey(ordinal as u64)),
-                            key: entry.key().clone(),
-                            value_path: path.child(ValuePathSegment::EntryValue(ordinal as u64)),
-                            value: entry.value().clone(),
-                        });
+                if let PortableMatch::Value { path, value } = item {
+                    if let Some(entries) = value.as_entry_mapping() {
+                        for (ordinal, entry) in entries
+                            .iter()
+                            .take(max_results.saturating_add(1))
+                            .enumerate()
+                        {
+                            output.push(PortableMatch::EntryMappingEntry {
+                                location: AssociationLocation::new(
+                                    path.clone(),
+                                    ordinal as u64,
+                                    AssociationRole::EntryMappingEntry,
+                                ),
+                                key_path: path.child(ValuePathSegment::EntryKey(ordinal as u64)),
+                                key: entry.key().clone(),
+                                value_path: path
+                                    .child(ValuePathSegment::EntryValue(ordinal as u64)),
+                                value: entry.value().clone(),
+                            });
+                        }
                     }
                 }
             }
@@ -1500,18 +1501,18 @@ fn apply_portable_operator_items(
         }
         "core.try-sequence-elements" => {
             for item in input {
-                if let PortableMatch::Value { path, value } = item
-                    && let Some(elements) = value.as_sequence()
-                {
-                    for (index, element) in elements
-                        .iter()
-                        .take(max_results.saturating_add(1))
-                        .enumerate()
-                    {
-                        output.push(PortableMatch::Value {
-                            path: path.child(ValuePathSegment::SequenceElement(index as u64)),
-                            value: element.clone(),
-                        });
+                if let PortableMatch::Value { path, value } = item {
+                    if let Some(elements) = value.as_sequence() {
+                        for (index, element) in elements
+                            .iter()
+                            .take(max_results.saturating_add(1))
+                            .enumerate()
+                        {
+                            output.push(PortableMatch::Value {
+                                path: path.child(ValuePathSegment::SequenceElement(index as u64)),
+                                value: element.clone(),
+                            });
+                        }
                     }
                 }
             }

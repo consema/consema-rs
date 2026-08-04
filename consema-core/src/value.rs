@@ -356,10 +356,10 @@ fn add_signed_small(value: &BigInteger, amount: i64) -> BigInteger {
     if amount == 0 {
         return value.clone();
     }
-    if let Some(current) = value.to_i64()
-        && let Some(sum) = current.checked_add(amount)
-    {
-        return BigInteger::from(sum);
+    if let Some(current) = value.to_i64() {
+        if let Some(sum) = current.checked_add(amount) {
+            return BigInteger::from(sum);
+        }
     }
     let mut result = value.clone();
     if amount > 0 {

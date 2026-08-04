@@ -947,44 +947,44 @@ fn value_from_input(input: &PortableValue) -> Option<PortableValue> {
         value if value.as_integer().is_some() => Some(value.clone()),
         _ => {
             let entries = input.as_object()?;
-            if let Some(integer) = object_field(entries, "integer")
-                && let Some(text) = integer.as_string()
-            {
-                return Some(PortableValue::integer(
-                    BigInteger::parse_decimal(text).ok()?,
-                ));
-            }
-            if let Some(decimal) = object_field(entries, "decimal")
-                && let Some(text) = decimal.as_string()
-            {
-                return Some(PortableValue::decimal(
-                    Decimal::parse_json_number(text).ok()?,
-                ));
-            }
-            if let Some(string) = object_field(entries, "string")
-                && let Some(text) = string.as_string()
-            {
-                return Some(PortableValue::string(text));
-            }
-            if let Some(sequence) = object_field(entries, "sequence")
-                && let Some(elements) = sequence.as_sequence()
-            {
-                let mut builder = SequenceBuilder::new();
-                for element in elements {
-                    builder.push(value_from_input(element)?);
+            if let Some(integer) = object_field(entries, "integer") {
+                if let Some(text) = integer.as_string() {
+                    return Some(PortableValue::integer(
+                        BigInteger::parse_decimal(text).ok()?,
+                    ));
                 }
-                return Some(builder.build());
             }
-            if let Some(object) = object_field(entries, "object")
-                && let Some(members) = object.as_object()
-            {
-                let mut builder = ObjectBuilder::new();
-                for member in members {
-                    builder
-                        .insert(member.key(), value_from_input(member.value())?)
-                        .ok()?;
+            if let Some(decimal) = object_field(entries, "decimal") {
+                if let Some(text) = decimal.as_string() {
+                    return Some(PortableValue::decimal(
+                        Decimal::parse_json_number(text).ok()?,
+                    ));
                 }
-                return Some(builder.build());
+            }
+            if let Some(string) = object_field(entries, "string") {
+                if let Some(text) = string.as_string() {
+                    return Some(PortableValue::string(text));
+                }
+            }
+            if let Some(sequence) = object_field(entries, "sequence") {
+                if let Some(elements) = sequence.as_sequence() {
+                    let mut builder = SequenceBuilder::new();
+                    for element in elements {
+                        builder.push(value_from_input(element)?);
+                    }
+                    return Some(builder.build());
+                }
+            }
+            if let Some(object) = object_field(entries, "object") {
+                if let Some(members) = object.as_object() {
+                    let mut builder = ObjectBuilder::new();
+                    for member in members {
+                        builder
+                            .insert(member.key(), value_from_input(member.value())?)
+                            .ok()?;
+                    }
+                    return Some(builder.build());
+                }
             }
             // Bare object descriptor without a wrapping key.
             let mut builder = ObjectBuilder::new();

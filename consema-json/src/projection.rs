@@ -671,13 +671,13 @@ fn select_members(
     for name in names {
         *counts.entry(name).or_default() += 1;
     }
-    if let Some(name) = names.iter().find(|name| counts[name.as_str()] > 1)
-        && policy == DuplicateKeyPolicy::Reject
-    {
-        return Err(ProjectionFailure::DuplicateKeys {
-            node,
-            name: name.clone(),
-        });
+    if policy == DuplicateKeyPolicy::Reject {
+        if let Some(name) = names.iter().find(|name| counts[name.as_str()] > 1) {
+            return Err(ProjectionFailure::DuplicateKeys {
+                node,
+                name: name.clone(),
+            });
+        }
     }
     match policy {
         DuplicateKeyPolicy::Reject | DuplicateKeyPolicy::FirstWins => {
