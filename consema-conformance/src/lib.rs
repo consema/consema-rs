@@ -1,5 +1,6 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
+mod protocol_v1;
 mod toml_v1;
 
 use consema_core::{
@@ -17,6 +18,7 @@ use consema_pvce::{DecodeError, DecodeLimits, decode, encode};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+pub use protocol_v1::{PROTOCOL_V1_VECTORS_JSON, run_protocol_v1};
 pub use toml_v1::{TOML_V1_VECTORS_JSON, run_toml_v1};
 
 /// Embedded language-neutral suite bytes.
