@@ -5,6 +5,7 @@
 //! `core.portable-value-json@1` representation without host-language object
 //! serialization.
 
+mod change;
 mod contract;
 mod diagnostic;
 mod error;
@@ -40,3 +41,4 @@ pub use value_transport::{decode_json, decode_pvce, encode_json, encode_pvce};
 
 /// Canonical tagged JSON transport schema.
 pub const PORTABLE_VALUE_JSON_SCHEMA: &str = "core.portable-value-json@1";
+pub use change::{ChangeSetMessage, NodeMappingMessage, SourceEditMessage};
