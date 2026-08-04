@@ -1232,6 +1232,7 @@ fn string_error(error: impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use consema_core::StableFailure;
 
     #[test]
     fn published_semantic_model_v6_suite_is_conformant() {
@@ -1269,5 +1270,71 @@ mod tests {
                 .any(|(id, _)| id == "source-encoding.mandatory-code-pages"),
             "{report:#?}"
         );
+    }
+
+    #[test]
+    fn line_format_internal_failure_codes_are_v6_registry_bound() {
+        let registry = ErrorCodeRegistry::v6();
+        let ini_failures = [
+            consema::ini::EditFailure::RecoveredDocument,
+            consema::ini::EditFailure::WrongSnapshot,
+            consema::ini::EditFailure::WrongRole,
+            consema::ini::EditFailure::DuplicateTarget,
+            consema::ini::EditFailure::OverlappingOwnership,
+            consema::ini::EditFailure::AncestorDescendantConflict,
+            consema::ini::EditFailure::PlacementAnchorRemoved,
+            consema::ini::EditFailure::TargetNotFound,
+            consema::ini::EditFailure::InvalidPlacement,
+            consema::ini::EditFailure::InvalidName,
+            consema::ini::EditFailure::NameCollision,
+            consema::ini::EditFailure::InvalidKey,
+            consema::ini::EditFailure::DuplicateKey,
+            consema::ini::EditFailure::KeyCollision,
+            consema::ini::EditFailure::RepresentationIncompatible,
+            consema::ini::EditFailure::ExactLiteralRequiresLiteralOperation,
+            consema::ini::EditFailure::UnrepresentableValue,
+            consema::ini::EditFailure::EncodingUnrepresentable,
+            consema::ini::EditFailure::InvalidLiteral,
+            consema::ini::EditFailure::ResourceLimit("test"),
+            consema::ini::EditFailure::NewDocumentFormationFailed,
+        ];
+        let properties_failures = [
+            consema::properties::EditFailure::RecoveredDocument,
+            consema::properties::EditFailure::WrongSnapshot,
+            consema::properties::EditFailure::WrongRole,
+            consema::properties::EditFailure::DuplicateTarget,
+            consema::properties::EditFailure::OverlappingOwnership,
+            consema::properties::EditFailure::InvalidPlacement,
+            consema::properties::EditFailure::PlacementAnchorRemoved,
+            consema::properties::EditFailure::TargetNotFound,
+            consema::properties::EditFailure::EncodingUnrepresentable,
+            consema::properties::EditFailure::InvalidLiteral,
+            consema::properties::EditFailure::ResourceLimit("test"),
+            consema::properties::EditFailure::NewDocumentFormationFailed,
+        ];
+        for failure in ini_failures
+            .iter()
+            .map(StableFailure::diagnostic_code)
+            .chain(
+                properties_failures
+                    .iter()
+                    .map(StableFailure::diagnostic_code),
+            )
+        {
+            assert!(
+                registry.contains(failure),
+                "unregistered failure: {failure}"
+            );
+        }
+        for code in [
+            "ini.projection.incomplete-document@1",
+            "ini.projection.collision@1",
+            "core.projection.resource-limit@1",
+            "core.projection.target-not-applicable@1",
+            "java-properties.projection.incomplete-document@1",
+            "java-properties.projection.unpaired-surrogate@1",
+        ] {
+            assert!(registry.contains(code), "unregistered diagnostic: {code}");
+        }
     }
 }

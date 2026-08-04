@@ -857,9 +857,21 @@ fn failed(document: &Document, failure: ProjectionFailure) -> ProjectionResult {
         None,
         0,
     );
-    diagnostic
-        .arguments
-        .insert("failure".to_owned(), format!("{failure:?}"));
+    diagnostic.arguments.insert(
+        "reason".to_owned(),
+        match &failure {
+            ProjectionFailure::RecoveredDocument => "incomplete-document",
+            ProjectionFailure::Collision { .. } => "collision",
+            ProjectionFailure::ResourceLimit(_) => "resource-limit",
+            ProjectionFailure::CoreInvariant => "target-not-applicable",
+        }
+        .to_owned(),
+    );
+    if let ProjectionFailure::ResourceLimit(limit) = &failure {
+        diagnostic
+            .arguments
+            .insert("limit".to_owned(), (*limit).to_owned());
+    }
     let profile = document.profile();
     diagnostic.arguments.insert(
         "profile".to_owned(),
@@ -873,10 +885,10 @@ fn failed(document: &Document, failure: ProjectionFailure) -> ProjectionResult {
 
 const fn failure_code(failure: &ProjectionFailure) -> &'static str {
     match failure {
-        ProjectionFailure::RecoveredDocument => "ini.projection.recovered-document@1",
+        ProjectionFailure::RecoveredDocument => "ini.projection.incomplete-document@1",
         ProjectionFailure::Collision { .. } => "ini.projection.collision@1",
-        ProjectionFailure::ResourceLimit(_) => "ini.projection.resource-limit@1",
-        ProjectionFailure::CoreInvariant => "ini.projection.core-invariant@1",
+        ProjectionFailure::ResourceLimit(_) => "core.projection.resource-limit@1",
+        ProjectionFailure::CoreInvariant => "core.projection.target-not-applicable@1",
     }
 }
 
@@ -1047,10 +1059,22 @@ mod tests {
     #[test]
     fn recovered_and_each_projection_limit_fail_without_values() {
         let recovered = parse_profile(IniProfile::PortableV1, "[s]\nbare\n");
-        assert!(matches!(
-            recovered.project(ProjectionRequest::best_exact_entry_mapping()),
-            ProjectionResult::Failed(_)
-        ));
+        let ProjectionResult::Failed(failed) =
+            recovered.project(ProjectionRequest::best_exact_entry_mapping())
+        else {
+            panic!("recovered projection must fail")
+        };
+        assert_eq!(
+            failed.diagnostics[0].code,
+            "ini.projection.incomplete-document@1"
+        );
+        assert_eq!(
+            failed.diagnostics[0]
+                .arguments
+                .get("reason")
+                .map(String::as_str),
+            Some("incomplete-document")
+        );
 
         let complete = parse_profile(IniProfile::PortableV1, "[s]\na=1\n");
         for limits in [
@@ -1067,10 +1091,16 @@ mod tests {
                 ..ProjectionLimits::default()
             },
         ] {
-            assert!(matches!(
-                complete.project(ProjectionRequest::best_exact_entry_mapping().with_limits(limits)),
-                ProjectionResult::Failed(_)
-            ));
+            let ProjectionResult::Failed(failed) =
+                complete.project(ProjectionRequest::best_exact_entry_mapping().with_limits(limits))
+            else {
+                panic!("projection limit must fail")
+            };
+            assert_eq!(
+                failed.diagnostics[0].code,
+                "core.projection.resource-limit@1"
+            );
+            assert!(!failed.diagnostics[0].arguments.contains_key("failure"));
         }
 
         let duplicate = parse_profile(IniProfile::WindowsV1, "[s]\r\na=1\r\nA=2\r\n");

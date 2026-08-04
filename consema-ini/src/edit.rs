@@ -274,13 +274,17 @@ pub enum EditFailure {
     PlacementAnchorRemoved,
     /// A target or placement anchor does not exist in its declared container.
     TargetNotFound,
+    /// A valid entry anchor belongs to another section container.
+    InvalidPlacement,
     /// A section name is invalid under the selected profile.
     InvalidName,
     /// A strict profile would become ambiguous after insertion or rename.
     NameCollision,
     /// An entry key is invalid under the selected profile.
     InvalidKey,
-    /// A strict profile would contain a duplicate or comparison-equivalent key.
+    /// A strict profile would contain an exact duplicate key.
+    DuplicateKey,
+    /// Python `optionxform` makes two distinctly spelled keys equivalent.
     KeyCollision,
     /// `PreserveCompatible` cannot retain the target representation.
     RepresentationIncompatible,
@@ -1006,7 +1010,7 @@ impl Document {
             .iter()
             .copied()
             .find(|entry| entry.node_ref() == target && entry.section() == section)
-            .ok_or(EditFailure::TargetNotFound)
+            .ok_or(EditFailure::InvalidPlacement)
     }
 
     fn validate_entry_key(&self, key: &str) -> Result<(), EditFailure> {
@@ -1049,12 +1053,16 @@ impl Document {
         } else {
             key.to_owned()
         };
-        if self.entries().iter().any(|entry| {
+        if let Some(entry) = self.entries().iter().find(|entry| {
             entry.section() == section
                 && Some(entry.node_ref()) != except
                 && entry.comparison_key() == comparison
         }) {
-            Err(EditFailure::KeyCollision)
+            Err(if entry.key() == key {
+                EditFailure::DuplicateKey
+            } else {
+                EditFailure::KeyCollision
+            })
         } else {
             Ok(())
         }
@@ -1724,9 +1732,11 @@ impl consema_core::StableFailure for EditFailure {
             | Self::OverlappingOwnership
             | Self::AncestorDescendantConflict
             | Self::PlacementAnchorRemoved
+            | Self::InvalidPlacement
             | Self::InvalidName
             | Self::NameCollision
             | Self::InvalidKey
+            | Self::DuplicateKey
             | Self::KeyCollision => consema_core::FailureKind::InvalidInput,
             Self::RecoveredDocument
             | Self::RepresentationIncompatible
@@ -1743,7 +1753,7 @@ impl consema_core::StableFailure for EditFailure {
 
     fn diagnostic_code(&self) -> &str {
         match self {
-            Self::RecoveredDocument => "ini.edit.recovered-document@1",
+            Self::RecoveredDocument => "core.edit.incomplete-target@1",
             Self::WrongSnapshot => "core.edit.wrong-snapshot@1",
             Self::WrongRole => "core.edit.wrong-role@1",
             Self::DuplicateTarget
@@ -1751,17 +1761,18 @@ impl consema_core::StableFailure for EditFailure {
             | Self::AncestorDescendantConflict
             | Self::PlacementAnchorRemoved => "core.edit.conflicting-edits@1",
             Self::TargetNotFound => "core.edit.target-not-found@1",
-            Self::InvalidName => "ini.edit.invalid-name@1",
-            Self::NameCollision => "ini.edit.name-collision@1",
-            Self::InvalidKey => "ini.edit.invalid-key@1",
-            Self::KeyCollision => "ini.edit.key-collision@1",
-            Self::RepresentationIncompatible => "core.edit.representation-incompatible@1",
+            Self::InvalidPlacement => "ini.edit.invalid-placement@1",
+            Self::InvalidName | Self::InvalidKey => "ini.edit.invalid-name@1",
+            Self::NameCollision | Self::DuplicateKey => "core.edit.duplicate-key@1",
+            Self::KeyCollision => "ini.edit.case-collision@1",
+            Self::RepresentationIncompatible | Self::EncodingUnrepresentable => {
+                "core.edit.representation-incompatible@1"
+            }
             Self::ExactLiteralRequiresLiteralOperation => {
                 "core.edit.exact-literal-requires-literal@1"
             }
-            Self::UnrepresentableValue => "ini.edit.unrepresentable-value@1",
-            Self::EncodingUnrepresentable => "ini.edit.encoding-unrepresentable@1",
-            Self::InvalidLiteral => "ini.edit.invalid-literal@1",
+            Self::UnrepresentableValue => "core.edit.unsupported-value@1",
+            Self::InvalidLiteral => "core.edit.invalid-literal@1",
             Self::ResourceLimit(_) => "core.edit.resource-limit@1",
             Self::NewDocumentFormationFailed => "core.edit.formation-failed@1",
         }
@@ -1931,8 +1942,74 @@ mod tests {
         ));
         assert_eq!(
             EditFailure::RecoveredDocument.diagnostic_code(),
-            "ini.edit.recovered-document@1"
+            "core.edit.incomplete-target@1"
         );
+    }
+
+    #[test]
+    fn every_edit_failure_maps_to_a_frozen_v6_or_common_code() {
+        let cases = [
+            (
+                EditFailure::RecoveredDocument,
+                "core.edit.incomplete-target@1",
+            ),
+            (EditFailure::WrongSnapshot, "core.edit.wrong-snapshot@1"),
+            (EditFailure::WrongRole, "core.edit.wrong-role@1"),
+            (
+                EditFailure::DuplicateTarget,
+                "core.edit.conflicting-edits@1",
+            ),
+            (
+                EditFailure::OverlappingOwnership,
+                "core.edit.conflicting-edits@1",
+            ),
+            (
+                EditFailure::AncestorDescendantConflict,
+                "core.edit.conflicting-edits@1",
+            ),
+            (
+                EditFailure::PlacementAnchorRemoved,
+                "core.edit.conflicting-edits@1",
+            ),
+            (EditFailure::TargetNotFound, "core.edit.target-not-found@1"),
+            (
+                EditFailure::InvalidPlacement,
+                "ini.edit.invalid-placement@1",
+            ),
+            (EditFailure::InvalidName, "ini.edit.invalid-name@1"),
+            (EditFailure::NameCollision, "core.edit.duplicate-key@1"),
+            (EditFailure::InvalidKey, "ini.edit.invalid-name@1"),
+            (EditFailure::DuplicateKey, "core.edit.duplicate-key@1"),
+            (EditFailure::KeyCollision, "ini.edit.case-collision@1"),
+            (
+                EditFailure::RepresentationIncompatible,
+                "core.edit.representation-incompatible@1",
+            ),
+            (
+                EditFailure::ExactLiteralRequiresLiteralOperation,
+                "core.edit.exact-literal-requires-literal@1",
+            ),
+            (
+                EditFailure::UnrepresentableValue,
+                "core.edit.unsupported-value@1",
+            ),
+            (
+                EditFailure::EncodingUnrepresentable,
+                "core.edit.representation-incompatible@1",
+            ),
+            (EditFailure::InvalidLiteral, "core.edit.invalid-literal@1"),
+            (
+                EditFailure::ResourceLimit("test"),
+                "core.edit.resource-limit@1",
+            ),
+            (
+                EditFailure::NewDocumentFormationFailed,
+                "core.edit.formation-failed@1",
+            ),
+        ];
+        for (failure, code) in cases {
+            assert_eq!(failure.diagnostic_code(), code);
+        }
     }
 
     #[test]
@@ -2308,7 +2385,14 @@ mod tests {
         );
         assert!(matches!(
             document.commit(&cross_section.build()),
-            Err(EditFailure::TargetNotFound)
+            Err(EditFailure::InvalidPlacement)
+        ));
+
+        let mut duplicate = EditTransactionBuilder::new(&document);
+        duplicate.insert_entry(section, "Key", "v", AssociationPlacement::End);
+        assert!(matches!(
+            document.commit(&duplicate.build()),
+            Err(EditFailure::DuplicateKey)
         ));
 
         let mut removed_anchor = EditTransactionBuilder::new(&document);
