@@ -25,7 +25,7 @@ impl Default for ProtocolLimits {
             max_nodes: 1_000_000,
             max_container_entries: 1_000_000,
             max_blob_bytes: 64 * 1024 * 1024,
-            max_integer_bytes: 1024 * 1024,
+            max_integer_bytes: 1024,
         }
     }
 }

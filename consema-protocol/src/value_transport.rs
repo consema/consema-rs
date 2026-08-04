@@ -1086,5 +1086,20 @@ mod tests {
             .kind(),
             ProtocolErrorKind::ResourceLimit
         );
+
+        let integer_limits = ProtocolLimits {
+            max_integer_bytes: 4,
+            ..ProtocolLimits::default()
+        };
+        let oversized_integer = format!(
+            "{{\"schema\":\"core.portable-value-json@1\",\"value\":{{\"type\":\"Integer\",\"value\":\"{}\"}}}}",
+            "9".repeat(15)
+        );
+        assert_eq!(
+            decode_json(oversized_integer.as_bytes(), integer_limits)
+                .unwrap_err()
+                .kind(),
+            ProtocolErrorKind::ResourceLimit
+        );
     }
 }
