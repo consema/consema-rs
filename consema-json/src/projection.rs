@@ -444,6 +444,7 @@ impl ProjectionContext<'_> {
             InternalValueKind::Boolean(value) => Ok(PortableValue::boolean(*value)),
             InternalValueKind::Integer(value) => Ok(PortableValue::integer(value.clone())),
             InternalValueKind::Decimal(value) => Ok(PortableValue::decimal(value.clone())),
+            InternalValueKind::BinaryFloat64(value) => Ok(PortableValue::binary_float64(*value)),
             InternalValueKind::String(value) => Ok(PortableValue::string(value.as_str())),
             InternalValueKind::Array(elements) => {
                 let mut builder = SequenceBuilder::new();

@@ -2,7 +2,9 @@ use crate::{
     Document, ElementEntity, Entity, InternalValueKind, JsonProfile, JsonSyntaxKind, MemberEntity,
     SemanticUnavailable, ValueEntity,
 };
-use consema_core::{BigInteger, Decimal, Diagnostic, DiagnosticCategory, DiagnosticSeverity};
+use consema_core::{
+    BigInteger, BinaryFloat64, Decimal, Diagnostic, DiagnosticCategory, DiagnosticSeverity,
+};
 use consema_document::{
     DocumentAuthority, FatalFormationFailure, FormationStatus, LosslessStructuralIndex,
     ParseLimits, SourceSnapshot, StructuralPiece, StructuralPieceKind,
@@ -19,6 +21,7 @@ enum TokenKind {
     Colon,
     Comma,
     String,
+    Identifier,
     Number,
     True,
     False,
@@ -56,6 +59,7 @@ impl LexemeClass {
             Self::Token(TokenKind::Colon) => JsonSyntaxKind::Colon,
             Self::Token(TokenKind::Comma) => JsonSyntaxKind::Comma,
             Self::Token(TokenKind::String) => JsonSyntaxKind::String,
+            Self::Token(TokenKind::Identifier) => JsonSyntaxKind::Identifier,
             Self::Token(TokenKind::Number) => JsonSyntaxKind::Number,
             Self::Token(TokenKind::True) => JsonSyntaxKind::True,
             Self::Token(TokenKind::False) => JsonSyntaxKind::False,
@@ -174,6 +178,14 @@ fn lex(
     limits: ParseLimits,
     diagnostics: &mut DiagnosticSink,
 ) -> Result<Lexed, FatalFormationFailure> {
+    if profile.is_json5() {
+        return lex_json5(
+            std::str::from_utf8(bytes).expect("source snapshot validated UTF-8"),
+            authority,
+            limits,
+            diagnostics,
+        );
+    }
     let mut lexemes = Vec::new();
     let mut tokens = Vec::new();
     let mut offset = 0;
@@ -389,6 +401,370 @@ fn lex(
     })
 }
 
+fn lex_json5(
+    source: &str,
+    authority: &DocumentAuthority,
+    limits: ParseLimits,
+    diagnostics: &mut DiagnosticSink,
+) -> Result<Lexed, FatalFormationFailure> {
+    let mut lexemes = Vec::new();
+    let mut tokens = Vec::new();
+    let mut offset = 0;
+    let mut recovered = false;
+    if source.starts_with('\u{feff}') {
+        lexemes.push(Lexeme {
+            start: 0,
+            end: '\u{feff}'.len_utf8(),
+            class: LexemeClass::Trivia(JsonSyntaxKind::Bom),
+        });
+        offset = '\u{feff}'.len_utf8();
+    }
+    while offset < source.len() {
+        let start = offset;
+        let character = char_at(source, offset);
+        let class = if is_json5_whitespace(character) {
+            offset += character.len_utf8();
+            while offset < source.len() && is_json5_whitespace(char_at(source, offset)) {
+                offset += char_at(source, offset).len_utf8();
+            }
+            LexemeClass::Trivia(JsonSyntaxKind::Whitespace)
+        } else if source[start..].starts_with("//") {
+            offset += 2;
+            while offset < source.len() && !is_json5_line_terminator(char_at(source, offset)) {
+                offset += char_at(source, offset).len_utf8();
+            }
+            LexemeClass::Trivia(JsonSyntaxKind::LineComment)
+        } else if source[start..].starts_with("/*") {
+            offset += 2;
+            let mut closed = false;
+            while offset < source.len() {
+                if source[offset..].starts_with("*/") {
+                    offset += 2;
+                    closed = true;
+                    break;
+                }
+                offset += char_at(source, offset).len_utf8();
+            }
+            if closed {
+                LexemeClass::Trivia(JsonSyntaxKind::BlockComment)
+            } else {
+                recovered = true;
+                diagnostics.push(source_diagnostic(
+                    authority,
+                    "json.syntax.unterminated-block-comment@1",
+                    DiagnosticCategory::Syntax,
+                    start,
+                    offset,
+                ));
+                LexemeClass::Error
+            }
+        } else {
+            match character {
+                '{' => single_token(TokenKind::LeftBrace, &mut offset),
+                '}' => single_token(TokenKind::RightBrace, &mut offset),
+                '[' => single_token(TokenKind::LeftBracket, &mut offset),
+                ']' => single_token(TokenKind::RightBracket, &mut offset),
+                ':' => single_token(TokenKind::Colon, &mut offset),
+                ',' => single_token(TokenKind::Comma, &mut offset),
+                '\'' | '"' => {
+                    let quote = character;
+                    offset += quote.len_utf8();
+                    let mut closed = false;
+                    while offset < source.len() {
+                        let current = char_at(source, offset);
+                        offset += current.len_utf8();
+                        if current == '\\' {
+                            if offset < source.len() {
+                                let escaped = char_at(source, offset);
+                                offset += escaped.len_utf8();
+                                if escaped == '\r' && source[offset..].starts_with('\n') {
+                                    offset += 1;
+                                }
+                            }
+                        } else if current == quote {
+                            closed = true;
+                            break;
+                        }
+                    }
+                    if closed {
+                        LexemeClass::Token(TokenKind::String)
+                    } else {
+                        recovered = true;
+                        diagnostics.push(source_diagnostic(
+                            authority,
+                            "json.syntax.unterminated-string@1",
+                            DiagnosticCategory::Syntax,
+                            start,
+                            offset,
+                        ));
+                        LexemeClass::Error
+                    }
+                }
+                '+' | '-' | '.' | '0'..='9'
+                    if character != '.'
+                        || source[start + 1..]
+                            .chars()
+                            .next()
+                            .is_some_and(|next| next.is_ascii_digit()) =>
+                {
+                    offset = scan_json5_number_candidate(source, start);
+                    if valid_json5_number(&source[start..offset]) {
+                        LexemeClass::Token(TokenKind::Number)
+                    } else {
+                        recovered = true;
+                        diagnostics.push(source_diagnostic(
+                            authority,
+                            "json.syntax.invalid-number@1",
+                            DiagnosticCategory::Syntax,
+                            start,
+                            offset,
+                        ));
+                        LexemeClass::Error
+                    }
+                }
+                '\\' | '$' | '_' if character == '\\' || is_json5_identifier_start(character) => {
+                    let (end, valid) = scan_json5_identifier(source, start);
+                    offset = end;
+                    if valid {
+                        LexemeClass::Token(TokenKind::Identifier)
+                    } else {
+                        recovered = true;
+                        diagnostics.push(source_diagnostic(
+                            authority,
+                            "json5.syntax.invalid-identifier@1",
+                            DiagnosticCategory::Syntax,
+                            start,
+                            offset,
+                        ));
+                        LexemeClass::Error
+                    }
+                }
+                _ if is_json5_identifier_start(character) => {
+                    let (end, valid) = scan_json5_identifier(source, start);
+                    offset = end;
+                    debug_assert!(valid);
+                    LexemeClass::Token(TokenKind::Identifier)
+                }
+                _ => {
+                    offset += character.len_utf8();
+                    recovered = true;
+                    diagnostics.push(source_diagnostic(
+                        authority,
+                        "json.syntax.unexpected-character@1",
+                        DiagnosticCategory::Syntax,
+                        start,
+                        offset,
+                    ));
+                    LexemeClass::Error
+                }
+            }
+        };
+        lexemes.push(Lexeme {
+            start,
+            end: offset,
+            class,
+        });
+        if let LexemeClass::Token(kind) = class {
+            tokens.push(Token {
+                kind,
+                start,
+                end: offset,
+            });
+        }
+        if lexemes.len() > limits.max_token_count {
+            return Err(FatalFormationFailure::resource_limit(
+                "token-count",
+                lexemes.len(),
+                limits.max_token_count,
+            ));
+        }
+    }
+    Ok(Lexed {
+        lexemes,
+        tokens,
+        recovered,
+    })
+}
+
+fn char_at(source: &str, offset: usize) -> char {
+    source[offset..]
+        .chars()
+        .next()
+        .expect("offset is inside source and on a scalar boundary")
+}
+
+const fn is_json5_line_terminator(character: char) -> bool {
+    matches!(character, '\n' | '\r' | '\u{2028}' | '\u{2029}')
+}
+
+const fn is_json5_whitespace(character: char) -> bool {
+    matches!(
+        character,
+        '\u{0009}'
+            | '\u{000a}'
+            | '\u{000b}'
+            | '\u{000c}'
+            | '\u{000d}'
+            | '\u{0020}'
+            | '\u{00a0}'
+            | '\u{1680}'
+            | '\u{2000}'
+            ..='\u{200a}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202f}'
+                | '\u{205f}'
+                | '\u{3000}'
+                | '\u{feff}'
+    )
+}
+
+fn is_json5_identifier_start(character: char) -> bool {
+    matches!(character, '$' | '_') || unicode_id_start::is_id_start(character)
+}
+
+fn is_json5_identifier_continue(character: char) -> bool {
+    matches!(character, '$' | '_' | '\u{200c}' | '\u{200d}')
+        || unicode_id_start::is_id_continue(character)
+}
+
+fn scan_json5_identifier(source: &str, start: usize) -> (usize, bool) {
+    let mut offset = start;
+    let mut first = true;
+    let mut valid = true;
+    while offset < source.len() {
+        let character = char_at(source, offset);
+        let (decoded, width) = if character == '\\' {
+            if let Some(decoded) = decode_identifier_escape(&source[offset..]) {
+                (decoded, 6)
+            } else {
+                valid = false;
+                offset = scan_json5_invalid_word(source, offset);
+                break;
+            }
+        } else {
+            (character, character.len_utf8())
+        };
+        let permitted = if first {
+            is_json5_identifier_start(decoded)
+        } else {
+            is_json5_identifier_continue(decoded)
+        };
+        if !permitted {
+            if first || character == '\\' {
+                valid = false;
+                offset = scan_json5_invalid_word(source, offset);
+            }
+            break;
+        }
+        offset += width;
+        first = false;
+    }
+    (offset, valid && !first)
+}
+
+fn scan_json5_invalid_word(source: &str, start: usize) -> usize {
+    let mut offset = start;
+    while offset < source.len() {
+        let character = char_at(source, offset);
+        if is_json5_whitespace(character)
+            || matches!(
+                character,
+                '{' | '}' | '[' | ']' | ':' | ',' | '/' | '\'' | '"'
+            )
+        {
+            break;
+        }
+        offset += character.len_utf8();
+    }
+    offset.max(start + 1)
+}
+
+fn decode_identifier_escape(source: &str) -> Option<char> {
+    let bytes = source.as_bytes();
+    if bytes.get(..2) != Some(b"\\u") || bytes.len() < 6 {
+        return None;
+    }
+    let mut value = 0_u32;
+    for byte in &bytes[2..6] {
+        value = value.checked_mul(16)? + char::from(*byte).to_digit(16)?;
+    }
+    char::from_u32(value)
+}
+
+fn scan_json5_number_candidate(source: &str, start: usize) -> usize {
+    let mut offset = start;
+    while offset < source.len() {
+        let character = char_at(source, offset);
+        if !(character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.' | '_')) {
+            break;
+        }
+        offset += character.len_utf8();
+    }
+    offset
+}
+
+fn valid_json5_number(text: &str) -> bool {
+    let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+    if matches!(unsigned, "Infinity" | "NaN") {
+        return true;
+    }
+    if let Some(hex) = unsigned
+        .strip_prefix("0x")
+        .or_else(|| unsigned.strip_prefix("0X"))
+    {
+        return !hex.is_empty() && hex.bytes().all(|byte| byte.is_ascii_hexdigit());
+    }
+    let bytes = unsigned.as_bytes();
+    let mut index = 0;
+    if bytes.get(index) == Some(&b'.') {
+        index += 1;
+        let start = index;
+        while matches!(bytes.get(index), Some(b'0'..=b'9')) {
+            index += 1;
+        }
+        if index == start {
+            return false;
+        }
+    } else {
+        match bytes.get(index) {
+            Some(b'0') => {
+                index += 1;
+                if matches!(bytes.get(index), Some(b'0'..=b'9')) {
+                    return false;
+                }
+            }
+            Some(b'1'..=b'9') => {
+                index += 1;
+                while matches!(bytes.get(index), Some(b'0'..=b'9')) {
+                    index += 1;
+                }
+            }
+            _ => return false,
+        }
+        if bytes.get(index) == Some(&b'.') {
+            index += 1;
+            while matches!(bytes.get(index), Some(b'0'..=b'9')) {
+                index += 1;
+            }
+        }
+    }
+    if matches!(bytes.get(index), Some(b'e' | b'E')) {
+        index += 1;
+        if matches!(bytes.get(index), Some(b'+' | b'-')) {
+            index += 1;
+        }
+        let exponent_start = index;
+        while matches!(bytes.get(index), Some(b'0'..=b'9')) {
+            index += 1;
+        }
+        if index == exponent_start {
+            return false;
+        }
+    }
+    index == bytes.len()
+}
+
 fn single_token(kind: TokenKind, offset: &mut usize) -> LexemeClass {
     *offset += 1;
     LexemeClass::Token(kind)
@@ -493,7 +869,9 @@ impl Parser<'_> {
             TokenKind::Number => {
                 self.position += 1;
                 let text = &self.source[token.start..token.end];
-                let kind = if text.contains(['.', 'e', 'E']) {
+                let kind = if self.profile.is_json5() {
+                    parse_json5_number(text).expect("lexer validated JSON5 number")
+                } else if text.contains(['.', 'e', 'E']) {
                     InternalValueKind::Decimal(
                         Decimal::parse_json_number(text).expect("lexer validated number"),
                     )
@@ -506,8 +884,19 @@ impl Parser<'_> {
             }
             TokenKind::String => {
                 self.position += 1;
-                if let Ok(value) = decode_json_string(&self.source[token.start..token.end]) {
-                    self.alloc_scalar(token, InternalValueKind::String(value))
+                if let Ok(decoded) =
+                    decode_json_string(&self.source[token.start..token.end], self.profile)
+                {
+                    if decoded.has_unescaped_line_separator {
+                        self.diagnostics.push(source_warning(
+                            self.authority,
+                            "json5.string.unescaped-line-separator@1",
+                            DiagnosticCategory::Conformance,
+                            token.start,
+                            token.end,
+                        ));
+                    }
+                    self.alloc_scalar(token, InternalValueKind::String(decoded.value))
                 } else {
                     self.syntax_diagnostic(
                         "json.syntax.invalid-string-escape@1",
@@ -523,6 +912,32 @@ impl Parser<'_> {
                         InternalValueKind::Unavailable(SemanticUnavailable::InvalidLiteral),
                     )
                 }
+            }
+            TokenKind::Identifier if self.profile.is_json5() => {
+                self.position += 1;
+                let text = decode_json5_identifier(&self.source[token.start..token.end])
+                    .expect("lexer validated identifier");
+                let kind = match text.as_str() {
+                    "null" => InternalValueKind::Null,
+                    "true" => InternalValueKind::Boolean(true),
+                    "false" => InternalValueKind::Boolean(false),
+                    "Infinity" => InternalValueKind::BinaryFloat64(BinaryFloat64::from_bits(
+                        0x7ff0_0000_0000_0000,
+                    )),
+                    "NaN" => InternalValueKind::BinaryFloat64(BinaryFloat64::from_bits(
+                        0x7ff8_0000_0000_0000,
+                    )),
+                    _ => {
+                        self.syntax_diagnostic(
+                            "json.syntax.expected-value@1",
+                            token.start,
+                            token.end,
+                        );
+                        self.recovered = true;
+                        InternalValueKind::Unavailable(SemanticUnavailable::ErrorRegion)
+                    }
+                };
+                self.alloc_scalar(token, kind)
             }
             TokenKind::LeftBrace => self.parse_object(depth),
             TokenKind::LeftBracket => self.parse_array(depth),
@@ -560,11 +975,11 @@ impl Parser<'_> {
                 break;
             }
             let ordinal = members.len();
-            let key = if self
-                .peek()
-                .is_some_and(|token| token.kind == TokenKind::String)
-            {
-                self.parse_value(depth + 1)?
+            let key = if self.peek().is_some_and(|token| {
+                token.kind == TokenKind::String
+                    || (self.profile.is_json5() && token.kind == TokenKind::Identifier)
+            }) {
+                self.parse_object_key(depth + 1)?
             } else {
                 let offset = self.current_offset();
                 self.syntax_diagnostic("json.syntax.expected-object-key@1", offset, offset);
@@ -639,7 +1054,10 @@ impl Parser<'_> {
             self.syntax_diagnostic("json.syntax.missing-comma@1", offset, offset);
             self.recovered = true;
             if self.peek().is_some_and(|token| {
-                !matches!(token.kind, TokenKind::String | TokenKind::RightBrace)
+                !matches!(
+                    token.kind,
+                    TokenKind::String | TokenKind::Identifier | TokenKind::RightBrace
+                )
             }) {
                 self.position += 1;
             }
@@ -718,6 +1136,18 @@ impl Parser<'_> {
             self.syntax_diagnostic("json.syntax.missing-comma@1", offset, offset);
             self.recovered = true;
         }
+    }
+
+    fn parse_object_key(&mut self, depth: usize) -> Result<usize, FatalFormationFailure> {
+        let token = self.peek().expect("caller checked object key");
+        if token.kind == TokenKind::String {
+            return self.parse_value(depth);
+        }
+        debug_assert!(self.profile.is_json5() && token.kind == TokenKind::Identifier);
+        self.position += 1;
+        let name = decode_json5_identifier(&self.source[token.start..token.end])
+            .expect("lexer validated identifier");
+        self.alloc_scalar(token, InternalValueKind::String(name))
     }
 
     fn alloc_scalar(
@@ -800,17 +1230,28 @@ impl Parser<'_> {
     }
 }
 
-fn decode_json_string(literal: &str) -> Result<String, ()> {
+struct DecodedString {
+    value: String,
+    has_unescaped_line_separator: bool,
+}
+
+fn decode_json_string(literal: &str, profile: JsonProfile) -> Result<DecodedString, ()> {
+    let quote = literal.chars().next().ok_or(())?;
+    if quote != '"' && !(profile.is_json5() && quote == '\'') {
+        return Err(());
+    }
     let inner = literal
-        .strip_prefix('"')
-        .and_then(|text| text.strip_suffix('"'))
+        .strip_prefix(quote)
+        .and_then(|text| text.strip_suffix(quote))
         .ok_or(())?;
     let mut output = String::new();
+    let mut has_unescaped_line_separator = false;
     let mut chars = inner.chars().peekable();
     while let Some(character) = chars.next() {
         if character == '\\' {
             match chars.next().ok_or(())? {
                 '"' => output.push('"'),
+                '\'' if profile.is_json5() => output.push('\''),
                 '\\' => output.push('\\'),
                 '/' => output.push('/'),
                 'b' => output.push('\u{0008}'),
@@ -818,6 +1259,17 @@ fn decode_json_string(literal: &str) -> Result<String, ()> {
                 'n' => output.push('\n'),
                 'r' => output.push('\r'),
                 't' => output.push('\t'),
+                'v' if profile.is_json5() => output.push('\u{000b}'),
+                '0' if profile.is_json5() => {
+                    if chars.peek().is_some_and(char::is_ascii_digit) {
+                        return Err(());
+                    }
+                    output.push('\0');
+                }
+                'x' if profile.is_json5() => {
+                    let value = read_hex_pair(&mut chars)?;
+                    output.push(char::from(value));
+                }
                 'u' => {
                     let first = read_hex_quad(&mut chars)?;
                     let scalar = if (0xd800..=0xdbff).contains(&first) {
@@ -838,15 +1290,50 @@ fn decode_json_string(literal: &str) -> Result<String, ()> {
                     };
                     output.push(char::from_u32(scalar).ok_or(())?);
                 }
+                '\n' | '\u{2028}' | '\u{2029}' if profile.is_json5() => {}
+                '\r' if profile.is_json5() => {
+                    if chars.peek() == Some(&'\n') {
+                        chars.next();
+                    }
+                }
+                escaped
+                    if profile.is_json5()
+                        && !escaped.is_ascii_digit()
+                        && !is_json5_line_terminator(escaped) =>
+                {
+                    output.push(escaped);
+                }
                 _ => return Err(()),
             }
         } else if character <= '\u{001f}' {
             return Err(());
         } else {
+            if matches!(character, '\u{2028}' | '\u{2029}') {
+                has_unescaped_line_separator = true;
+            }
             output.push(character);
         }
     }
-    Ok(output)
+    Ok(DecodedString {
+        value: output,
+        has_unescaped_line_separator,
+    })
+}
+
+fn read_hex_pair(iterator: &mut impl Iterator<Item = char>) -> Result<u8, ()> {
+    let mut value = 0_u8;
+    for _ in 0..2 {
+        value = value
+            .checked_mul(16)
+            .and_then(|current| {
+                iterator
+                    .next()?
+                    .to_digit(16)
+                    .map(|digit| current + digit as u8)
+            })
+            .ok_or(())?;
+    }
+    Ok(value)
 }
 
 fn read_hex_quad(iterator: &mut impl Iterator<Item = char>) -> Result<u16, ()> {
@@ -865,6 +1352,115 @@ fn read_hex_quad(iterator: &mut impl Iterator<Item = char>) -> Result<u16, ()> {
     Ok(value)
 }
 
+fn decode_json5_identifier(literal: &str) -> Result<String, ()> {
+    let mut output = String::new();
+    let mut offset = 0;
+    let mut first = true;
+    while offset < literal.len() {
+        let character = char_at(literal, offset);
+        let (decoded, width) = if character == '\\' {
+            (decode_identifier_escape(&literal[offset..]).ok_or(())?, 6)
+        } else {
+            (character, character.len_utf8())
+        };
+        let permitted = if first {
+            is_json5_identifier_start(decoded)
+        } else {
+            is_json5_identifier_continue(decoded)
+        };
+        if !permitted {
+            return Err(());
+        }
+        output.push(decoded);
+        offset += width;
+        first = false;
+    }
+    if first { Err(()) } else { Ok(output) }
+}
+
+fn parse_json5_number(text: &str) -> Result<InternalValueKind, ()> {
+    let (negative, unsigned) = if let Some(rest) = text.strip_prefix('-') {
+        (true, rest)
+    } else {
+        (false, text.strip_prefix('+').unwrap_or(text))
+    };
+    match unsigned {
+        "Infinity" => {
+            let bits = if negative {
+                0xfff0_0000_0000_0000
+            } else {
+                0x7ff0_0000_0000_0000
+            };
+            return Ok(InternalValueKind::BinaryFloat64(BinaryFloat64::from_bits(
+                bits,
+            )));
+        }
+        "NaN" => {
+            let bits = if negative {
+                0xfff8_0000_0000_0000
+            } else {
+                0x7ff8_0000_0000_0000
+            };
+            return Ok(InternalValueKind::BinaryFloat64(BinaryFloat64::from_bits(
+                bits,
+            )));
+        }
+        _ => {}
+    }
+    if let Some(hex) = unsigned
+        .strip_prefix("0x")
+        .or_else(|| unsigned.strip_prefix("0X"))
+    {
+        let mut magnitude = Vec::new();
+        for digit in hex.bytes() {
+            multiply_add_magnitude(
+                &mut magnitude,
+                16,
+                char::from(digit).to_digit(16).ok_or(())? as u8,
+            );
+        }
+        let sign = if negative { -1 } else { 1 };
+        return BigInteger::from_sign_and_magnitude(sign, &magnitude)
+            .map(InternalValueKind::Integer)
+            .map_err(|_| ());
+    }
+    let mut normalized = if negative {
+        format!("-{unsigned}")
+    } else {
+        unsigned.to_owned()
+    };
+    let sign_width = usize::from(negative);
+    if normalized[sign_width..].starts_with('.') {
+        normalized.insert(sign_width, '0');
+    }
+    let exponent = normalized.find(['e', 'E']).unwrap_or(normalized.len());
+    if normalized[..exponent].ends_with('.') {
+        normalized.insert(exponent, '0');
+    }
+    if normalized.contains(['.', 'e', 'E']) {
+        Decimal::parse_json_number(&normalized)
+            .map(InternalValueKind::Decimal)
+            .map_err(|_| ())
+    } else {
+        BigInteger::parse_decimal(&normalized)
+            .map(InternalValueKind::Integer)
+            .map_err(|_| ())
+    }
+}
+
+fn multiply_add_magnitude(bytes: &mut Vec<u8>, multiplier: u16, addend: u8) {
+    let mut carry = u16::from(addend);
+    for octet in bytes.iter_mut().rev() {
+        let value = u16::from(*octet) * multiplier + carry;
+        *octet = value as u8;
+        carry = value >> 8;
+    }
+    while carry != 0 {
+        bytes.insert(0, carry as u8);
+        carry >>= 8;
+    }
+}
+
 fn source_diagnostic(
     authority: &DocumentAuthority,
     code: &str,
@@ -876,6 +1472,27 @@ fn source_diagnostic(
         code,
         category,
         DiagnosticSeverity::Error,
+        Some(
+            authority
+                .span(start, end)
+                .expect("diagnostic range")
+                .diagnostic_location(),
+        ),
+        0,
+    )
+}
+
+fn source_warning(
+    authority: &DocumentAuthority,
+    code: &str,
+    category: DiagnosticCategory,
+    start: usize,
+    end: usize,
+) -> Diagnostic {
+    Diagnostic::new(
+        code,
+        category,
+        DiagnosticSeverity::Warning,
         Some(
             authority
                 .span(start, end)
@@ -941,7 +1558,36 @@ mod tests {
 
     #[test]
     fn string_decoder_rejects_isolated_surrogate() {
-        assert_eq!(decode_json_string(r#""\uD800""#), Err(()));
-        assert_eq!(decode_json_string(r#""\uD83D\uDE00""#), Ok("😀".to_owned()));
+        assert!(decode_json_string(r#""\uD800""#, JsonProfile::StrictV1).is_err());
+        assert_eq!(
+            decode_json_string(r#""\uD83D\uDE00""#, JsonProfile::StrictV1)
+                .unwrap()
+                .value,
+            "😀"
+        );
+    }
+
+    #[test]
+    fn json5_number_grammar_is_exact() {
+        for valid in [
+            "+1", "1.", ".5", "1.e2", "0xdecaf", "-0X1", "Infinity", "+NaN",
+        ] {
+            assert!(valid_json5_number(valid), "{valid}");
+        }
+        for invalid in ["01", ".", "0x", "1e", "0b1", "1_0", "+true"] {
+            assert!(!valid_json5_number(invalid), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn json5_string_decoder_handles_extensions_without_rounding() {
+        let decoded = decode_json_string(
+            r"'single\x20\v\0\q\
+line'",
+            JsonProfile::Json5StandardV1,
+        )
+        .unwrap();
+        assert_eq!(decoded.value, "single \u{000b}\0qline");
+        assert!(!decoded.has_unescaped_line_separator);
     }
 }

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Lossless JSON and JSONC implementation for Consema"
+description = "Lossless JSON, JSONC, and JSON5 implementation for Consema"
 
 [dependencies]
 consema-core = { path = "../consema-core", version = "0.5.0" }

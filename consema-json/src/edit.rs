@@ -1398,7 +1398,8 @@ fn analyze_lexical_style(
             }
             Some(JsonScalarLexicalStyle::String(style))
         }
-        InternalValueKind::Array(_)
+        InternalValueKind::BinaryFloat64(_)
+        | InternalValueKind::Array(_)
         | InternalValueKind::Object(_)
         | InternalValueKind::Unavailable(_) => None,
     }

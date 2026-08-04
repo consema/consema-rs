@@ -1,4 +1,4 @@
-//! Lossless `json.strict@1` and `jsonc.bounded@1` documents.
+//! Lossless `json.strict@1`, `jsonc.bounded@1`, and `json5.standard@1` documents.
 
 mod edit;
 mod materialization;
@@ -7,7 +7,7 @@ mod parser;
 mod projection;
 mod query;
 
-use consema_core::{BigInteger, Decimal, Diagnostic};
+use consema_core::{BigInteger, BinaryFloat64, Decimal, Diagnostic};
 use consema_document::{
     DocumentAuthority, FatalFormationFailure, FormatFamilyId, FormationStatus,
     LosslessStructuralIndex, NodeRef, NodeRole, ParseLimits, ProfileId, SnapshotIdentity,
@@ -40,6 +40,8 @@ pub enum JsonProfile {
     StrictV1,
     /// Strict JSON plus comments, trailing commas, and optional leading BOM.
     JsoncBoundedV1,
+    /// Standard JSON5 1.0.0 plus bounded Consema resource behavior.
+    Json5StandardV1,
 }
 
 /// Closed JSON/JSONC v1 lossless syntax-piece classification.
@@ -67,6 +69,8 @@ pub enum JsonSyntaxKind {
     Comma,
     /// Complete string token.
     String,
+    /// Complete JSON5 IdentifierName token.
+    Identifier,
     /// Valid JSON number token.
     Number,
     /// `true`.
@@ -95,6 +99,7 @@ impl JsonSyntaxKind {
             Self::Colon => "Colon",
             Self::Comma => "Comma",
             Self::String => "String",
+            Self::Identifier => "Identifier",
             Self::Number => "Number",
             Self::True => "True",
             Self::False => "False",
@@ -118,6 +123,7 @@ impl JsonSyntaxKind {
             "Colon" => Some(Self::Colon),
             "Comma" => Some(Self::Comma),
             "String" => Some(Self::String),
+            "Identifier" => Some(Self::Identifier),
             "Number" => Some(Self::Number),
             "True" => Some(Self::True),
             "False" => Some(Self::False),
@@ -135,13 +141,20 @@ impl JsonProfile {
         match self {
             Self::StrictV1 => ProfileId::new("json.strict", 1),
             Self::JsoncBoundedV1 => ProfileId::new("jsonc.bounded", 1),
+            Self::Json5StandardV1 => ProfileId::new("json5.standard", 1),
         }
     }
 
     /// Whether bounded comments and trailing commas are accepted.
     #[must_use]
     const fn permits_jsonc_extensions(self) -> bool {
-        matches!(self, Self::JsoncBoundedV1)
+        matches!(self, Self::JsoncBoundedV1 | Self::Json5StandardV1)
+    }
+
+    /// Whether the Standard JSON5 lexical surface is accepted.
+    #[must_use]
+    const fn is_json5(self) -> bool {
+        matches!(self, Self::Json5StandardV1)
     }
 }
 
@@ -316,6 +329,8 @@ pub enum JsonValueKind {
     Integer,
     /// Number with decimal point or exponent.
     Decimal,
+    /// Exact frozen IEEE-754 binary64 bits for a JSON5 non-finite literal.
+    BinaryFloat64,
     /// Decoded string.
     String,
     /// Ordered array.
@@ -358,6 +373,9 @@ impl<'a> JsonValue<'a> {
             InternalValueKind::Decimal(_) => {
                 SemanticAvailability::Available(JsonValueKind::Decimal)
             }
+            InternalValueKind::BinaryFloat64(_) => {
+                SemanticAvailability::Available(JsonValueKind::BinaryFloat64)
+            }
             InternalValueKind::String(_) => SemanticAvailability::Available(JsonValueKind::String),
             InternalValueKind::Array(_) => SemanticAvailability::Available(JsonValueKind::Array),
             InternalValueKind::Object(_) => SemanticAvailability::Available(JsonValueKind::Object),
@@ -396,6 +414,20 @@ impl<'a> JsonValue<'a> {
     pub fn as_decimal(self) -> SemanticAvailability<Option<&'a Decimal>> {
         match &self.document.value_entity(self.index).kind {
             InternalValueKind::Decimal(value) => SemanticAvailability::Available(Some(value)),
+            InternalValueKind::Unavailable(reason) => {
+                SemanticAvailability::Unavailable(reason.clone())
+            }
+            _ => SemanticAvailability::Available(None),
+        }
+    }
+
+    /// Exact IEEE-754 binary64 datum used by JSON5 non-finite literals.
+    #[must_use]
+    pub fn as_binary_float64(self) -> SemanticAvailability<Option<BinaryFloat64>> {
+        match &self.document.value_entity(self.index).kind {
+            InternalValueKind::BinaryFloat64(value) => {
+                SemanticAvailability::Available(Some(*value))
+            }
             InternalValueKind::Unavailable(reason) => {
                 SemanticAvailability::Unavailable(reason.clone())
             }
@@ -619,6 +651,7 @@ pub(crate) enum InternalValueKind {
     Boolean(bool),
     Integer(BigInteger),
     Decimal(Decimal),
+    BinaryFloat64(BinaryFloat64),
     String(String),
     Array(Vec<usize>),
     Object(Vec<usize>),
@@ -701,6 +734,64 @@ mod tests {
         assert_eq!(
             kinds.len(),
             document.lossless_structural_index().pieces().len()
+        );
+    }
+
+    #[test]
+    fn json5_profile_preserves_extensions_and_exact_native_values() {
+        let source = "{unquoted:'x',\\u0061:.5,hex:+0Xf,truth:true,inf:-Infinity,nan:NaN,}";
+        let document = parse(
+            source.as_bytes(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(document.formation_status(), FormationStatus::Complete);
+        assert_eq!(document.render(), source.as_bytes());
+        let members = match document.root().object_members() {
+            SemanticAvailability::Available(Some(members)) => members,
+            other => panic!("unexpected semantics: {other:?}"),
+        };
+        assert_eq!(
+            members[0].name(),
+            SemanticAvailability::Available("unquoted")
+        );
+        assert_eq!(members[1].name(), SemanticAvailability::Available("a"));
+        let decimal = match members[1].value().as_decimal() {
+            SemanticAvailability::Available(Some(value)) => value,
+            other => panic!("unexpected decimal: {other:?}"),
+        };
+        assert_eq!(decimal.coefficient().to_i64(), Some(5));
+        assert_eq!(decimal.exponent().to_i64(), Some(-1));
+        assert_eq!(
+            members[2]
+                .value()
+                .as_integer()
+                .map(|value| value.and_then(BigInteger::to_i64)),
+            SemanticAvailability::Available(Some(15))
+        );
+        assert_eq!(
+            members[3].value().as_boolean(),
+            SemanticAvailability::Available(Some(true))
+        );
+        assert_eq!(
+            members[4]
+                .value()
+                .as_binary_float64()
+                .map(|value| value.map(BinaryFloat64::bits)),
+            SemanticAvailability::Available(Some(0xfff0_0000_0000_0000))
+        );
+        assert_eq!(
+            members[5]
+                .value()
+                .as_binary_float64()
+                .map(|value| value.map(BinaryFloat64::bits)),
+            SemanticAvailability::Available(Some(0x7ff8_0000_0000_0000))
+        );
+        assert!(
+            document
+                .lossless_syntax_kinds()
+                .contains(&JsonSyntaxKind::Identifier)
         );
     }
 }
