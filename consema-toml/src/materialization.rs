@@ -33,6 +33,17 @@ pub fn materialize(
     }
 }
 
+/// Renders one canonical TOML value fragment for structural editing.
+pub(crate) fn canonical_fragment(
+    value: &PortableValue,
+    limits: MaterializationLimits,
+) -> Result<Vec<u8>, MaterializationFailure> {
+    let mut analyzed = Vec::new();
+    let mut writer = TomlWriter::new(NewlinePolicy::Lf, limits, &mut analyzed);
+    writer.value(value, &ValuePath::root(), 0)?;
+    Ok(writer.output.finish())
+}
+
 #[derive(Default)]
 struct Attempt {
     report: MaterializationReport,

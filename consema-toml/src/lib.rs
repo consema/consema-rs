@@ -16,8 +16,8 @@ use consema_document::{
 use std::sync::Arc;
 
 pub use edit::{
-    EditCommit, EditFailure, EditTransaction, EditTransactionBuilder, RepresentationPolicy,
-    ScalarReplacement,
+    EditCommit, EditFailure, EditOperation, EditTransaction, EditTransactionBuilder,
+    RepresentationPolicy, ScalarReplacement,
 };
 pub use materialization::materialize;
 pub use operation_registry::format_operation_registry;
