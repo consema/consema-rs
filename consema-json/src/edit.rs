@@ -516,6 +516,7 @@ impl Document {
                     value,
                     &entity.kind,
                     old_literal,
+                    self.profile,
                     *policy,
                     old_span,
                     diagnostics,
@@ -1220,6 +1221,7 @@ fn semantic_literal(
     value: &PortableValue,
     old: &InternalValueKind,
     old_literal: &[u8],
+    profile: JsonProfile,
     policy: RepresentationPolicy,
     target_span: consema_document::Span,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1227,14 +1229,15 @@ fn semantic_literal(
     if policy == RepresentationPolicy::ExactLiteral {
         return Err(EditFailure::ExactLiteralRequiresLiteralOperation);
     }
-    portable_json_kind(value).ok_or_else(|| EditFailure::UnsupportedSemanticValue(value.kind()))?;
+    portable_json_kind(value, profile)
+        .ok_or_else(|| EditFailure::UnsupportedSemanticValue(value.kind()))?;
     let preserved = analyze_lexical_style(old_literal, old)
         .and_then(|style| render_preserving_style(value, &style));
     match policy {
         RepresentationPolicy::PreserveCompatible => {
             preserved.ok_or(EditFailure::RepresentationIncompatible)
         }
-        RepresentationPolicy::CanonicalForProfile => canonical_literal(value),
+        RepresentationPolicy::CanonicalForProfile => canonical_literal(value, profile),
         RepresentationPolicy::PreserveElseCanonical => {
             if let Some(bytes) = preserved {
                 Ok(bytes)
@@ -1247,7 +1250,7 @@ fn semantic_literal(
                     diagnostics.len() as u64,
                 );
                 diagnostics.push(diagnostic);
-                canonical_literal(value)
+                canonical_literal(value, profile)
             }
         }
         RepresentationPolicy::ExactLiteral => {
@@ -1269,20 +1272,44 @@ const MAX_PRESERVED_FRACTION_DIGITS: usize = 1_000_000;
 enum JsonScalarLexicalStyle {
     Null,
     Boolean,
-    Integer,
+    Integer(IntegerLexicalStyle),
     Decimal(DecimalLexicalStyle),
+    NonFinite(NonFiniteLexicalStyle),
     String(StringLexicalStyle),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum IntegerRadix {
+    Decimal,
+    Hex {
+        uppercase_prefix: bool,
+        uppercase_digits: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct IntegerLexicalStyle {
+    radix: IntegerRadix,
+    explicit_plus: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct DecimalLexicalStyle {
     fraction_scale: Option<usize>,
     exponent_marker: Option<u8>,
+    exponent_plus: bool,
+    leading_plus: bool,
+    leading_point: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NonFiniteLexicalStyle {
     explicit_plus: bool,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct StringLexicalStyle {
+    quote: char,
     escapes: HashMap<char, String>,
 }
 
@@ -1293,117 +1320,136 @@ fn analyze_lexical_style(
     match old {
         InternalValueKind::Null => Some(JsonScalarLexicalStyle::Null),
         InternalValueKind::Boolean(_) => Some(JsonScalarLexicalStyle::Boolean),
-        InternalValueKind::Integer(_) => Some(JsonScalarLexicalStyle::Integer),
+        InternalValueKind::Integer(_) => {
+            let text = std::str::from_utf8(literal).ok()?;
+            let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+            let radix = if let Some(hex) = unsigned
+                .strip_prefix("0x")
+                .or_else(|| unsigned.strip_prefix("0X"))
+            {
+                IntegerRadix::Hex {
+                    uppercase_prefix: unsigned.starts_with("0X"),
+                    uppercase_digits: hex.bytes().any(|byte| byte.is_ascii_uppercase()),
+                }
+            } else {
+                IntegerRadix::Decimal
+            };
+            Some(JsonScalarLexicalStyle::Integer(IntegerLexicalStyle {
+                radix,
+                explicit_plus: text.starts_with('+'),
+            }))
+        }
         InternalValueKind::Decimal(_) => {
             let text = std::str::from_utf8(literal).ok()?;
-            let fraction_scale = text
+            let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+            let exponent_index = unsigned.find(['e', 'E']);
+            let mantissa = &unsigned[..exponent_index.unwrap_or(unsigned.len())];
+            let fraction_scale = mantissa
                 .find('.')
-                .map(|index| text.len().saturating_sub(index + 1));
-            let exponent_index = text.find(['e', 'E']);
-            let (exponent_marker, explicit_plus) = match exponent_index {
+                .map(|index| mantissa.len().saturating_sub(index + 1));
+            let (exponent_marker, exponent_plus) = match exponent_index {
                 Some(index) => {
-                    let plus = text.as_bytes().get(index + 1) == Some(&b'+');
-                    (Some(text.as_bytes()[index]), plus)
+                    let plus = unsigned.as_bytes().get(index + 1) == Some(&b'+');
+                    (Some(unsigned.as_bytes()[index]), plus)
                 }
                 None => (None, false),
             };
             Some(JsonScalarLexicalStyle::Decimal(DecimalLexicalStyle {
                 fraction_scale,
                 exponent_marker,
-                explicit_plus,
+                exponent_plus,
+                leading_plus: text.starts_with('+'),
+                leading_point: mantissa.starts_with('.'),
+            }))
+        }
+        InternalValueKind::BinaryFloat64(_) => {
+            let text = std::str::from_utf8(literal).ok()?;
+            Some(JsonScalarLexicalStyle::NonFinite(NonFiniteLexicalStyle {
+                explicit_plus: text.starts_with('+'),
             }))
         }
         InternalValueKind::String(_) => {
-            let mut style = StringLexicalStyle::default();
-            let bytes = literal;
-            let mut index = 1;
-            while index + 1 < bytes.len() {
-                if bytes[index] != b'\\' {
-                    index += 1;
-                    continue;
-                }
-                let escape_start = index;
-                index += 1;
-                let Some(&kind_byte) = bytes.get(index) else {
-                    break;
-                };
-                index += 1;
-                match kind_byte {
-                    b'"' => {
-                        style.escapes.insert('"', "\\\"".to_owned());
-                    }
-                    b'\\' => {
-                        style.escapes.insert('\\', "\\\\".to_owned());
-                    }
-                    b'/' => {
-                        style.escapes.insert('/', "\\/".to_owned());
-                    }
-                    b'b' => {
-                        style.escapes.insert('\u{0008}', "\\b".to_owned());
-                    }
-                    b'f' => {
-                        style.escapes.insert('\u{000c}', "\\f".to_owned());
-                    }
-                    b'n' => {
-                        style.escapes.insert('\n', "\\n".to_owned());
-                    }
-                    b'r' => {
-                        style.escapes.insert('\r', "\\r".to_owned());
-                    }
-                    b't' => {
-                        style.escapes.insert('\t', "\\t".to_owned());
-                    }
-                    b'u' => {
-                        let Some(hex) = bytes.get(index..index + 4) else {
-                            break;
-                        };
-                        let Some(value) =
-                            u32::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok()
-                        else {
-                            break;
-                        };
-                        index += 4;
-                        let text = std::str::from_utf8(&bytes[escape_start..index])
-                            .ok()?
-                            .to_owned();
-                        if (0xd800..=0xdbff).contains(&value)
-                            && bytes.get(index) == Some(&b'\\')
-                            && bytes.get(index + 1) == Some(&b'u')
-                        {
-                            let low_start = index + 2;
-                            if let Some(low_value) = bytes
-                                .get(low_start..low_start + 4)
-                                .and_then(|low| std::str::from_utf8(low).ok())
-                                .and_then(|low| u32::from_str_radix(low, 16).ok())
-                            {
-                                if (0xdc00..=0xdfff).contains(&low_value) {
-                                    let combined =
-                                        0x1_0000 + ((value - 0xd800) << 10) + (low_value - 0xdc00);
-                                    if let Some(character) = char::from_u32(combined) {
-                                        index += 6;
-                                        let pair = std::str::from_utf8(&bytes[escape_start..index])
-                                            .ok()?
-                                            .to_owned();
-                                        style.escapes.insert(character, pair);
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                        if let Some(character) = char::from_u32(value) {
-                            style.escapes.insert(character, text);
-                        }
-                    }
-                    _ => break,
-                }
-            }
-            Some(JsonScalarLexicalStyle::String(style))
+            analyze_string_style(literal).map(JsonScalarLexicalStyle::String)
         }
-        InternalValueKind::BinaryFloat64(_)
-        | InternalValueKind::Array(_)
+        InternalValueKind::Array(_)
         | InternalValueKind::Object(_)
         | InternalValueKind::Unavailable(_) => None,
     }
+}
+
+fn analyze_string_style(literal: &[u8]) -> Option<StringLexicalStyle> {
+    let text = std::str::from_utf8(literal).ok()?;
+    let quote = text.chars().next()?;
+    if !matches!(quote, '\'' | '"') || !text.ends_with(quote) {
+        return None;
+    }
+    let mut style = StringLexicalStyle {
+        quote,
+        escapes: HashMap::new(),
+    };
+    let end = text.len().checked_sub(quote.len_utf8())?;
+    let mut offset = quote.len_utf8();
+    while offset < end {
+        let character = text[offset..].chars().next()?;
+        if character != '\\' {
+            offset += character.len_utf8();
+            continue;
+        }
+        let escape_start = offset;
+        offset += 1;
+        let escaped = text[offset..].chars().next()?;
+        offset += escaped.len_utf8();
+        let decoded = match escaped {
+            '"' => Some('"'),
+            '\'' => Some('\''),
+            '\\' => Some('\\'),
+            '/' => Some('/'),
+            'b' => Some('\u{0008}'),
+            'f' => Some('\u{000c}'),
+            'n' => Some('\n'),
+            'r' => Some('\r'),
+            't' => Some('\t'),
+            'v' => Some('\u{000b}'),
+            '0' => Some('\0'),
+            'x' => {
+                let value = u8::from_str_radix(text.get(offset..offset + 2)?, 16).ok()?;
+                offset += 2;
+                Some(char::from(value))
+            }
+            'u' => {
+                let first = u16::from_str_radix(text.get(offset..offset + 4)?, 16).ok()?;
+                offset += 4;
+                let scalar = if (0xd800..=0xdbff).contains(&first) {
+                    if text.get(offset..offset + 2)? != "\\u" {
+                        return None;
+                    }
+                    let second = u16::from_str_radix(text.get(offset + 2..offset + 6)?, 16).ok()?;
+                    if !(0xdc00..=0xdfff).contains(&second) {
+                        return None;
+                    }
+                    offset += 6;
+                    0x1_0000 + ((u32::from(first) - 0xd800) << 10) + (u32::from(second) - 0xdc00)
+                } else {
+                    u32::from(first)
+                };
+                Some(char::from_u32(scalar)?)
+            }
+            '\r' => {
+                if text[offset..].starts_with('\n') {
+                    offset += 1;
+                }
+                None
+            }
+            '\n' | '\u{2028}' | '\u{2029}' => None,
+            other => Some(other),
+        };
+        if let Some(decoded) = decoded {
+            style
+                .escapes
+                .insert(decoded, text[escape_start..offset].to_owned());
+        }
+    }
+    Some(style)
 }
 
 fn render_preserving_style(
@@ -1417,8 +1463,8 @@ fn render_preserving_style(
         JsonScalarLexicalStyle::Boolean if value.kind() == PortableValueKind::Boolean => {
             Some(value.as_boolean()?.to_string().into_bytes())
         }
-        JsonScalarLexicalStyle::Integer if value.kind() == PortableValueKind::Integer => {
-            Some(value.as_integer()?.to_string().into_bytes())
+        JsonScalarLexicalStyle::Integer(style) if value.kind() == PortableValueKind::Integer => {
+            render_integer_style(value.as_integer()?, *style)
         }
         JsonScalarLexicalStyle::Decimal(style)
             if matches!(
@@ -1428,11 +1474,54 @@ fn render_preserving_style(
         {
             render_decimal_style(value, style)
         }
+        JsonScalarLexicalStyle::NonFinite(style)
+            if value.kind() == PortableValueKind::BinaryFloat64 =>
+        {
+            render_non_finite_style(value.as_binary_float64()?, *style)
+        }
         JsonScalarLexicalStyle::String(style) if value.kind() == PortableValueKind::String => {
             Some(render_string_style(value.as_string()?, style).into_bytes())
         }
         _ => None,
     }
+}
+
+fn render_integer_style(
+    value: &consema_core::BigInteger,
+    style: IntegerLexicalStyle,
+) -> Option<Vec<u8>> {
+    let mut output = String::new();
+    if value.signum() < 0 {
+        output.push('-');
+    } else if style.explicit_plus {
+        output.push('+');
+    }
+    match style.radix {
+        IntegerRadix::Decimal => output.push_str(value.to_string().trim_start_matches('-')),
+        IntegerRadix::Hex {
+            uppercase_prefix,
+            uppercase_digits,
+        } => {
+            output.push_str(if uppercase_prefix { "0X" } else { "0x" });
+            if value.magnitude().is_empty() {
+                output.push('0');
+            } else {
+                use std::fmt::Write as _;
+                for (index, octet) in value.magnitude().iter().enumerate() {
+                    if uppercase_digits && index == 0 {
+                        write!(output, "{octet:X}").ok()?;
+                    } else if uppercase_digits {
+                        write!(output, "{octet:02X}").ok()?;
+                    } else if index == 0 {
+                        write!(output, "{octet:x}").ok()?;
+                    } else {
+                        write!(output, "{octet:02x}").ok()?;
+                    }
+                }
+            }
+        }
+    }
+    Some(output.into_bytes())
 }
 
 fn render_decimal_style(value: &PortableValue, style: &DecimalLexicalStyle) -> Option<Vec<u8>> {
@@ -1446,7 +1535,25 @@ fn render_decimal_style(value: &PortableValue, style: &DecimalLexicalStyle) -> O
         PortableValueKind::Integer => &consema_core::BigInteger::zero(),
         _ => return None,
     };
-    if let Some(scale) = style.fraction_scale {
+    let mut output = if let Some(marker) = style.exponent_marker {
+        let scale = style.fraction_scale.unwrap_or(0);
+        let mut mantissa = if style.fraction_scale.is_some() {
+            decimal_fixed_text(coefficient, scale)
+        } else {
+            coefficient.to_string()
+        };
+        if style.leading_point {
+            remove_leading_zero(&mut mantissa)?;
+        }
+        let exponent = exponent.to_i64()?.checked_add(i64::try_from(scale).ok()?)?;
+        mantissa.push(marker as char);
+        if exponent >= 0 && style.exponent_plus {
+            mantissa.push('+');
+        }
+        mantissa.push_str(&exponent.to_string());
+        mantissa
+    } else {
+        let scale = style.fraction_scale?;
         let shift = match exponent.to_i64() {
             Some(shift) if shift >= 0 => usize::try_from(shift).ok()?.checked_add(scale)?,
             Some(negative) => scale.checked_sub(usize::try_from(negative.unsigned_abs()).ok()?)?,
@@ -1456,19 +1563,39 @@ fn render_decimal_style(value: &PortableValue, style: &DecimalLexicalStyle) -> O
             return None;
         }
         let mantissa = coefficient.mul_pow10(shift);
-        return Some(decimal_fixed_text(&mantissa, scale).into_bytes());
-    }
-    if let Some(marker) = style.exponent_marker {
-        let mut output = coefficient.to_string();
-        output.push(marker as char);
-        let exponent = exponent.to_string();
-        if !exponent.starts_with('-') && style.explicit_plus {
-            output.push('+');
+        let mut output = decimal_fixed_text(&mantissa, scale);
+        if style.leading_point {
+            remove_leading_zero(&mut output)?;
         }
-        output.push_str(&exponent);
-        return Some(output.into_bytes());
+        output
+    };
+    if style.leading_plus && !output.starts_with('-') {
+        output.insert(0, '+');
     }
-    None
+    Some(output.into_bytes())
+}
+
+fn remove_leading_zero(text: &mut String) -> Option<()> {
+    let zero = usize::from(text.starts_with("-0."));
+    (text.as_bytes().get(zero..zero + 2) == Some(b"0.")).then_some(())?;
+    text.remove(zero);
+    Some(())
+}
+
+fn render_non_finite_style(
+    value: consema_core::BinaryFloat64,
+    style: NonFiniteLexicalStyle,
+) -> Option<Vec<u8>> {
+    let text = match value.bits() {
+        0x7ff0_0000_0000_0000 if style.explicit_plus => "+Infinity",
+        0x7ff0_0000_0000_0000 => "Infinity",
+        0xfff0_0000_0000_0000 => "-Infinity",
+        0x7ff8_0000_0000_0000 if style.explicit_plus => "+NaN",
+        0x7ff8_0000_0000_0000 => "NaN",
+        0xfff8_0000_0000_0000 => "-NaN",
+        _ => return None,
+    };
+    Some(text.as_bytes().to_vec())
 }
 
 fn decimal_fixed_text(mantissa: &consema_core::BigInteger, scale: usize) -> String {
@@ -1487,30 +1614,33 @@ fn decimal_fixed_text(mantissa: &consema_core::BigInteger, scale: usize) -> Stri
 
 fn render_string_style(value: &str, style: &StringLexicalStyle) -> String {
     let mut output = String::with_capacity(value.len() + 2);
-    output.push('"');
+    output.push(style.quote);
     for character in value.chars() {
         if let Some(escape) = style.escapes.get(&character) {
             output.push_str(escape);
         } else {
-            push_json_char(&mut output, character);
+            push_json_string_char(&mut output, character, style.quote, false);
         }
     }
-    output.push('"');
+    output.push(style.quote);
     output
 }
 
-fn portable_json_kind(value: &PortableValue) -> Option<JsonValueKind> {
+fn portable_json_kind(value: &PortableValue, profile: JsonProfile) -> Option<JsonValueKind> {
     match value.kind() {
         PortableValueKind::Null => Some(JsonValueKind::Null),
         PortableValueKind::Boolean => Some(JsonValueKind::Boolean),
         PortableValueKind::Integer => Some(JsonValueKind::Integer),
         PortableValueKind::Decimal => Some(JsonValueKind::Decimal),
+        PortableValueKind::BinaryFloat64 if profile.is_json5() => {
+            Some(JsonValueKind::BinaryFloat64)
+        }
         PortableValueKind::String => Some(JsonValueKind::String),
         _ => None,
     }
 }
 
-fn canonical_literal(value: &PortableValue) -> Result<Vec<u8>, EditFailure> {
+fn canonical_literal(value: &PortableValue, profile: JsonProfile) -> Result<Vec<u8>, EditFailure> {
     let text = match value.kind() {
         PortableValueKind::Null => "null".to_owned(),
         PortableValueKind::Boolean => value.as_boolean().expect("boolean kind").to_string(),
@@ -1519,25 +1649,41 @@ fn canonical_literal(value: &PortableValue) -> Result<Vec<u8>, EditFailure> {
             let value = value.as_decimal().expect("decimal kind");
             format!("{}e{}", value.coefficient(), value.exponent())
         }
-        PortableValueKind::String => encode_json_string(value.as_string().expect("string kind")),
+        PortableValueKind::BinaryFloat64 if profile.is_json5() => {
+            return render_non_finite_style(
+                value.as_binary_float64().expect("binary64 kind"),
+                NonFiniteLexicalStyle {
+                    explicit_plus: false,
+                },
+            )
+            .ok_or(EditFailure::UnsupportedSemanticValue(
+                PortableValueKind::BinaryFloat64,
+            ));
+        }
+        PortableValueKind::String => {
+            encode_json_string(value.as_string().expect("string kind"), profile.is_json5())
+        }
         kind => return Err(EditFailure::UnsupportedSemanticValue(kind)),
     };
     Ok(text.into_bytes())
 }
 
-fn encode_json_string(value: &str) -> String {
+fn encode_json_string(value: &str, json5: bool) -> String {
     let mut output = String::with_capacity(value.len() + 2);
     output.push('"');
     for character in value.chars() {
-        push_json_char(&mut output, character);
+        push_json_string_char(&mut output, character, '"', json5);
     }
     output.push('"');
     output
 }
 
-fn push_json_char(output: &mut String, character: char) {
+fn push_json_string_char(output: &mut String, character: char, quote: char, canonical_json5: bool) {
     match character {
-        '"' => output.push_str("\\\""),
+        character if character == quote => {
+            output.push('\\');
+            output.push(character);
+        }
         '\\' => output.push_str("\\\\"),
         '\u{0008}' => output.push_str("\\b"),
         '\u{000c}' => output.push_str("\\f"),
@@ -1545,6 +1691,10 @@ fn push_json_char(output: &mut String, character: char) {
         '\r' => output.push_str("\\r"),
         '\t' => output.push_str("\\t"),
         '\u{0000}'..='\u{001f}' => {
+            use std::fmt::Write;
+            write!(output, "\\u{:04X}", u32::from(character)).expect("String write");
+        }
+        '\u{2028}' | '\u{2029}' if canonical_json5 => {
             use std::fmt::Write;
             write!(output, "\\u{:04X}", u32::from(character)).expect("String write");
         }
@@ -1572,6 +1722,7 @@ fn validate_literal(
                     | JsonValueKind::Boolean
                     | JsonValueKind::Integer
                     | JsonValueKind::Decimal
+                    | JsonValueKind::BinaryFloat64
                     | JsonValueKind::String
             )
         )
@@ -1608,7 +1759,7 @@ fn find_value_by_literal_span(document: &Document, start: usize, end: usize) -> 
 mod tests {
     use super::*;
     use crate::{JsonProfile, parse};
-    use consema_core::{BigInteger, Decimal, PortableValue};
+    use consema_core::{BigInteger, BinaryFloat64, Decimal, PortableValue};
     use consema_document::ParseLimits;
 
     fn object_members(document: &Document) -> Vec<crate::JsonObjectMember<'_>> {
@@ -2116,6 +2267,109 @@ mod tests {
         assert!(matches!(
             document.commit(&builder.build()),
             Err(EditFailure::RepresentationIncompatible)
+        ));
+    }
+
+    #[test]
+    fn json5_scalar_edits_preserve_compatible_lexical_categories() {
+        let document = parse(
+            br"{hex:+0X0f,lead:+.50,trail:1.,exp:1.0E+2,single:'a\x20\v\0\q',nf:+Infinity,}"
+                .as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let members = object_members(&document);
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder
+            .semantic_scalar(
+                members[0].value_node_ref(),
+                PortableValue::integer(BigInteger::from(16_i64)),
+                RepresentationPolicy::PreserveCompatible,
+            )
+            .semantic_scalar(
+                members[1].value_node_ref(),
+                PortableValue::decimal(Decimal::new(
+                    BigInteger::from(75_i64),
+                    BigInteger::from(-2_i64),
+                )),
+                RepresentationPolicy::PreserveCompatible,
+            )
+            .semantic_scalar(
+                members[2].value_node_ref(),
+                PortableValue::integer(BigInteger::from(2_i64)),
+                RepresentationPolicy::PreserveCompatible,
+            )
+            .semantic_scalar(
+                members[3].value_node_ref(),
+                PortableValue::decimal(Decimal::new(
+                    BigInteger::from(34_i64),
+                    BigInteger::from(-1_i64),
+                )),
+                RepresentationPolicy::PreserveCompatible,
+            )
+            .semantic_scalar(
+                members[4].value_node_ref(),
+                PortableValue::string("a \u{000b}\0q"),
+                RepresentationPolicy::PreserveCompatible,
+            )
+            .semantic_scalar(
+                members[5].value_node_ref(),
+                PortableValue::binary_float64(BinaryFloat64::from_bits(0x7ff8_0000_0000_0000)),
+                RepresentationPolicy::PreserveCompatible,
+            );
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(
+            commit.document.render(),
+            br"{hex:+0X10,lead:+.75,trail:2.,exp:3.4E+0,single:'a\x20\v\0\q',nf:+NaN,}"
+        );
+    }
+
+    #[test]
+    fn json5_structural_edits_quote_names_and_allow_frozen_non_finite_values() {
+        let document = parse(
+            b"{a:1, /*keep*/ b:2,}".as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let members = object_members(&document);
+        let mut insert = EditTransactionBuilder::new(&document);
+        insert.insert_member(
+            document.root().node_ref(),
+            "x\"",
+            PortableValue::binary_float64(BinaryFloat64::from_bits(0x7ff0_0000_0000_0000)),
+            AssociationPlacement::Before(members[1].node_ref()),
+        );
+        assert_eq!(
+            document.commit(&insert.build()).unwrap().document.render(),
+            br#"{a:1, /*keep*/ "x\"":Infinity,b:2,}"#
+        );
+
+        let mut rename = EditTransactionBuilder::new(&document);
+        rename.rename_member(members[0].node_ref(), "renamed");
+        assert_eq!(
+            document.commit(&rename.build()).unwrap().document.render(),
+            br#"{"renamed":1, /*keep*/ b:2,}"#
+        );
+
+        let strict = parse(
+            b"0".as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut unsupported = EditTransactionBuilder::new(&strict);
+        unsupported.semantic_scalar(
+            strict.root().node_ref(),
+            PortableValue::binary_float64(BinaryFloat64::from_bits(0x7ff0_0000_0000_0000)),
+            RepresentationPolicy::CanonicalForProfile,
+        );
+        assert!(matches!(
+            strict.commit(&unsupported.build()),
+            Err(EditFailure::UnsupportedSemanticValue(
+                PortableValueKind::BinaryFloat64
+            ))
         ));
     }
 }
