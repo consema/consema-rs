@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 mod edit;
 mod materialization;
+mod operation_registry;
 mod parser;
 mod projection;
 mod query;
@@ -18,6 +19,7 @@ pub use edit::{
     RepresentationPolicy, ValueReplacement,
 };
 pub use materialization::materialize;
+pub use operation_registry::format_operation_registry;
 pub use projection::{
     CollisionPolicy, CompleteProjection, FailedProjectionAttempt, Fidelity, NameComparison,
     ProjectedLocation, ProjectionEvent, ProjectionEventKind, ProjectionFailure, ProjectionLimits,
