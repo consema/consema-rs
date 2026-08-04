@@ -401,6 +401,28 @@ pub struct FailedMaterializationAttempt {
     pub analyzed_input_paths: Vec<ValuePath>,
 }
 
+/// Complete successful materialization; its document and audit facts are never partial.
+#[derive(Clone, Debug)]
+pub struct CompleteMaterialization<D> {
+    /// Newly formed immutable target document.
+    pub document: D,
+    /// Worst fidelity of the whole operation.
+    pub fidelity: MaterializationFidelity,
+    /// Complete ordered transformation report.
+    pub report: MaterializationReport,
+    /// Complete portable-input-to-target provenance.
+    pub provenance: MaterializationProvenanceMap,
+}
+
+/// Closed materialization completion algebra.
+#[derive(Clone, Debug)]
+pub enum MaterializationResult<D> {
+    /// Complete success with every required artifact.
+    Complete(CompleteMaterialization<D>),
+    /// Failed attempt without a Document or partial output bytes.
+    Failed(FailedMaterializationAttempt),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

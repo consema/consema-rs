@@ -13,11 +13,11 @@ mod source_patch;
 mod untouched_proof;
 
 pub use materialization::{
-    FailedMaterializationAttempt, MappingPolicy, MaterializationFailure, MaterializationFidelity,
-    MaterializationInputLocation, MaterializationLimits, MaterializationProvenanceEntry,
-    MaterializationProvenanceMap, MaterializationRelation, MaterializationReport,
-    MaterializationRequest, MaterializationStyleId, MaterializedOrigin, NewlinePolicy,
-    RepresentabilityPolicy,
+    CompleteMaterialization, FailedMaterializationAttempt, MappingPolicy, MaterializationFailure,
+    MaterializationFidelity, MaterializationInputLocation, MaterializationLimits,
+    MaterializationProvenanceEntry, MaterializationProvenanceMap, MaterializationRelation,
+    MaterializationReport, MaterializationRequest, MaterializationResult, MaterializationStyleId,
+    MaterializedOrigin, NewlinePolicy, RepresentabilityPolicy,
 };
 pub use operation_registry::{
     FormatOperationDescriptor, FormatOperationId, FormatOperationRegistry,
