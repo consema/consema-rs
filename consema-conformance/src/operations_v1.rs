@@ -178,7 +178,7 @@ fn registry_v3(case: &VectorCase<'_>) -> Result<(), String> {
     let v2 = RegistryManifest::v2();
     let v3 = RegistryManifest::v3();
     ensure(
-        v3 == RegistryManifest::current()
+        v3.semantic_model().version() == 3
             && v3.contracts().len() == expected_usize(case, "contract_count")?
             && v3.error_codes().len() == expected_usize(case, "error_code_count")?
             && v1.contracts().len() == expected_usize(case, "v1_contract_count")?

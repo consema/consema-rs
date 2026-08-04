@@ -34,8 +34,8 @@ pub use diagnostic::{
 pub use error::{ProtocolError, ProtocolErrorKind};
 pub use error_registry::{
     ErrorCodeDescriptor, ErrorCodeRegistry, error_code_manifest_value,
-    error_code_manifest_value_v2, error_code_manifest_value_v3, query_failure_code,
-    validate_error_code_manifest_value,
+    error_code_manifest_value_v2, error_code_manifest_value_v3, error_code_manifest_value_v4,
+    query_failure_code, validate_error_code_manifest_value,
 };
 pub use execution::{CancellationRequest, Completion, CompletionStatus, ExecutionPolicy};
 pub use limits::ProtocolLimits;

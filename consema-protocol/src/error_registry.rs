@@ -644,6 +644,51 @@ const fn build_v3_codes() -> [ErrorCodeDescriptor; 90] {
     output
 }
 
+const NEW_CODES_V4: &[ErrorCodeDescriptor] = &[
+    code!(
+        "json5.string.unescaped-line-separator@1",
+        Conformance,
+        "0.6.0",
+        "JSON5 string contains an unescaped Unicode line separator"
+    ),
+    code!(
+        "json5.syntax.invalid-identifier@1",
+        Syntax,
+        "0.6.0",
+        "JSON5 IdentifierName syntax is invalid"
+    ),
+];
+
+const ERROR_CODES_V4: [ErrorCodeDescriptor; 92] = build_v4_codes();
+
+const fn build_v4_codes() -> [ErrorCodeDescriptor; 92] {
+    let mut output = [ERROR_CODES_V3[0]; 92];
+    let mut old = 0;
+    let mut new = 0;
+    let mut target = 0;
+    while old < ERROR_CODES_V3.len() && new < NEW_CODES_V4.len() {
+        if const_str_less(ERROR_CODES_V3[old].code, NEW_CODES_V4[new].code) {
+            output[target] = ERROR_CODES_V3[old];
+            old += 1;
+        } else {
+            output[target] = NEW_CODES_V4[new];
+            new += 1;
+        }
+        target += 1;
+    }
+    while old < ERROR_CODES_V3.len() {
+        output[target] = ERROR_CODES_V3[old];
+        old += 1;
+        target += 1;
+    }
+    while new < NEW_CODES_V4.len() {
+        output[target] = NEW_CODES_V4[new];
+        new += 1;
+        target += 1;
+    }
+    output
+}
+
 const fn const_str_less(left: &str, right: &str) -> bool {
     let left = left.as_bytes();
     let right = right.as_bytes();
@@ -671,6 +716,7 @@ enum RegistryVersion {
     V1,
     V2,
     V3,
+    V4,
 }
 
 impl Default for ErrorCodeRegistry {
@@ -704,6 +750,14 @@ impl ErrorCodeRegistry {
         }
     }
 
+    /// Consema 0.6 semantic-model v4 error registry.
+    #[must_use]
+    pub const fn v4() -> Self {
+        Self {
+            version: RegistryVersion::V4,
+        }
+    }
+
     /// Sorted immutable descriptors.
     #[must_use]
     pub const fn codes(self) -> &'static [ErrorCodeDescriptor] {
@@ -711,6 +765,7 @@ impl ErrorCodeRegistry {
             RegistryVersion::V1 => ERROR_CODES_V1,
             RegistryVersion::V2 => &ERROR_CODES_V2,
             RegistryVersion::V3 => &ERROR_CODES_V3,
+            RegistryVersion::V4 => &ERROR_CODES_V4,
         }
     }
 
@@ -782,6 +837,12 @@ pub fn error_code_manifest_value_v2() -> PortableValue {
 #[must_use]
 pub fn error_code_manifest_value_v3() -> PortableValue {
     error_code_manifest_value_for(ErrorCodeRegistry::v3())
+}
+
+/// Encodes the semantic-model v4 `core.error-code-registry@1` payload.
+#[must_use]
+pub fn error_code_manifest_value_v4() -> PortableValue {
+    error_code_manifest_value_for(ErrorCodeRegistry::v4())
 }
 
 fn error_code_manifest_value_for(registry: ErrorCodeRegistry) -> PortableValue {
@@ -916,6 +977,7 @@ mod tests {
             ErrorCodeRegistry::v1(),
             ErrorCodeRegistry::v2(),
             ErrorCodeRegistry::v3(),
+            ErrorCodeRegistry::v4(),
         ] {
             assert!(
                 registry
@@ -927,10 +989,14 @@ mod tests {
         assert_eq!(ErrorCodeRegistry::v1().codes().len(), 55);
         assert_eq!(ErrorCodeRegistry::v2().codes().len(), 62);
         assert_eq!(ErrorCodeRegistry::v3().codes().len(), 90);
+        assert_eq!(ErrorCodeRegistry::v4().codes().len(), 92);
         assert!(!ErrorCodeRegistry::v1().contains("core.source.patch-base-mismatch@1"));
         assert!(ErrorCodeRegistry::v2().contains("core.source.patch-base-mismatch@1"));
         assert!(!ErrorCodeRegistry::v2().contains("core.materialization.unrepresentable@1"));
         assert!(ErrorCodeRegistry::v3().contains("core.materialization.unrepresentable@1"));
+        assert!(!ErrorCodeRegistry::v3().contains("json5.syntax.invalid-identifier@1"));
+        assert!(ErrorCodeRegistry::v4().contains("json5.syntax.invalid-identifier@1"));
+        assert!(ErrorCodeRegistry::v4().contains("json5.string.unescaped-line-separator@1"));
         let protocol_kinds = [
             ProtocolErrorKind::InvalidJson,
             ProtocolErrorKind::NonCanonicalJson,
@@ -975,5 +1041,6 @@ mod tests {
         validate_error_code_manifest_value(&error_code_manifest_value()).unwrap();
         validate_error_code_manifest_value(&error_code_manifest_value_v2()).unwrap();
         validate_error_code_manifest_value(&error_code_manifest_value_v3()).unwrap();
+        validate_error_code_manifest_value(&error_code_manifest_value_v4()).unwrap();
     }
 }

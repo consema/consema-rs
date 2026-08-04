@@ -569,4 +569,57 @@ mod tests {
         message.category = DiagnosticCategory::Syntax;
         assert!(DiagnosticMessage::from_value(&message.to_value()).is_err());
     }
+
+    #[test]
+    fn json5_diagnostics_require_semantic_model_v4() {
+        let diagnostic = Diagnostic::new(
+            "json5.syntax.invalid-identifier@1",
+            DiagnosticCategory::Syntax,
+            DiagnosticSeverity::Error,
+            None,
+            0,
+        );
+        assert!(
+            DiagnosticMessage::from_core_with_registry(&diagnostic, None, ErrorCodeRegistry::v3())
+                .is_err()
+        );
+        let message =
+            DiagnosticMessage::from_core_with_registry(&diagnostic, None, ErrorCodeRegistry::v4())
+                .unwrap();
+        assert_eq!(message.code, diagnostic.code);
+        let contract = crate::ContractId::new("core.diagnostic", 1).unwrap();
+        assert!(
+            crate::ProtocolMessage::new(
+                contract.clone(),
+                message.to_value(),
+                crate::ContractRegistry::v3(),
+            )
+            .is_err()
+        );
+        let envelope = crate::ProtocolMessage::new(
+            contract,
+            message.to_value(),
+            crate::ContractRegistry::v4(),
+        )
+        .unwrap();
+        let limits = crate::ProtocolLimits::default();
+        assert_eq!(
+            crate::ProtocolMessage::from_json(
+                &envelope.to_json(limits).unwrap(),
+                limits,
+                crate::ContractRegistry::v4(),
+            )
+            .unwrap(),
+            envelope
+        );
+        assert_eq!(
+            crate::ProtocolMessage::from_pvce(
+                &envelope.to_pvce(limits).unwrap(),
+                limits,
+                crate::ContractRegistry::v4(),
+            )
+            .unwrap(),
+            envelope
+        );
+    }
 }

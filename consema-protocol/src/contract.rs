@@ -158,6 +158,7 @@ enum RegistryVersion {
     V1,
     V2,
     V3,
+    V4,
 }
 
 impl Default for ContractRegistry {
@@ -191,13 +192,21 @@ impl ContractRegistry {
         }
     }
 
+    /// Consema 0.6 semantic-model v4 registry.
+    #[must_use]
+    pub const fn v4() -> Self {
+        Self {
+            version: RegistryVersion::V4,
+        }
+    }
+
     /// Sorted registered contracts.
     #[must_use]
     pub const fn contracts(self) -> &'static [ContractDescriptor] {
         match self.version {
             RegistryVersion::V1 => CONTRACTS_V1,
             RegistryVersion::V2 => CONTRACTS_V2,
-            RegistryVersion::V3 => CONTRACTS_V3,
+            RegistryVersion::V3 | RegistryVersion::V4 => CONTRACTS_V3,
         }
     }
 
@@ -222,6 +231,7 @@ impl ContractRegistry {
             RegistryVersion::V1 => ErrorCodeRegistry::v1(),
             RegistryVersion::V2 => ErrorCodeRegistry::v2(),
             RegistryVersion::V3 => ErrorCodeRegistry::v3(),
+            RegistryVersion::V4 => ErrorCodeRegistry::v4(),
         }
     }
 }
@@ -491,6 +501,7 @@ mod tests {
             ContractRegistry::v1(),
             ContractRegistry::v2(),
             ContractRegistry::v3(),
+            ContractRegistry::v4(),
         ] {
             assert!(
                 registry
@@ -502,6 +513,11 @@ mod tests {
         assert_eq!(ContractRegistry::v1().contracts().len(), 16);
         assert_eq!(ContractRegistry::v2().contracts().len(), 18);
         assert_eq!(ContractRegistry::v3().contracts().len(), 25);
+        assert_eq!(ContractRegistry::v4().contracts().len(), 25);
+        assert_eq!(
+            ContractRegistry::v4().contracts(),
+            ContractRegistry::v3().contracts()
+        );
         assert!(
             !ContractRegistry::v1()
                 .recognizes(&ContractId::new("core.source-snapshot", 1).unwrap())
