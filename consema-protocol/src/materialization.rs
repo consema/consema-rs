@@ -126,11 +126,16 @@ pub struct MaterializationReportMessage {
 impl MaterializationReportMessage {
     /// Validates all events against semantic-model v3.
     pub fn new(events: Vec<DiagnosticMessage>) -> Result<Self, ProtocolError> {
+        Self::new_with_registry(events, ErrorCodeRegistry::v3())
+    }
+
+    /// Validates all events against one explicit semantic-model registry.
+    pub fn new_with_registry(
+        events: Vec<DiagnosticMessage>,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         for event in &events {
-            DiagnosticMessage::from_value_with_registry(
-                &event.to_value(),
-                ErrorCodeRegistry::v3(),
-            )?;
+            DiagnosticMessage::from_value_with_registry(&event.to_value(), registry)?;
         }
         Ok(Self { events })
     }
@@ -140,18 +145,23 @@ impl MaterializationReportMessage {
         report: &MaterializationReport,
         target_source_id: Option<&str>,
     ) -> Result<Self, ProtocolError> {
+        Self::from_report_with_registry(report, target_source_id, ErrorCodeRegistry::v3())
+    }
+
+    /// Externalizes a report under one explicit semantic-model registry.
+    pub fn from_report_with_registry(
+        report: &MaterializationReport,
+        target_source_id: Option<&str>,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let events = report
             .events()
             .iter()
             .map(|event| {
-                DiagnosticMessage::from_core_with_registry(
-                    event,
-                    target_source_id,
-                    ErrorCodeRegistry::v3(),
-                )
+                DiagnosticMessage::from_core_with_registry(event, target_source_id, registry)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Self::new(events)
+        Self::new_with_registry(events, registry)
     }
 
     /// Ordered materialization events.
@@ -178,6 +188,14 @@ impl MaterializationReportMessage {
 
     /// Strictly decodes ordered v3 diagnostics.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v3())
+    }
+
+    /// Strictly decodes events under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.materialization-report@1",
@@ -186,11 +204,9 @@ impl MaterializationReportMessage {
         )?;
         let events = sequence(fields[1], "$.events")?
             .iter()
-            .map(|event| {
-                DiagnosticMessage::from_value_with_registry(event, ErrorCodeRegistry::v3())
-            })
+            .map(|event| DiagnosticMessage::from_value_with_registry(event, registry))
             .collect::<Result<Vec<_>, _>>()?;
-        Self::new(events)
+        Self::new_with_registry(events, registry)
     }
 }
 
@@ -669,6 +685,14 @@ impl MaterializationResultMessage {
 
     /// Strictly decodes and revalidates snapshot, report, provenance, and failure facts.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v3())
+    }
+
+    /// Strictly decodes reports under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.materialization-result@1",
@@ -702,7 +726,7 @@ impl MaterializationResultMessage {
                     string(fields[1], "$.outcome.target_source_id")?,
                     SourceSnapshotMessage::from_value(fields[2], SourceLimits::default())?,
                     parse_fidelity(string(fields[3], "$.outcome.fidelity")?)?,
-                    MaterializationReportMessage::from_value(fields[4])?,
+                    MaterializationReportMessage::from_value_with_registry(fields[4], registry)?,
                     MaterializationProvenanceMapMessage::from_value(fields[5])?,
                 )
             }
@@ -722,7 +746,7 @@ impl MaterializationResultMessage {
                 Self::failed(
                     target_profile,
                     parse_failure(fields[1], "$.outcome.failure")?,
-                    MaterializationReportMessage::from_value(fields[2])?,
+                    MaterializationReportMessage::from_value_with_registry(fields[2], registry)?,
                     analyzed_input_paths,
                 )
             }

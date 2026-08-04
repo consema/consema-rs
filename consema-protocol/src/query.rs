@@ -4,8 +4,8 @@ use crate::schema::{
     exact_fields, integer_u64, object, schema_fields, sequence, string, unsigned_u32, unsigned_u64,
 };
 use crate::{
-    Completion, CompletionStatus, ContractId, ContractRegistry, DiagnosticMessage, ProtocolError,
-    ProtocolErrorKind, ProtocolMessage,
+    Completion, CompletionStatus, ContractId, ContractRegistry, DiagnosticMessage,
+    ErrorCodeRegistry, ProtocolError, ProtocolErrorKind, ProtocolMessage,
 };
 use consema_core::{
     AssociationLocation, AssociationRole, MatchRole, PortableMatch, PortableValue, QueryDefinition,
@@ -281,6 +281,14 @@ impl QueryResultMessage {
 
     /// Strictly decodes `core.query-result@1`.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes terminal facts under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.query-result@1",
@@ -303,7 +311,7 @@ impl QueryResultMessage {
             .collect::<Result<Vec<_>, _>>()?;
         let diagnostics = sequence(fields[6], "$.diagnostics")?
             .iter()
-            .map(DiagnosticMessage::from_value)
+            .map(|value| DiagnosticMessage::from_value_with_registry(value, registry))
             .collect::<Result<Vec<_>, _>>()?;
         Self::new(
             QueryDomain::new(
@@ -312,7 +320,7 @@ impl QueryResultMessage {
             ),
             role,
             matches,
-            Completion::from_value(fields[5])?,
+            Completion::from_value_with_registry(fields[5], registry)?,
             diagnostics,
         )
     }

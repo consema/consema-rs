@@ -23,43 +23,75 @@ pub(crate) fn validate_registered_payload(
     match contract.id() {
         "core.cancellation-request" => CancellationRequest::from_value(payload).map(drop),
         "core.capability-declaration" => CapabilityDeclaration::from_value(payload).map(drop),
-        "core.change-set" => ChangeSetMessage::from_value(payload).map(drop),
-        "core.completion" => Completion::from_value(payload).map(drop),
-        "core.conversion-report" => ConversionReportMessage::from_value(payload).map(drop),
+        "core.change-set" => {
+            ChangeSetMessage::from_value_with_registry(payload, registry.error_code_registry())
+                .map(drop)
+        }
+        "core.completion" => {
+            Completion::from_value_with_registry(payload, registry.error_code_registry()).map(drop)
+        }
+        "core.conversion-report" => ConversionReportMessage::from_value_with_registry(
+            payload,
+            registry.error_code_registry(),
+        )
+        .map(drop),
         "core.diagnostic" => {
             DiagnosticMessage::from_value_with_registry(payload, registry.error_code_registry())
                 .map(drop)
         }
-        "core.edit-plan" => EditPlanMessage::from_value(payload).map(drop),
+        "core.edit-plan" => {
+            EditPlanMessage::from_value_with_registry(payload, registry.error_code_registry())
+                .map(drop)
+        }
         "core.error-code-registry" => validate_error_code_manifest_value(payload),
         "core.execution-policy" => ExecutionPolicy::from_value(payload).map(drop),
         "core.format-operation-registry" => {
             FormatOperationRegistryMessage::from_value(payload).map(drop)
         }
-        "core.graph-projection-result" => {
-            GraphProjectionResultMessage::from_value(payload).map(drop)
-        }
+        "core.graph-projection-result" => GraphProjectionResultMessage::from_value_with_registry(
+            payload,
+            PgceLimits::default(),
+            registry.error_code_registry(),
+        )
+        .map(drop),
         "core.graph-provenance-map" => GraphProvenanceMapMessage::from_value(payload).map(drop),
-        "core.graph-query-result" => GraphQueryResultMessage::from_value(payload).map(drop),
+        "core.graph-query-result" => GraphQueryResultMessage::from_value_with_registry(
+            payload,
+            PgceLimits::default(),
+            registry.error_code_registry(),
+        )
+        .map(drop),
         "core.materialization-provenance-map" => {
             MaterializationProvenanceMapMessage::from_value(payload).map(drop)
         }
-        "core.materialization-report" => {
-            MaterializationReportMessage::from_value(payload).map(drop)
-        }
+        "core.materialization-report" => MaterializationReportMessage::from_value_with_registry(
+            payload,
+            registry.error_code_registry(),
+        )
+        .map(drop),
         "core.materialization-request" => {
             MaterializationRequestMessage::from_value(payload).map(drop)
         }
-        "core.materialization-result" => {
-            MaterializationResultMessage::from_value(payload).map(drop)
-        }
+        "core.materialization-result" => MaterializationResultMessage::from_value_with_registry(
+            payload,
+            registry.error_code_registry(),
+        )
+        .map(drop),
         "core.profile-descriptor" => ProfileDescriptor::from_value(payload).map(drop),
         "core.portable-graph" => {
             PortableGraphMessage::from_value(payload, PgceLimits::default()).map(drop)
         }
-        "core.projection-report" => ProjectionReportMessage::from_value(payload).map(drop),
+        "core.projection-report" => ProjectionReportMessage::from_value_with_registry(
+            payload,
+            registry.error_code_registry(),
+        )
+        .map(drop),
         "core.projection-request" => ProjectionRequestMessage::from_value(payload).map(drop),
-        "core.projection-result" => ProjectionResultMessage::from_value(payload).map(drop),
+        "core.projection-result" => ProjectionResultMessage::from_value_with_registry(
+            payload,
+            registry.error_code_registry(),
+        )
+        .map(drop),
         "core.provenance-map" => ProvenanceMapMessage::from_value(payload).map(drop),
         "core.query-definition" => QueryDefinition::from_protocol_value(payload)
             .map(drop)
@@ -70,7 +102,10 @@ pub(crate) fn validate_registered_payload(
                     format!("invalid query definition: {error:?}"),
                 )
             }),
-        "core.query-result" => QueryResultMessage::from_value(payload).map(drop),
+        "core.query-result" => {
+            QueryResultMessage::from_value_with_registry(payload, registry.error_code_registry())
+                .map(drop)
+        }
         "core.registry-manifest" => RegistryManifest::from_value(payload).map(drop),
         "core.source-patch" => {
             SourcePatchMessage::from_value(payload, SourcePatchLimits::default()).map(drop)
@@ -78,7 +113,11 @@ pub(crate) fn validate_registered_payload(
         "core.source-snapshot" => {
             SourceSnapshotMessage::from_value(payload, SourceLimits::default()).map(drop)
         }
-        "core.yaml-query-result" => YamlQueryResultMessage::from_value(payload).map(drop),
+        "core.yaml-query-result" => YamlQueryResultMessage::from_value_with_registry(
+            payload,
+            registry.error_code_registry(),
+        )
+        .map(drop),
         _ => Err(ProtocolError::new(
             ProtocolErrorKind::UnknownContract,
             "$.contract",

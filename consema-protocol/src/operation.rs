@@ -123,6 +123,14 @@ pub struct EditPlanMessage {
 impl EditPlanMessage {
     /// Externalizes a complete local plan without serializing process-local identities.
     pub fn from_plan(plan: &EditPlan) -> Result<Self, ProtocolError> {
+        Self::from_plan_with_registry(plan, ErrorCodeRegistry::v3())
+    }
+
+    /// Externalizes a plan under one explicit semantic-model registry.
+    pub fn from_plan_with_registry(
+        plan: &EditPlan,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let report = plan
             .report()
             .iter()
@@ -130,11 +138,11 @@ impl EditPlanMessage {
                 DiagnosticMessage::from_core_with_registry(
                     diagnostic,
                     Some(plan.source_id().as_str()),
-                    ErrorCodeRegistry::v3(),
+                    registry,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Self::new(
+        Self::new_with_registry(
             plan.source_id().as_str(),
             plan.base_digest(),
             plan.profile().clone(),
@@ -148,6 +156,7 @@ impl EditPlanMessage {
             plan.replacements().to_vec(),
             plan.target_digest(),
             report,
+            registry,
         )
     }
 
@@ -160,6 +169,30 @@ impl EditPlanMessage {
         replacements: Vec<SourceReplacement>,
         target_digest: ContentDigest,
         report: Vec<DiagnosticMessage>,
+    ) -> Result<Self, ProtocolError> {
+        Self::new_with_registry(
+            source_id,
+            base_digest,
+            profile,
+            operations,
+            replacements,
+            target_digest,
+            report,
+            ErrorCodeRegistry::v3(),
+        )
+    }
+
+    /// Validates a dry-run plan under one explicit semantic-model registry.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_registry(
+        source_id: impl Into<String>,
+        base_digest: ContentDigest,
+        profile: ProfileId,
+        operations: Vec<EditOperationSummaryMessage>,
+        replacements: Vec<SourceReplacement>,
+        target_digest: ContentDigest,
+        report: Vec<DiagnosticMessage>,
+        registry: ErrorCodeRegistry,
     ) -> Result<Self, ProtocolError> {
         let source_id = source_id.into();
         if source_id.is_empty() || source_id.len() > 1024 {
@@ -180,10 +213,7 @@ impl EditPlanMessage {
             ));
         }
         for event in &report {
-            DiagnosticMessage::from_value_with_registry(
-                &event.to_value(),
-                ErrorCodeRegistry::v3(),
-            )?;
+            DiagnosticMessage::from_value_with_registry(&event.to_value(), registry)?;
             if event
                 .primary
                 .as_ref()
@@ -297,6 +327,14 @@ impl EditPlanMessage {
 
     /// Strictly decodes and revalidates a dry-run plan.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v3())
+    }
+
+    /// Strictly decodes report diagnostics under one semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.edit-plan@1",
@@ -328,11 +366,9 @@ impl EditPlanMessage {
             .collect::<Result<Vec<_>, _>>()?;
         let report = sequence(fields[7], "$.report")?
             .iter()
-            .map(|event| {
-                DiagnosticMessage::from_value_with_registry(event, ErrorCodeRegistry::v3())
-            })
+            .map(|event| DiagnosticMessage::from_value_with_registry(event, registry))
             .collect::<Result<Vec<_>, _>>()?;
-        Self::new(
+        Self::new_with_registry(
             string(fields[1], "$.source_id")?,
             parse_digest(fields[2], "$.base_digest")?,
             parse_profile(fields[3], "$.profile")?,
@@ -340,6 +376,7 @@ impl EditPlanMessage {
             replacements,
             parse_digest(fields[6], "$.target_digest")?,
             report,
+            registry,
         )
     }
 }

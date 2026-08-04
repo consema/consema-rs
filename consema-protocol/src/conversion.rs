@@ -2,7 +2,8 @@
 
 use crate::schema::{object, schema_fields, string};
 use crate::{
-    LossClassification, MaterializationReportMessage, ProjectionReportMessage, ProtocolError,
+    ErrorCodeRegistry, LossClassification, MaterializationReportMessage, ProjectionReportMessage,
+    ProtocolError,
 };
 use consema_core::PortableValue;
 use consema_document::{MaterializationFidelity, ProfileId};
@@ -167,6 +168,14 @@ impl ConversionReportMessage {
 
     /// Strictly decodes and revalidates both report stages.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v3())
+    }
+
+    /// Strictly decodes both stage reports under one semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.conversion-report@1",
@@ -189,12 +198,9 @@ impl ConversionReportMessage {
                 string(fields[3], "$.projection_fidelity")?,
                 "$.projection_fidelity",
             )?,
-            ProjectionReportMessage::from_value_with_registry(
-                fields[4],
-                crate::ErrorCodeRegistry::v3(),
-            )?,
+            ProjectionReportMessage::from_value_with_registry(fields[4], registry)?,
             parse_materialization_fidelity(string(fields[5], "$.materialization_fidelity")?)?,
-            MaterializationReportMessage::from_value(fields[6])?,
+            MaterializationReportMessage::from_value_with_registry(fields[6], registry)?,
             parse_fidelity(
                 string(fields[7], "$.overall_fidelity")?,
                 "$.overall_fidelity",

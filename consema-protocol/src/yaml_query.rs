@@ -3,7 +3,7 @@
 use crate::schema::{
     exact_fields, integer_u64, object, schema_fields, sequence, string, unsigned_u32, unsigned_u64,
 };
-use crate::{Completion, DiagnosticMessage, ProtocolError, ProtocolErrorKind};
+use crate::{Completion, DiagnosticMessage, ErrorCodeRegistry, ProtocolError, ProtocolErrorKind};
 use consema_core::{BigInteger, MatchRole, PortableValue, QueryDomain, SequenceBuilder};
 use consema_document::NodeRef;
 
@@ -191,6 +191,14 @@ impl YamlQueryResultMessage {
 
     /// Strictly decodes one externalized YAML query result.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes terminal facts under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.yaml-query-result@1",
@@ -225,7 +233,7 @@ impl YamlQueryResultMessage {
             .collect::<Result<Vec<_>, _>>()?;
         let diagnostics = sequence(fields[6], "$.diagnostics")?
             .iter()
-            .map(DiagnosticMessage::from_value)
+            .map(|value| DiagnosticMessage::from_value_with_registry(value, registry))
             .collect::<Result<Vec<_>, _>>()?;
         Self::new(
             QueryDomain::new(
@@ -234,7 +242,7 @@ impl YamlQueryResultMessage {
             ),
             parse_role(string(fields[3], "$.role")?)?,
             matches,
-            Completion::from_value(fields[5])?,
+            Completion::from_value_with_registry(fields[5], registry)?,
             diagnostics,
         )
     }

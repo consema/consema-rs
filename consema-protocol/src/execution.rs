@@ -56,8 +56,27 @@ impl Completion {
         limit_name: Option<String>,
         failure_code: Option<String>,
     ) -> Result<Self, ProtocolError> {
+        Self::new_with_registry(
+            status,
+            processed,
+            produced,
+            limit_name,
+            failure_code,
+            ErrorCodeRegistry::v1(),
+        )
+    }
+
+    /// Validates completion facts against one explicit semantic-model registry.
+    pub fn new_with_registry(
+        status: CompletionStatus,
+        processed: u64,
+        produced: u64,
+        limit_name: Option<String>,
+        failure_code: Option<String>,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         if let Some(code) = failure_code.as_deref() {
-            ErrorCodeRegistry::v1().validate_at(code, "$.failure_code")?;
+            registry.validate_at(code, "$.failure_code")?;
         }
         let valid = match status {
             CompletionStatus::Success | CompletionStatus::Cancelled => {
@@ -135,6 +154,14 @@ impl Completion {
 
     /// Strictly decodes `core.completion@1`.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.completion@1",
@@ -148,12 +175,13 @@ impl Completion {
             ],
             "$",
         )?;
-        Self::new(
+        Self::new_with_registry(
             parse_status(string(fields[1], "$.status")?)?,
             unsigned_u64(fields[2], "$.processed")?,
             unsigned_u64(fields[3], "$.produced")?,
             optional_string(fields[4], "$.limit_name")?.map(str::to_owned),
             optional_string(fields[5], "$.failure_code")?.map(str::to_owned),
+            registry,
         )
     }
 }
@@ -383,6 +411,45 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn selected_registry_controls_new_nested_failure_codes() {
+        let code = "yaml.parse.syntax@1".to_owned();
+        assert!(
+            Completion::new(CompletionStatus::Failed, 1, 0, None, Some(code.clone()),).is_err()
+        );
+        let completion = Completion::new_with_registry(
+            CompletionStatus::Failed,
+            1,
+            0,
+            None,
+            Some(code),
+            ErrorCodeRegistry::v5(),
+        )
+        .unwrap();
+        assert!(Completion::from_value(&completion.to_value()).is_err());
+        assert_eq!(
+            Completion::from_value_with_registry(&completion.to_value(), ErrorCodeRegistry::v5(),)
+                .unwrap(),
+            completion
+        );
+
+        let contract = crate::ContractId::new("core.completion", 1).unwrap();
+        assert!(
+            crate::ProtocolMessage::new(
+                contract.clone(),
+                completion.to_value(),
+                crate::ContractRegistry::v4(),
+            )
+            .is_err()
+        );
+        crate::ProtocolMessage::new(
+            contract,
+            completion.to_value(),
+            crate::ContractRegistry::v5(),
+        )
+        .unwrap();
     }
 
     #[test]

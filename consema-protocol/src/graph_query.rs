@@ -4,8 +4,8 @@ use crate::schema::{
     exact_fields, integer_u64, object, schema_fields, sequence, string, unsigned_u32, unsigned_u64,
 };
 use crate::{
-    Completion, CompletionStatus, DiagnosticMessage, PortableGraphMessage, ProtocolError,
-    ProtocolErrorKind,
+    Completion, CompletionStatus, DiagnosticMessage, ErrorCodeRegistry, PortableGraphMessage,
+    ProtocolError, ProtocolErrorKind,
 };
 use consema_core::{
     BigInteger, MatchRole, PortableValue, QueryDomain, QueryExecution, SequenceBuilder,
@@ -214,13 +214,22 @@ impl GraphQueryResultMessage {
 
     /// Strictly decodes with default PGCE limits.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
-        Self::from_value_with_limits(value, PgceLimits::default())
+        Self::from_value_with_registry(value, PgceLimits::default(), ErrorCodeRegistry::v1())
     }
 
     /// Strictly decodes with explicit PGCE limits.
     pub fn from_value_with_limits(
         value: &PortableValue,
         limits: PgceLimits,
+    ) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, limits, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes with explicit graph limits and semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        limits: PgceLimits,
+        registry: ErrorCodeRegistry,
     ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
@@ -244,7 +253,7 @@ impl GraphQueryResultMessage {
             .collect::<Result<Vec<_>, _>>()?;
         let diagnostics = sequence(fields[7], "$.diagnostics")?
             .iter()
-            .map(DiagnosticMessage::from_value)
+            .map(|value| DiagnosticMessage::from_value_with_registry(value, registry))
             .collect::<Result<Vec<_>, _>>()?;
         Self::new(
             QueryDomain::new(
@@ -254,7 +263,7 @@ impl GraphQueryResultMessage {
             parse_role(string(fields[3], "$.role")?)?,
             PortableGraphMessage::from_value(fields[4], limits)?,
             matches,
-            Completion::from_value(fields[6])?,
+            Completion::from_value_with_registry(fields[6], registry)?,
             diagnostics,
         )
     }

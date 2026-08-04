@@ -637,6 +637,14 @@ impl ProjectionResultMessage {
 
     /// Strictly decodes `core.projection-result@1`.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes terminal facts under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.projection-result@1",
@@ -661,13 +669,13 @@ impl ProjectionResultMessage {
             .transpose()?;
         let diagnostics = sequence(fields[6], "$.diagnostics")?
             .iter()
-            .map(DiagnosticMessage::from_value)
+            .map(|value| DiagnosticMessage::from_value_with_registry(value, registry))
             .collect::<Result<Vec<_>, _>>()?;
         Self::new(
-            Completion::from_value(fields[1])?,
+            Completion::from_value_with_registry(fields[1], registry)?,
             projected,
             fidelity,
-            ProjectionReportMessage::from_value(fields[4])?,
+            ProjectionReportMessage::from_value_with_registry(fields[4], registry)?,
             ProvenanceMapMessage::from_value(fields[5])?,
             diagnostics,
         )

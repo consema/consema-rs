@@ -4,7 +4,7 @@ use crate::schema::{
     exact_fields, integer_u64, nullable_string, object, optional_string, schema_fields, sequence,
     string, unsigned_u64,
 };
-use crate::{DiagnosticMessage, ProtocolError, ProtocolErrorKind};
+use crate::{DiagnosticMessage, ErrorCodeRegistry, ProtocolError, ProtocolErrorKind};
 use consema_core::{PortableValue, SequenceBuilder};
 use consema_document::{ChangeSet, NodeMappingStatus, NodeRef};
 use std::collections::BTreeSet;
@@ -187,6 +187,23 @@ impl ChangeSetMessage {
         new_source_id: impl Into<String>,
         locator: impl Fn(NodeRef) -> Option<String>,
     ) -> Result<Self, ProtocolError> {
+        Self::from_document_with_registry(
+            change_set,
+            old_source_id,
+            new_source_id,
+            locator,
+            ErrorCodeRegistry::v1(),
+        )
+    }
+
+    /// Externalizes a ChangeSet under one explicit semantic-model registry.
+    pub fn from_document_with_registry(
+        change_set: &ChangeSet,
+        old_source_id: impl Into<String>,
+        new_source_id: impl Into<String>,
+        locator: impl Fn(NodeRef) -> Option<String>,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let old_source_id = old_source_id.into();
         let new_source_id = new_source_id.into();
         let source_edits = change_set
@@ -233,7 +250,13 @@ impl ChangeSetMessage {
         let diagnostics = change_set
             .diagnostics()
             .iter()
-            .map(|diagnostic| DiagnosticMessage::from_core(diagnostic, Some(&new_source_id)))
+            .map(|diagnostic| {
+                DiagnosticMessage::from_core_with_registry(
+                    diagnostic,
+                    Some(&new_source_id),
+                    registry,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
         Self::new(
             old_source_id,
@@ -307,6 +330,14 @@ impl ChangeSetMessage {
 
     /// Strictly decodes `core.change-set@1`.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes diagnostics under one explicit semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.change-set@1",
@@ -334,7 +365,7 @@ impl ChangeSetMessage {
             .collect::<Result<Vec<_>, _>>()?;
         let diagnostics = sequence(fields[5], "$.diagnostics")?
             .iter()
-            .map(DiagnosticMessage::from_value)
+            .map(|value| DiagnosticMessage::from_value_with_registry(value, registry))
             .collect::<Result<Vec<_>, _>>()?;
         Self::new(
             string(fields[1], "$.old_source_id")?,

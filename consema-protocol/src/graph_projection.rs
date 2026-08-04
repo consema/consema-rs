@@ -5,8 +5,8 @@ use crate::schema::{
     string, unsigned_u64,
 };
 use crate::{
-    Completion, CompletionStatus, DiagnosticMessage, PortableGraphMessage, ProtocolError,
-    ProtocolErrorKind,
+    Completion, CompletionStatus, DiagnosticMessage, ErrorCodeRegistry, PortableGraphMessage,
+    ProtocolError, ProtocolErrorKind,
 };
 use consema_core::{PortableValue, SequenceBuilder};
 use consema_document::NodeRef;
@@ -306,13 +306,22 @@ impl GraphProjectionResultMessage {
 
     /// Strictly decodes with default PGCE limits.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
-        Self::from_value_with_limits(value, PgceLimits::default())
+        Self::from_value_with_registry(value, PgceLimits::default(), ErrorCodeRegistry::v1())
     }
 
     /// Strictly decodes with explicit PGCE limits.
     pub fn from_value_with_limits(
         value: &PortableValue,
         limits: PgceLimits,
+    ) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, limits, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes with explicit graph limits and semantic-model registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        limits: PgceLimits,
+        registry: ErrorCodeRegistry,
     ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
@@ -328,10 +337,10 @@ impl GraphProjectionResultMessage {
         };
         let diagnostics = sequence(fields[4], "$.diagnostics")?
             .iter()
-            .map(DiagnosticMessage::from_value)
+            .map(|value| DiagnosticMessage::from_value_with_registry(value, registry))
             .collect::<Result<Vec<_>, _>>()?;
         Self::new(
-            Completion::from_value(fields[1])?,
+            Completion::from_value_with_registry(fields[1], registry)?,
             graph,
             GraphProvenanceMapMessage::from_value(fields[3])?,
             diagnostics,
