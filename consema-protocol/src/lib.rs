@@ -12,6 +12,7 @@ mod diagnostic;
 mod error;
 mod error_registry;
 mod execution;
+mod graph_projection;
 mod graph_query;
 mod limits;
 mod materialization;
@@ -40,6 +41,10 @@ pub use error_registry::{
     query_failure_code, validate_error_code_manifest_value,
 };
 pub use execution::{CancellationRequest, Completion, CompletionStatus, ExecutionPolicy};
+pub use graph_projection::{
+    GraphProjectedLocationMessage, GraphProjectionResultMessage, GraphProvenanceEntryMessage,
+    GraphProvenanceMapMessage, GraphProvenanceRelationMessage, GraphSourceOriginMessage,
+};
 pub use graph_query::{GraphQueryMatchMessage, GraphQueryResultMessage};
 pub use limits::ProtocolLimits;
 pub use materialization::{
