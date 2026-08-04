@@ -33,11 +33,16 @@ pub fn materialize(
 
 pub(crate) fn canonical_fragment(
     value: &PortableValue,
+    profile: JsonProfile,
     limits: MaterializationLimits,
 ) -> Result<Vec<u8>, MaterializationFailure> {
     let mut analyzed = Vec::new();
     let mut writer = JsonWriter::new(
-        JsonStyle::Compact,
+        if profile.is_json5() {
+            JsonStyle::Json5Compact
+        } else {
+            JsonStyle::Compact
+        },
         NewlinePolicy::None,
         limits,
         &mut analyzed,
@@ -52,11 +57,11 @@ fn materialize_complete(
     analyzed: &mut Vec<ValuePath>,
 ) -> Result<CompleteMaterialization<Document>, MaterializationFailure> {
     let profile = requested_profile(request)?;
-    let style = requested_style(request)?;
+    let style = requested_style(request, profile)?;
     if request.encoding() != SourceEncoding::Utf8 {
         return Err(MaterializationFailure::UnsupportedEncoding);
     }
-    if style == JsonStyle::Pretty && request.newline() == NewlinePolicy::None {
+    if style.is_pretty() && request.newline() == NewlinePolicy::None {
         return Err(MaterializationFailure::UnsupportedNewline);
     }
 
@@ -91,6 +96,18 @@ fn materialize_complete(
 enum JsonStyle {
     Compact,
     Pretty,
+    Json5Compact,
+    Json5Pretty,
+}
+
+impl JsonStyle {
+    const fn is_pretty(self) -> bool {
+        matches!(self, Self::Pretty | Self::Json5Pretty)
+    }
+
+    const fn is_json5(self) -> bool {
+        matches!(self, Self::Json5Compact | Self::Json5Pretty)
+    }
 }
 
 fn requested_profile(
@@ -102,14 +119,24 @@ fn requested_profile(
     ) {
         ("json.strict", 1) => Ok(JsonProfile::StrictV1),
         ("jsonc.bounded", 1) => Ok(JsonProfile::JsoncBoundedV1),
+        ("json5.standard", 1) => Ok(JsonProfile::Json5StandardV1),
         _ => Err(MaterializationFailure::UnsupportedProfile),
     }
 }
 
-fn requested_style(request: &MaterializationRequest) -> Result<JsonStyle, MaterializationFailure> {
-    match (request.style().id(), request.style().version()) {
-        ("json.canonical-compact", 1) => Ok(JsonStyle::Compact),
-        ("json.canonical-pretty", 1) => Ok(JsonStyle::Pretty),
+fn requested_style(
+    request: &MaterializationRequest,
+    profile: JsonProfile,
+) -> Result<JsonStyle, MaterializationFailure> {
+    match (profile, request.style().id(), request.style().version()) {
+        (JsonProfile::StrictV1 | JsonProfile::JsoncBoundedV1, "json.canonical-compact", 1) => {
+            Ok(JsonStyle::Compact)
+        }
+        (JsonProfile::StrictV1 | JsonProfile::JsoncBoundedV1, "json.canonical-pretty", 1) => {
+            Ok(JsonStyle::Pretty)
+        }
+        (JsonProfile::Json5StandardV1, "json5.canonical-compact", 1) => Ok(JsonStyle::Json5Compact),
+        (JsonProfile::Json5StandardV1, "json5.canonical-pretty", 1) => Ok(JsonStyle::Json5Pretty),
         _ => Err(MaterializationFailure::UnsupportedStyle),
     }
 }
@@ -180,6 +207,12 @@ impl<'a> JsonWriter<'a> {
                     .as_decimal()
                     .expect("PortableValue kind and view agree"),
             ),
+            PortableValueKind::BinaryFloat64 if self.style.is_json5() => self.write_binary_float64(
+                value
+                    .as_binary_float64()
+                    .expect("PortableValue kind and view agree"),
+                path,
+            ),
             PortableValueKind::String => self.write_string(
                 value
                     .as_string()
@@ -249,6 +282,10 @@ impl<'a> JsonWriter<'a> {
                     write!(&mut self.output, "\\u{:04x}", u32::from(character))
                         .map_err(|_| MaterializationFailure::ResourceLimit("output-bytes"))?;
                 }
+                '\u{2028}' | '\u{2029}' if self.style.is_json5() => {
+                    write!(&mut self.output, "\\u{:04x}", u32::from(character))
+                        .map_err(|_| MaterializationFailure::ResourceLimit("output-bytes"))?;
+                }
                 _ => {
                     let mut encoded = [0_u8; 4];
                     self.output
@@ -259,6 +296,26 @@ impl<'a> JsonWriter<'a> {
         self.output.push_byte(b'"')
     }
 
+    fn write_binary_float64(
+        &mut self,
+        value: consema_core::BinaryFloat64,
+        path: &ValuePath,
+    ) -> Result<(), MaterializationFailure> {
+        let spelling: &[u8] = match value.bits() {
+            0x7ff0_0000_0000_0000 => b"Infinity",
+            0xfff0_0000_0000_0000 => b"-Infinity",
+            0x7ff8_0000_0000_0000 => b"NaN",
+            0xfff8_0000_0000_0000 => b"-NaN",
+            _ => {
+                return Err(MaterializationFailure::Unrepresentable {
+                    path: path.clone(),
+                    kind: PortableValueKind::BinaryFloat64,
+                });
+            }
+        };
+        self.output.push_bytes(spelling)
+    }
+
     fn write_sequence(
         &mut self,
         values: &[PortableValue],
@@ -266,13 +323,13 @@ impl<'a> JsonWriter<'a> {
         depth: usize,
     ) -> Result<(), MaterializationFailure> {
         self.output.push_byte(b'[')?;
-        if !values.is_empty() && self.style == JsonStyle::Pretty {
+        if !values.is_empty() && self.style.is_pretty() {
             self.layout_newline(depth.saturating_add(1))?;
         }
         for (index, value) in values.iter().enumerate() {
             if index != 0 {
                 self.output.push_byte(b',')?;
-                if self.style == JsonStyle::Pretty {
+                if self.style.is_pretty() {
                     self.layout_newline(depth.saturating_add(1))?;
                 }
             }
@@ -284,7 +341,7 @@ impl<'a> JsonWriter<'a> {
                 depth.saturating_add(1),
             )?;
         }
-        if !values.is_empty() && self.style == JsonStyle::Pretty {
+        if !values.is_empty() && self.style.is_pretty() {
             self.layout_newline(depth)?;
         }
         self.output.push_byte(b']')
@@ -297,14 +354,14 @@ impl<'a> JsonWriter<'a> {
         depth: usize,
     ) -> Result<(), MaterializationFailure> {
         self.output.push_byte(b'{')?;
-        if !entries.is_empty() && self.style == JsonStyle::Pretty {
+        if !entries.is_empty() && self.style.is_pretty() {
             self.layout_newline(depth.saturating_add(1))?;
         }
         for (index, entry) in entries.iter().enumerate() {
             self.member_separator(index, depth)?;
             self.write_string(entry.key())?;
             self.output.push_byte(b':')?;
-            if self.style == JsonStyle::Pretty {
+            if self.style.is_pretty() {
                 self.output.push_byte(b' ')?;
             }
             self.value(
@@ -313,7 +370,7 @@ impl<'a> JsonWriter<'a> {
                 depth.saturating_add(1),
             )?;
         }
-        if !entries.is_empty() && self.style == JsonStyle::Pretty {
+        if !entries.is_empty() && self.style.is_pretty() {
             self.layout_newline(depth)?;
         }
         self.output.push_byte(b'}')
@@ -326,7 +383,7 @@ impl<'a> JsonWriter<'a> {
         depth: usize,
     ) -> Result<(), MaterializationFailure> {
         self.output.push_byte(b'{')?;
-        if !entries.is_empty() && self.style == JsonStyle::Pretty {
+        if !entries.is_empty() && self.style.is_pretty() {
             self.layout_newline(depth.saturating_add(1))?;
         }
         for (index, entry) in entries.iter().enumerate() {
@@ -343,7 +400,7 @@ impl<'a> JsonWriter<'a> {
             };
             self.write_string(key)?;
             self.output.push_byte(b':')?;
-            if self.style == JsonStyle::Pretty {
+            if self.style.is_pretty() {
                 self.output.push_byte(b' ')?;
             }
             self.value(
@@ -352,7 +409,7 @@ impl<'a> JsonWriter<'a> {
                 depth.saturating_add(1),
             )?;
         }
-        if !entries.is_empty() && self.style == JsonStyle::Pretty {
+        if !entries.is_empty() && self.style.is_pretty() {
             self.layout_newline(depth)?;
         }
         self.output.push_byte(b'}')
@@ -380,7 +437,7 @@ impl<'a> JsonWriter<'a> {
     ) -> Result<(), MaterializationFailure> {
         if index != 0 {
             self.output.push_byte(b',')?;
-            if self.style == JsonStyle::Pretty {
+            if self.style.is_pretty() {
                 self.layout_newline(depth.saturating_add(1))?;
             }
         }
@@ -468,6 +525,7 @@ impl<'a> ProvenanceBuilder<'a> {
             PortableValueKind::Boolean => JsonValueKind::Boolean,
             PortableValueKind::Integer => JsonValueKind::Integer,
             PortableValueKind::Decimal => JsonValueKind::Decimal,
+            PortableValueKind::BinaryFloat64 => JsonValueKind::BinaryFloat64,
             PortableValueKind::String => JsonValueKind::String,
             PortableValueKind::Sequence => JsonValueKind::Array,
             PortableValueKind::Object | PortableValueKind::EntryMapping => JsonValueKind::Object,
@@ -477,6 +535,15 @@ impl<'a> ProvenanceBuilder<'a> {
             output.kind(),
             SemanticAvailability::Available(kind) if kind == expected_kind
         ) {
+            return Err(MaterializationFailure::FormationFailed);
+        }
+        if input.kind() == PortableValueKind::BinaryFloat64
+            && input.as_binary_float64()
+                != match output.as_binary_float64() {
+                    SemanticAvailability::Available(value) => value,
+                    SemanticAvailability::Unavailable(_) => None,
+                }
+        {
             return Err(MaterializationFailure::FormationFailed);
         }
         self.push_origin(
@@ -692,12 +759,22 @@ fn available_members(
 mod tests {
     use super::*;
     use crate::{ProjectionRequestBuilder, ProjectionResult, ProjectionTarget};
-    use consema_core::{BigInteger, Decimal, EntryMappingBuilder, ObjectBuilder, SequenceBuilder};
+    use consema_core::{
+        BigInteger, BinaryFloat64, Decimal, EntryMappingBuilder, ObjectBuilder, SequenceBuilder,
+    };
     use consema_document::{MappingPolicy, MaterializationStyleId, ProfileId};
 
     fn request(style: &str, newline: NewlinePolicy) -> MaterializationRequest {
         MaterializationRequest::new(
             ProfileId::new("json.strict", 1),
+            MaterializationStyleId::new(style, 1),
+        )
+        .with_newline(newline)
+    }
+
+    fn json5_request(style: &str, newline: NewlinePolicy) -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("json5.standard", 1),
             MaterializationStyleId::new(style, 1),
         )
         .with_newline(newline)
@@ -844,6 +921,58 @@ mod tests {
             ),
             MaterializationResult::Failed(FailedMaterializationAttempt {
                 failure: MaterializationFailure::ResourceLimit("provenance-entries"),
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn json5_materialization_is_bit_exact_and_profile_bound() {
+        let input = PortableValue::sequence(vec![
+            PortableValue::binary_float64(BinaryFloat64::from_bits(0x7ff0_0000_0000_0000)),
+            PortableValue::binary_float64(BinaryFloat64::from_bits(0xfff0_0000_0000_0000)),
+            PortableValue::binary_float64(BinaryFloat64::from_bits(0x7ff8_0000_0000_0000)),
+            PortableValue::binary_float64(BinaryFloat64::from_bits(0xfff8_0000_0000_0000)),
+            PortableValue::string("a\u{2028}b"),
+        ]);
+        let complete = complete(materialize(
+            &input,
+            &json5_request("json5.canonical-compact", NewlinePolicy::None),
+        ));
+        assert_eq!(
+            complete.document.render(),
+            br#"[Infinity,-Infinity,NaN,-NaN,"a\u2028b"]"#
+        );
+        let projection = complete.document.project(
+            &ProjectionRequestBuilder::new(ProjectionTarget::Json5BestExactCoreV1)
+                .build()
+                .unwrap(),
+        );
+        assert!(matches!(
+            projection,
+            ProjectionResult::Complete(ref result) if result.value == input
+        ));
+
+        assert!(matches!(
+            materialize(
+                &PortableValue::binary_float64(BinaryFloat64::from_bits(0)),
+                &json5_request("json5.canonical-compact", NewlinePolicy::None)
+            ),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::Unrepresentable {
+                    kind: PortableValueKind::BinaryFloat64,
+                    ..
+                },
+                ..
+            })
+        ));
+        assert!(matches!(
+            materialize(
+                &PortableValue::null(),
+                &json5_request("json.canonical-compact", NewlinePolicy::None)
+            ),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::UnsupportedStyle,
                 ..
             })
         ));

@@ -803,6 +803,7 @@ impl Document {
     fn fragment(&self, value: &PortableValue) -> Result<Vec<u8>, EditFailure> {
         crate::materialization::canonical_fragment(
             value,
+            self.profile,
             MaterializationLimits {
                 max_input_nodes: self.parse_limits.max_node_count,
                 max_output_bytes: self.parse_limits.max_source_bytes,
