@@ -174,6 +174,7 @@ impl CompleteConversion {
         F: FnMut(document::NodeRef) -> Option<String>,
     {
         let snapshot = match &self.document.inner {
+            DocumentInner::Ini(document) => document.source(),
             DocumentInner::Json(document) => document.source(),
             DocumentInner::Toml(document) => document.source(),
             DocumentInner::Yaml(document) => document.source(),

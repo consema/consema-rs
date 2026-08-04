@@ -23,6 +23,8 @@ use std::sync::Arc;
 /// Typed adapter failure on the common opaque facade.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FormatMismatch {
+    /// The snapshot is not an INI document.
+    Ini,
     /// The snapshot is not a JSON document.
     Json,
     /// The snapshot is not a TOML document.
@@ -42,12 +44,25 @@ pub struct Document {
 
 #[derive(Clone, Debug)]
 enum DocumentInner {
+    Ini(Box<ini::Document>),
     Json(json::Document),
     Toml(toml::Document),
     Yaml(Box<yaml::Document>),
 }
 
 impl Document {
+    /// Parses one INI snapshot under an exact profile and explicit encoding selection.
+    pub fn parse_ini(
+        source: impl Into<Arc<[u8]>>,
+        profile: ini::IniProfile,
+        encoding: ini::IniEncodingSelection,
+        limits: ini::IniParseLimits,
+    ) -> Result<Self, document::FatalFormationFailure> {
+        Ok(Self {
+            inner: DocumentInner::Ini(Box::new(ini::parse(source, profile, encoding, limits)?)),
+        })
+    }
+
     /// Parses one JSON/JSONC snapshot under an exact profile.
     pub fn parse_json(
         source: impl Into<Arc<[u8]>>,
@@ -85,6 +100,7 @@ impl Document {
     #[must_use]
     pub fn render(&self) -> &[u8] {
         match &self.inner {
+            DocumentInner::Ini(document) => document.render(),
             DocumentInner::Json(document) => document.render(),
             DocumentInner::Toml(document) => document.render(),
             DocumentInner::Yaml(document) => document.render(),
@@ -95,6 +111,7 @@ impl Document {
     #[must_use]
     pub fn formation_status(&self) -> document::FormationStatus {
         match &self.inner {
+            DocumentInner::Ini(document) => document.formation_status(),
             DocumentInner::Json(document) => document.formation_status(),
             DocumentInner::Toml(document) => document.formation_status(),
             DocumentInner::Yaml(document) => document.formation_status(),
@@ -105,6 +122,7 @@ impl Document {
     #[must_use]
     pub fn diagnostics(&self) -> &[core::Diagnostic] {
         match &self.inner {
+            DocumentInner::Ini(document) => document.diagnostics(),
             DocumentInner::Json(document) => document.diagnostics(),
             DocumentInner::Toml(document) => document.diagnostics(),
             DocumentInner::Yaml(document) => document.diagnostics(),
@@ -115,6 +133,7 @@ impl Document {
     #[must_use]
     pub fn snapshot_identity(&self) -> document::SnapshotIdentity {
         match &self.inner {
+            DocumentInner::Ini(document) => document.snapshot_identity(),
             DocumentInner::Json(document) => document.snapshot_identity(),
             DocumentInner::Toml(document) => document.snapshot_identity(),
             DocumentInner::Yaml(document) => document.snapshot_identity(),
@@ -125,6 +144,7 @@ impl Document {
     #[must_use]
     pub fn profile(&self) -> document::ProfileId {
         match &self.inner {
+            DocumentInner::Ini(document) => document.profile(),
             DocumentInner::Json(document) => document.profile(),
             DocumentInner::Toml(document) => document.profile(),
             DocumentInner::Yaml(document) => document.profile(),
@@ -135,7 +155,9 @@ impl Document {
     pub fn as_json(&self) -> Result<&json::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Json(document) => Ok(document),
-            DocumentInner::Toml(_) | DocumentInner::Yaml(_) => Err(FormatMismatch::Json),
+            DocumentInner::Ini(_) | DocumentInner::Toml(_) | DocumentInner::Yaml(_) => {
+                Err(FormatMismatch::Json)
+            }
         }
     }
 
@@ -143,15 +165,29 @@ impl Document {
     pub fn as_toml(&self) -> Result<&toml::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Toml(document) => Ok(document),
-            DocumentInner::Json(_) | DocumentInner::Yaml(_) => Err(FormatMismatch::Toml),
+            DocumentInner::Ini(_) | DocumentInner::Json(_) | DocumentInner::Yaml(_) => {
+                Err(FormatMismatch::Toml)
+            }
         }
     }
 
     /// Typed YAML adapter; fails only when the snapshot is not YAML.
     pub fn as_yaml(&self) -> Result<&yaml::Document, FormatMismatch> {
         match &self.inner {
-            DocumentInner::Json(_) | DocumentInner::Toml(_) => Err(FormatMismatch::Yaml),
+            DocumentInner::Ini(_) | DocumentInner::Json(_) | DocumentInner::Toml(_) => {
+                Err(FormatMismatch::Yaml)
+            }
             DocumentInner::Yaml(document) => Ok(document),
+        }
+    }
+
+    /// Typed INI adapter; fails only when the snapshot is not INI.
+    pub fn as_ini(&self) -> Result<&ini::Document, FormatMismatch> {
+        match &self.inner {
+            DocumentInner::Ini(document) => Ok(document),
+            DocumentInner::Json(_) | DocumentInner::Toml(_) | DocumentInner::Yaml(_) => {
+                Err(FormatMismatch::Ini)
+            }
         }
     }
 }
@@ -175,6 +211,7 @@ mod tests {
             br#"{"a":1}"#
         );
         assert!(matches!(json.as_toml(), Err(FormatMismatch::Toml)));
+        assert!(matches!(json.as_ini(), Err(FormatMismatch::Ini)));
 
         let toml = Document::parse_toml(
             b"value = 1".as_slice(),
@@ -207,6 +244,18 @@ mod tests {
         assert!(matches!(yaml.as_toml(), Err(FormatMismatch::Toml)));
         assert_eq!(yaml.as_yaml().expect("yaml adapter").document_count(), 1);
         assert!(yaml.diagnostics().is_empty());
+
+        let ini = Document::parse_ini(
+            b"[section]\nvalue=1\n".as_slice(),
+            ini::IniProfile::PortableV1,
+            ini::IniEncodingSelection::ProfileDefault,
+            ini::IniParseLimits::default(),
+        )
+        .expect("INI facade");
+        assert_eq!(ini.render(), b"[section]\nvalue=1\n");
+        assert_eq!(ini.profile().id(), "ini.portable");
+        assert_eq!(ini.as_ini().unwrap().entries()[0].value(), "1");
+        assert!(matches!(ini.as_json(), Err(FormatMismatch::Json)));
 
         let other = Document::parse_json(
             b"{}".as_slice(),
