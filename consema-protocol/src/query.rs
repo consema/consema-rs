@@ -570,7 +570,13 @@ fn role_name(role: MatchRole) -> &'static str {
         | MatchRole::YamlSequenceElement
         | MatchRole::YamlAnchorDefinition
         | MatchRole::YamlAliasOccurrence
-        | MatchRole::YamlSyntaxPiece => {
+        | MatchRole::YamlSyntaxPiece
+        | MatchRole::IniDocument
+        | MatchRole::IniSection
+        | MatchRole::IniEntry
+        | MatchRole::IniPhysicalLine
+        | MatchRole::IniLogicalLine
+        | MatchRole::IniSyntaxPiece => {
             unreachable!("core.query-result@1 construction rejects newer roles")
         }
     }
@@ -590,6 +596,12 @@ const fn is_v1_role(role: MatchRole) -> bool {
             | MatchRole::YamlAnchorDefinition
             | MatchRole::YamlAliasOccurrence
             | MatchRole::YamlSyntaxPiece
+            | MatchRole::IniDocument
+            | MatchRole::IniSection
+            | MatchRole::IniEntry
+            | MatchRole::IniPhysicalLine
+            | MatchRole::IniLogicalLine
+            | MatchRole::IniSyntaxPiece
     )
 }
 
@@ -696,10 +708,20 @@ mod tests {
     }
 
     #[test]
-    fn frozen_query_result_v1_rejects_graph_roles() {
+    fn frozen_query_result_v1_rejects_newer_roles() {
         let error = QueryResultMessage::new(
             QueryDomain::portable_graph_v1(),
             MatchRole::GraphNode,
+            Vec::new(),
+            Completion::new(CompletionStatus::Success, 0, 0, None, None).unwrap(),
+            Vec::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
+
+        let error = QueryResultMessage::new(
+            QueryDomain::ini_native_v1(),
+            MatchRole::IniDocument,
             Vec::new(),
             Completion::new(CompletionStatus::Success, 0, 0, None, None).unwrap(),
             Vec::new(),

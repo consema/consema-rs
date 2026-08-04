@@ -8,6 +8,12 @@ use consema_document::{
 use std::sync::Arc;
 
 mod parser;
+mod query;
+
+pub use query::{
+    IniMatch, IniSyntaxMatch, execute_ini_query, execute_ini_query_cursor,
+    execute_ini_syntax_query, execute_ini_syntax_query_cursor,
+};
 
 /// Frozen INI formation profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -147,6 +153,26 @@ impl IniSyntaxKind {
             Self::EntryValue => "EntryValue",
             Self::ContinuationMarker => "ContinuationMarker",
             Self::ErrorRegion => "ErrorRegion",
+        }
+    }
+
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "Bom" => Some(Self::Bom),
+            "Whitespace" => Some(Self::Whitespace),
+            "LineBreak" => Some(Self::LineBreak),
+            "CommentMarker" => Some(Self::CommentMarker),
+            "CommentText" => Some(Self::CommentText),
+            "SectionOpen" => Some(Self::SectionOpen),
+            "SectionName" => Some(Self::SectionName),
+            "SectionClose" => Some(Self::SectionClose),
+            "EntryKey" => Some(Self::EntryKey),
+            "Delimiter" => Some(Self::Delimiter),
+            "Quote" => Some(Self::Quote),
+            "EntryValue" => Some(Self::EntryValue),
+            "ContinuationMarker" => Some(Self::ContinuationMarker),
+            "ErrorRegion" => Some(Self::ErrorRegion),
+            _ => None,
         }
     }
 }

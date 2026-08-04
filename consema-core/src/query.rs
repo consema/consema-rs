@@ -62,6 +62,12 @@ impl QueryDomain {
         Self::new("yaml.native-semantic-query", 1)
     }
 
+    /// `ini.native-semantic-query@1`.
+    #[must_use]
+    pub fn ini_native_v1() -> Self {
+        Self::new("ini.native-semantic-query", 1)
+    }
+
     /// `json.lossless-syntax-query@1`.
     #[must_use]
     pub fn json_lossless_syntax_v1() -> Self {
@@ -84,6 +90,12 @@ impl QueryDomain {
     #[must_use]
     pub fn yaml_lossless_syntax_v1() -> Self {
         Self::new("yaml.lossless-syntax-query", 1)
+    }
+
+    /// `ini.lossless-syntax-query@1`.
+    #[must_use]
+    pub fn ini_lossless_syntax_v1() -> Self {
+        Self::new("ini.lossless-syntax-query", 1)
     }
 
     /// Domain namespace.
@@ -140,6 +152,18 @@ pub enum MatchRole {
     TomlSyntaxPiece,
     /// YAML lossless syntax piece.
     YamlSyntaxPiece,
+    /// Complete INI document.
+    IniDocument,
+    /// One INI section occurrence.
+    IniSection,
+    /// One INI entry occurrence.
+    IniEntry,
+    /// One physical INI source line.
+    IniPhysicalLine,
+    /// One logical INI record.
+    IniLogicalLine,
+    /// INI lossless syntax piece.
+    IniSyntaxPiece,
     /// PortableGraph node.
     GraphNode,
     /// PortableGraph sequence element association.
@@ -338,9 +362,11 @@ impl QueryDefinition {
             ("json.native-semantic-query", 1 | 2) => MatchRole::JsonValue,
             ("toml.native-semantic-query", 1) => MatchRole::TomlItem,
             ("yaml.native-semantic-query", 1) => MatchRole::YamlStream,
+            ("ini.native-semantic-query", 1) => MatchRole::IniDocument,
             ("json.lossless-syntax-query", 1 | 2) => MatchRole::JsonSyntaxPiece,
             ("toml.lossless-syntax-query", 1) => MatchRole::TomlSyntaxPiece,
             ("yaml.lossless-syntax-query", 1) => MatchRole::YamlSyntaxPiece,
+            ("ini.lossless-syntax-query", 1) => MatchRole::IniSyntaxPiece,
             _ => return Err(QueryFailure::DomainMismatch(self.domain.clone())),
         };
         let output_role = validate_expression(&self.domain, &self.expression, input_role)?;
@@ -842,6 +868,55 @@ fn validate_operator(
             ("yaml.native-semantic-query", "yaml.alias-target") => {
                 (MatchRole::YamlAliasOccurrence, MatchRole::YamlNode, &[])
             }
+            ("ini.native-semantic-query", "ini.document-sections") => {
+                (MatchRole::IniDocument, MatchRole::IniSection, &[])
+            }
+            ("ini.native-semantic-query", "ini.section-entries") => {
+                (MatchRole::IniSection, MatchRole::IniEntry, &[])
+            }
+            ("ini.native-semantic-query", "ini.all-entries") => {
+                (MatchRole::IniDocument, MatchRole::IniEntry, &[])
+            }
+            ("ini.native-semantic-query", "ini.entry-section") => {
+                (MatchRole::IniEntry, MatchRole::IniSection, &[])
+            }
+            ("ini.native-semantic-query", "ini.section-name-equals") => (
+                MatchRole::IniSection,
+                MatchRole::IniSection,
+                &[
+                    ("name", PortableValueKind::String),
+                    ("comparison", PortableValueKind::String),
+                ],
+            ),
+            ("ini.native-semantic-query", "ini.entry-key-equals") => (
+                MatchRole::IniEntry,
+                MatchRole::IniEntry,
+                &[
+                    ("key", PortableValueKind::String),
+                    ("comparison", PortableValueKind::String),
+                ],
+            ),
+            ("ini.native-semantic-query", "ini.entry-value-state-is") => (
+                MatchRole::IniEntry,
+                MatchRole::IniEntry,
+                &[("state", PortableValueKind::String)],
+            ),
+            ("ini.native-semantic-query", "ini.duplicate-group") => {
+                if !matches!(input, MatchRole::IniSection | MatchRole::IniEntry) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::IniSection,
+                        actual: input,
+                    });
+                }
+                (input, input, &[])
+            }
+            ("ini.native-semantic-query", "ini.physical-lines") => {
+                (MatchRole::IniDocument, MatchRole::IniPhysicalLine, &[])
+            }
+            ("ini.native-semantic-query", "ini.logical-lines") => {
+                (MatchRole::IniDocument, MatchRole::IniLogicalLine, &[])
+            }
             ("json.lossless-syntax-query", "json.syntax-kind-is") => (
                 MatchRole::JsonSyntaxPiece,
                 MatchRole::JsonSyntaxPiece,
@@ -870,6 +945,16 @@ fn validate_operator(
             ("yaml.lossless-syntax-query", "yaml.syntax-text-equals") => (
                 MatchRole::YamlSyntaxPiece,
                 MatchRole::YamlSyntaxPiece,
+                &[("text", PortableValueKind::String)],
+            ),
+            ("ini.lossless-syntax-query", "ini.syntax-kind-is") => (
+                MatchRole::IniSyntaxPiece,
+                MatchRole::IniSyntaxPiece,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("ini.lossless-syntax-query", "ini.syntax-text-equals") => (
+                MatchRole::IniSyntaxPiece,
+                MatchRole::IniSyntaxPiece,
                 &[("text", PortableValueKind::String)],
             ),
             ("core.portable-graph-query", "graph.reachable-nodes") => {
@@ -991,6 +1076,45 @@ fn validate_operator(
             argument: "kind".to_owned(),
         });
     }
+    if operator.id() == "ini.syntax-kind-is"
+        && !is_ini_syntax_kind(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if matches!(
+        operator.id(),
+        "ini.section-name-equals" | "ini.entry-key-equals"
+    ) && !matches!(
+        operator.arguments()["comparison"]
+            .as_string()
+            .expect("validated string"),
+        "OriginalExact" | "ProfileEquivalent"
+    ) {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "comparison".to_owned(),
+        });
+    }
+    if operator.id() == "ini.entry-value-state-is"
+        && !matches!(
+            operator.arguments()["state"]
+                .as_string()
+                .expect("validated string"),
+            "Missing" | "Empty" | "Present"
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "state".to_owned(),
+        });
+    }
     if operator.id() == "yaml.where-node-kind"
         && !matches!(
             operator.arguments()["kind"]
@@ -1109,6 +1233,26 @@ fn is_yaml_syntax_kind(kind: &str) -> bool {
             | "LiteralBlockHeader"
             | "FoldedBlockHeader"
             | "BlockScalarContent"
+            | "ErrorRegion"
+    )
+}
+
+fn is_ini_syntax_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Bom"
+            | "Whitespace"
+            | "LineBreak"
+            | "CommentMarker"
+            | "CommentText"
+            | "SectionOpen"
+            | "SectionName"
+            | "SectionClose"
+            | "EntryKey"
+            | "Delimiter"
+            | "Quote"
+            | "EntryValue"
+            | "ContinuationMarker"
             | "ErrorRegion"
     )
 }
