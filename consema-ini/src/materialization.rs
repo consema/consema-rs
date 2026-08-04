@@ -725,13 +725,42 @@ fn encode_text(
     encoding: SourceEncoding,
     max_output_bytes: usize,
 ) -> Result<Vec<u8>, MaterializationFailure> {
+    let bom_bytes = if matches!(encoding, SourceEncoding::Utf16Le | SourceEncoding::Utf16Be) {
+        2
+    } else {
+        0
+    };
+    let fragment_limit = max_output_bytes
+        .checked_sub(bom_bytes)
+        .ok_or(MaterializationFailure::ResourceLimit("output-bytes"))?;
+    let fragment = encode_fragment(text, encoding, fragment_limit)?;
+    if bom_bytes == 0 {
+        return Ok(fragment);
+    }
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(fragment.len().saturating_add(2))
+        .map_err(|_| MaterializationFailure::ResourceLimit("output-bytes"))?;
+    output.extend(if encoding == SourceEncoding::Utf16Le {
+        [0xff, 0xfe]
+    } else {
+        [0xfe, 0xff]
+    });
+    output.extend(fragment);
+    Ok(output)
+}
+
+pub(crate) fn encode_fragment(
+    text: &str,
+    encoding: SourceEncoding,
+    max_output_bytes: usize,
+) -> Result<Vec<u8>, MaterializationFailure> {
     let mut output = match encoding {
         SourceEncoding::Utf8 => text.as_bytes().to_vec(),
         SourceEncoding::Utf16Le | SourceEncoding::Utf16Be => {
             let units = text.encode_utf16().count();
             let length = units
                 .checked_mul(2)
-                .and_then(|bytes| bytes.checked_add(2))
                 .ok_or(MaterializationFailure::ResourceLimit("output-bytes"))?;
             if length > max_output_bytes {
                 return Err(MaterializationFailure::ResourceLimit("output-bytes"));
@@ -740,11 +769,6 @@ fn encode_text(
             bytes
                 .try_reserve_exact(length)
                 .map_err(|_| MaterializationFailure::ResourceLimit("output-bytes"))?;
-            bytes.extend(if encoding == SourceEncoding::Utf16Le {
-                [0xff, 0xfe]
-            } else {
-                [0xfe, 0xff]
-            });
             for unit in text.encode_utf16() {
                 bytes.extend(if encoding == SourceEncoding::Utf16Le {
                     unit.to_le_bytes()
@@ -830,7 +854,7 @@ const fn is_windows_name(byte: u8) -> bool {
         && !matches!(byte, b'[' | b']' | b'=' | b'\0' | b'\r' | b'\n')
 }
 
-fn windows_value_needs_quotes(value: &str) -> bool {
+pub(crate) fn windows_value_needs_quotes(value: &str) -> bool {
     value
         .as_bytes()
         .first()
