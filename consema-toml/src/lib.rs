@@ -80,7 +80,9 @@ impl TomlSyntaxKind {
         }
     }
 
-    pub(crate) fn from_name(name: &str) -> Option<Self> {
+    /// Resolves one exact stable kind name.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "Whitespace" => Some(Self::Whitespace),
             "Newline" => Some(Self::Newline),

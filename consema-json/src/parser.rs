@@ -1,5 +1,5 @@
 use crate::{
-    Document, ElementEntity, Entity, InternalValueKind, JsonProfile, MemberEntity,
+    Document, ElementEntity, Entity, InternalValueKind, JsonProfile, JsonSyntaxKind, MemberEntity,
     SemanticUnavailable, ValueEntity,
 };
 use consema_core::{BigInteger, Decimal, Diagnostic, DiagnosticCategory, DiagnosticSeverity};
@@ -42,8 +42,28 @@ struct Lexeme {
 #[derive(Clone, Copy, Debug)]
 enum LexemeClass {
     Token(TokenKind),
-    Trivia,
+    Trivia(JsonSyntaxKind),
     Error,
+}
+
+impl LexemeClass {
+    const fn syntax_kind(self) -> JsonSyntaxKind {
+        match self {
+            Self::Token(TokenKind::LeftBrace) => JsonSyntaxKind::LeftBrace,
+            Self::Token(TokenKind::RightBrace) => JsonSyntaxKind::RightBrace,
+            Self::Token(TokenKind::LeftBracket) => JsonSyntaxKind::LeftBracket,
+            Self::Token(TokenKind::RightBracket) => JsonSyntaxKind::RightBracket,
+            Self::Token(TokenKind::Colon) => JsonSyntaxKind::Colon,
+            Self::Token(TokenKind::Comma) => JsonSyntaxKind::Comma,
+            Self::Token(TokenKind::String) => JsonSyntaxKind::String,
+            Self::Token(TokenKind::Number) => JsonSyntaxKind::Number,
+            Self::Token(TokenKind::True) => JsonSyntaxKind::True,
+            Self::Token(TokenKind::False) => JsonSyntaxKind::False,
+            Self::Token(TokenKind::Null) => JsonSyntaxKind::Null,
+            Self::Trivia(kind) => kind,
+            Self::Error => JsonSyntaxKind::ErrorRegion,
+        }
+    }
 }
 
 pub(crate) fn parse(
@@ -72,12 +92,16 @@ pub(crate) fn parse(
         limits,
         &mut diagnostics,
     )?;
+    let syntax_kinds = lexemes
+        .iter()
+        .map(|lexeme| lexeme.class.syntax_kind())
+        .collect::<Vec<_>>();
     let pieces = lexemes
         .iter()
         .map(|lexeme| {
             let kind = match lexeme.class {
                 LexemeClass::Token(_) => StructuralPieceKind::Token,
-                LexemeClass::Trivia => StructuralPieceKind::Trivia,
+                LexemeClass::Trivia(_) => StructuralPieceKind::Trivia,
                 LexemeClass::Error => StructuralPieceKind::ErrorRegion,
             };
             StructuralPiece::new(
@@ -128,6 +152,7 @@ pub(crate) fn parse(
         source,
         profile,
         structural_index,
+        syntax_kinds: Arc::from(syntax_kinds),
         formation_status,
         diagnostics: Arc::from(diagnostics),
         entities: Arc::from(entities),
@@ -157,7 +182,7 @@ fn lex(
         lexemes.push(Lexeme {
             start: 0,
             end: 3,
-            class: LexemeClass::Trivia,
+            class: LexemeClass::Trivia(JsonSyntaxKind::Bom),
         });
         if profile == JsonProfile::StrictV1 {
             diagnostics.push(Diagnostic::new(
@@ -184,7 +209,7 @@ fn lex(
                 {
                     offset += 1;
                 }
-                LexemeClass::Trivia
+                LexemeClass::Trivia(JsonSyntaxKind::Whitespace)
             }
             b'/' if bytes.get(offset + 1) == Some(&b'/') => {
                 offset += 2;
@@ -201,7 +226,7 @@ fn lex(
                         offset,
                     ));
                 }
-                LexemeClass::Trivia
+                LexemeClass::Trivia(JsonSyntaxKind::LineComment)
             }
             b'/' if bytes.get(offset + 1) == Some(&b'*') => {
                 offset += 2;
@@ -225,7 +250,7 @@ fn lex(
                             offset,
                         ));
                     }
-                    LexemeClass::Trivia
+                    LexemeClass::Trivia(JsonSyntaxKind::BlockComment)
                 } else {
                     offset = bytes.len();
                     recovered = true;

@@ -113,6 +113,10 @@ pub enum NodeRole {
     TomlArrayElement,
     /// Format-owned region in an opaque binary document.
     BinaryRegion,
+    /// One JSON lossless syntax piece.
+    JsonSyntaxPiece,
+    /// One TOML lossless syntax piece.
+    TomlSyntaxPiece,
 }
 
 /// Opaque handle to one structural identity in exactly one snapshot.

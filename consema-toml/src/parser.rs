@@ -1,6 +1,7 @@
 use crate::{
     Document, ElementEntity, Entity, EntityKind, EntryEntity, InternalItemKind, ItemEntity,
-    KeyEntity, TableFlavor, TomlDate, TomlDateTime, TomlOffset, TomlProfile, TomlTime,
+    KeyEntity, TableFlavor, TomlDate, TomlDateTime, TomlOffset, TomlProfile, TomlSyntaxKind,
+    TomlTime,
 };
 use consema_core::{
     BinaryFloat64, Diagnostic, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity,
@@ -31,7 +32,7 @@ pub(crate) fn parse(
     let source_text = source
         .decoded_text()
         .expect("TOML parser constructs a UTF-8 source");
-    let pieces = tokenize(source_text, &authority, limits.max_token_count)?;
+    let (pieces, syntax_kinds) = tokenize(source_text, &authority, limits.max_token_count)?;
     preflight_delimiter_nesting(source_text, &pieces, limits.max_nesting_depth)?;
     let structural_index = LosslessStructuralIndex::new(authority.identity(), source.len(), pieces)
         .expect("TOML tokenizer creates exact source coverage");
@@ -53,6 +54,7 @@ pub(crate) fn parse(
         source,
         profile,
         structural_index,
+        syntax_kinds: Arc::from(syntax_kinds),
         diagnostics: Arc::from([]),
         entities,
         root,
@@ -359,27 +361,43 @@ fn tokenize(
     source: &str,
     authority: &DocumentAuthority,
     max_count: usize,
-) -> Result<Vec<StructuralPiece>, FatalFormationFailure> {
+) -> Result<(Vec<StructuralPiece>, Vec<TomlSyntaxKind>), FatalFormationFailure> {
     let bytes = source.as_bytes();
     let mut pieces = Vec::new();
+    let mut syntax_kinds = Vec::new();
     let mut cursor = 0;
     while cursor < bytes.len() {
-        let (end, kind) = if bytes[cursor].is_ascii_whitespace() {
+        let (end, kind, syntax_kind) = if matches!(bytes[cursor], b' ' | b'\t') {
             let mut end = cursor + 1;
-            while end < bytes.len() && bytes[end].is_ascii_whitespace() {
+            while end < bytes.len() && matches!(bytes[end], b' ' | b'\t') {
                 end += 1;
             }
-            (end, StructuralPieceKind::Trivia)
+            (end, StructuralPieceKind::Trivia, TomlSyntaxKind::Whitespace)
+        } else if matches!(bytes[cursor], b'\r' | b'\n') {
+            let end = if bytes[cursor] == b'\r' && bytes.get(cursor + 1) == Some(&b'\n') {
+                cursor + 2
+            } else {
+                cursor + 1
+            };
+            (end, StructuralPieceKind::Trivia, TomlSyntaxKind::Newline)
         } else if bytes[cursor] == b'#' {
             let mut end = cursor + 1;
             while end < bytes.len() && !matches!(bytes[end], b'\r' | b'\n') {
                 end += 1;
             }
-            (end, StructuralPieceKind::Trivia)
+            (end, StructuralPieceKind::Trivia, TomlSyntaxKind::Comment)
         } else if matches!(bytes[cursor], b'\'' | b'"') {
-            (string_end(bytes, cursor), StructuralPieceKind::Token)
+            (
+                string_end(bytes, cursor),
+                StructuralPieceKind::Token,
+                TomlSyntaxKind::String,
+            )
         } else if is_punctuation(bytes[cursor]) {
-            (cursor + 1, StructuralPieceKind::Token)
+            (
+                cursor + 1,
+                StructuralPieceKind::Token,
+                punctuation_kind(bytes[cursor]),
+            )
         } else {
             let mut end = cursor + 1;
             while end < bytes.len()
@@ -390,7 +408,7 @@ fn tokenize(
             {
                 end += 1;
             }
-            (end, StructuralPieceKind::Token)
+            (end, StructuralPieceKind::Token, TomlSyntaxKind::Bare)
         };
         let observed = pieces.len().saturating_add(1);
         if observed > max_count {
@@ -406,9 +424,10 @@ fn tokenize(
                 .expect("tokenizer produces ordered ranges"),
             kind,
         ));
+        syntax_kinds.push(syntax_kind);
         cursor = end;
     }
-    Ok(pieces)
+    Ok((pieces, syntax_kinds))
 }
 
 fn preflight_delimiter_nesting(
@@ -443,6 +462,19 @@ fn preflight_delimiter_nesting(
 
 fn is_punctuation(byte: u8) -> bool {
     matches!(byte, b'=' | b'[' | b']' | b'{' | b'}' | b',' | b'.')
+}
+
+const fn punctuation_kind(byte: u8) -> TomlSyntaxKind {
+    match byte {
+        b'=' => TomlSyntaxKind::Equals,
+        b'[' => TomlSyntaxKind::LeftBracket,
+        b']' => TomlSyntaxKind::RightBracket,
+        b'{' => TomlSyntaxKind::LeftBrace,
+        b'}' => TomlSyntaxKind::RightBrace,
+        b',' => TomlSyntaxKind::Comma,
+        b'.' => TomlSyntaxKind::Dot,
+        _ => unreachable!(),
+    }
 }
 
 fn string_end(bytes: &[u8], start: usize) -> usize {
