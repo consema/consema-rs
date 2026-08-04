@@ -10,6 +10,7 @@ mod diagnostic;
 mod error;
 mod execution;
 mod limits;
+mod query;
 mod registry;
 mod schema;
 mod value_transport;
@@ -23,6 +24,10 @@ pub use diagnostic::{
 pub use error::{ProtocolError, ProtocolErrorKind};
 pub use execution::{CancellationRequest, Completion, CompletionStatus, ExecutionPolicy};
 pub use limits::ProtocolLimits;
+pub use query::{
+    NativeMatchLocator, ProtocolQueryMatch, QueryResultMessage, query_definition_from_message,
+    query_definition_message,
+};
 pub use registry::{CapabilityDeclaration, ProfileDescriptor, ProfileReference};
 pub use value_transport::{decode_json, decode_pvce, encode_json, encode_pvce};
 
