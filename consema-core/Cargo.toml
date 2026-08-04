@@ -1,0 +1,11 @@
+[package]
+name = "consema-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Portable values and common protocols for Consema"
+
+[lints]
+workspace = true
+

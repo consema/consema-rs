@@ -1,0 +1,16 @@
+[package]
+name = "consema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Consema public facade"
+
+[dependencies]
+consema-core = { path = "../consema-core", version = "0.1.0" }
+consema-document = { path = "../consema-document", version = "0.1.0" }
+consema-json = { path = "../consema-json", version = "0.1.0" }
+consema-pvce = { path = "../consema-pvce", version = "0.1.0" }
+
+[lints]
+workspace = true
