@@ -1,15 +1,18 @@
 //! Adversarial corpus and Rust publication-property checks.
 
 use consema_core::{ExecutableQuery, PortableValue, QueryDefinition, QueryExecution, QueryLimits};
-use consema_document::{ChangeSet, ParseLimits};
+use consema_document::{
+    ChangeSet, EncodingRequest, ParseLimits, SourceEncoding, SourceLimits, SourcePatch,
+    SourcePatchError, SourcePatchLimits, SourceReplacement, SourceSnapshot,
+};
 use consema_json::{
     CompleteProjection, Document, JsonProfile, ProjectionRequest, ProjectionResult, parse,
 };
 use consema_protocol::{
     CapabilityDeclaration, ChangeSetMessage, DiagnosticMessage, ProfileDescriptor,
     ProjectionRequestMessage, ProjectionResultMessage, ProtocolError, ProtocolErrorKind,
-    ProtocolLimits, ProtocolMessage, QueryResultMessage, RegistryManifest, decode_json,
-    decode_pvce, encode_json, encode_pvce,
+    ProtocolLimits, ProtocolMessage, QueryResultMessage, RegistryManifest, SourcePatchMessage,
+    SourceSnapshotMessage, decode_json, decode_pvce, encode_json, encode_pvce,
 };
 use consema_pvce::{DecodeLimits, decode};
 use consema_toml::{
@@ -17,6 +20,8 @@ use consema_toml::{
     ProjectionRequest as TomlProjectionRequest, ProjectionResult as TomlProjectionResult,
     TomlProfile, parse as parse_toml,
 };
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 fn assert_send_sync<T: Send + Sync>() {}
 
@@ -45,6 +50,101 @@ fn completed_public_objects_are_send_and_sync() {
     assert_send_sync::<ProjectionResultMessage>();
     assert_send_sync::<ChangeSetMessage>();
     assert_send_sync::<RegistryManifest>();
+    assert_send_sync::<SourceSnapshot>();
+    assert_send_sync::<SourcePatch>();
+    assert_send_sync::<SourceSnapshotMessage>();
+    assert_send_sync::<SourcePatchMessage>();
+}
+
+#[test]
+fn bounded_source_and_patch_corpus_never_panics_or_returns_partial_facts() {
+    let limits = SourceLimits {
+        max_raw_bytes: 16,
+        max_decoded_utf8_bytes: 16,
+        max_decoded_scalars: 8,
+    };
+    let source_corpus = [
+        (vec![], SourceEncoding::Utf8),
+        (vec![0xff], SourceEncoding::Utf8),
+        (vec![0xc0, 0x80], SourceEncoding::Utf8),
+        (vec![0xff, 0xfe, 0x00, 0x00], SourceEncoding::Utf8),
+        (vec![0xff, 0xfe, 0x41], SourceEncoding::Utf16Le),
+        (vec![0x3d, 0xd8, 0x41, 0x00], SourceEncoding::Utf16Le),
+        (vec![0xd8, 0x3d, 0x00, 0x41], SourceEncoding::Utf16Be),
+        (vec![0xe9, 0xff], SourceEncoding::Latin1),
+        (vec![0xff, 0xfe, 0x00, 0x00], SourceEncoding::Binary),
+        (vec![b'a'; 17], SourceEncoding::Utf8),
+    ];
+    for (bytes, encoding) in source_corpus {
+        let result = SourceSnapshot::from_raw(
+            Arc::<[u8]>::from(bytes.clone()),
+            EncodingRequest::new(encoding),
+            limits,
+        );
+        if let Ok(snapshot) = result {
+            assert_eq!(snapshot.bytes(), bytes);
+            assert_eq!(
+                snapshot.digest(),
+                consema_document::ContentDigest::of(&bytes)
+            );
+            if snapshot.decoded_text().is_some() {
+                let terminal = snapshot.decoded_position(bytes.len()).unwrap();
+                assert_eq!(terminal.raw_byte, bytes.len());
+            }
+        }
+    }
+
+    let base = SourceSnapshot::from_utf8(Arc::<[u8]>::from(b"abc".as_slice())).unwrap();
+    let patch_limits = SourcePatchLimits {
+        source: SourceLimits {
+            max_raw_bytes: 8,
+            max_decoded_utf8_bytes: 8,
+            max_decoded_scalars: 8,
+        },
+        max_replacements: 2,
+        max_patch_bytes: 8,
+    };
+    let hostile_sets = [
+        vec![SourceReplacement::new(
+            usize::MAX,
+            usize::MAX,
+            [],
+            b"x".as_slice(),
+        )],
+        vec![SourceReplacement::new(0, usize::MAX, [], [])],
+        vec![
+            SourceReplacement::new(1, 1, [], b"x".as_slice()),
+            SourceReplacement::new(1, 1, [], b"y".as_slice()),
+        ],
+        vec![
+            SourceReplacement::new(0, 2, b"ab".as_slice(), []),
+            SourceReplacement::new(1, 3, b"bc".as_slice(), []),
+        ],
+        vec![SourceReplacement::new(3, 3, [], vec![b'x'; 32])],
+    ];
+    for replacements in hostile_sets {
+        match SourcePatch::create(&base, replacements, BTreeMap::new(), patch_limits) {
+            Ok(patch) => assert!(patch.apply(&base, patch_limits).is_err()),
+            Err(error) => assert!(matches!(
+                error,
+                SourcePatchError::InvalidReplacement { .. }
+                    | SourcePatchError::ReplacementOrder { .. }
+                    | SourcePatchError::DuplicateInsertion { .. }
+                    | SourcePatchError::OriginalMismatch { .. }
+                    | SourcePatchError::ResourceLimit { .. }
+            )),
+        }
+    }
+
+    let too_many = vec![
+        SourceReplacement::new(0, 0, [], []),
+        SourceReplacement::new(1, 1, [], []),
+        SourceReplacement::new(2, 2, [], []),
+    ];
+    assert!(matches!(
+        SourcePatch::create(&base, too_many, BTreeMap::new(), patch_limits),
+        Err(SourcePatchError::ResourceLimit { .. })
+    ));
 }
 
 #[test]
