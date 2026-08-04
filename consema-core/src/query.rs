@@ -154,6 +154,48 @@ impl QueryExpression {
     }
 }
 
+/// Builder that is not yet a completed query definition.
+#[derive(Clone, Debug)]
+pub struct QueryDefinitionBuilder {
+    domain: QueryDomain,
+    expression: QueryExpression,
+    selection: QuerySelection,
+}
+
+impl QueryDefinitionBuilder {
+    /// Starts a definition rooted at the domain input.
+    #[must_use]
+    pub fn new(domain: QueryDomain) -> Self {
+        Self {
+            domain,
+            expression: QueryExpression::Input,
+            selection: QuerySelection::All,
+        }
+    }
+
+    /// Replaces the expression.
+    pub fn expression(&mut self, expression: QueryExpression) -> &mut Self {
+        self.expression = expression;
+        self
+    }
+
+    /// Sets cardinality selection.
+    pub fn selection(&mut self, selection: QuerySelection) -> &mut Self {
+        self.selection = selection;
+        self
+    }
+
+    /// Completes the immutable definition. The builder itself is never a valid query.
+    #[must_use]
+    pub fn build(self) -> QueryDefinition {
+        QueryDefinition {
+            domain: self.domain,
+            expression: self.expression,
+            selection: self.selection,
+        }
+    }
+}
+
 /// Cardinality selection applied to the complete standard result sequence.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum QuerySelection {
@@ -540,7 +582,8 @@ impl ExecutableQuery {
             cancellation,
             steps: 0,
         };
-        context.step(0)?;
+        // The root is the first standard result; it must not bypass result limits.
+        context.step(1)?;
         let root = PortableMatch::Value {
             path: ValuePath::root(),
             value: target.clone(),
@@ -1220,6 +1263,47 @@ mod tests {
         let mut capabilities = CapabilitySet::new();
         capabilities.insert(CapabilityId::new("core.query.ordered-results", 1));
         capabilities
+    }
+
+    #[test]
+    fn builder_produces_the_same_immutable_definition() {
+        let fluent = QueryDefinition::new(QueryDomain::portable_value_v1())
+            .with_expression(
+                QueryExpression::Input.then(OperatorCall::new("core.try-sequence-elements", 1)),
+            )
+            .with_selection(QuerySelection::First);
+        let mut builder = QueryDefinitionBuilder::new(QueryDomain::portable_value_v1());
+        builder.expression(
+            QueryExpression::Input.then(OperatorCall::new("core.try-sequence-elements", 1)),
+        );
+        builder.selection(QuerySelection::First);
+        let built = builder.build();
+        assert_eq!(built, fluent);
+        assert_eq!(
+            QueryDefinition::from_protocol_value(&built.to_protocol_value().unwrap()).unwrap(),
+            built
+        );
+    }
+
+    #[test]
+    fn operator_free_root_result_obeys_max_results() {
+        let executable = QueryDefinition::new(QueryDomain::portable_value_v1())
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let limits = QueryLimits {
+            max_results: 0,
+            ..QueryLimits::default()
+        };
+        assert!(matches!(
+            executable.execute_portable(
+                &PortableValue::null(),
+                limits,
+                &CancellationToken::new()
+            ),
+            Err(QueryFailure::ResourceLimitExceeded)
+        ));
     }
 
     #[test]

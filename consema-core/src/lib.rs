@@ -15,8 +15,8 @@ pub use error::{FailureKind, OperationFailure, OperationKind, OperationStatus};
 pub use location::{AssociationLocation, AssociationRole, ValuePath, ValuePathSegment};
 pub use query::{
     CancellationToken, ExecutableQuery, MatchRole, OperatorCall, OrderedQueryCursor, PortableMatch,
-    QueryDefinition, QueryDomain, QueryExecution, QueryExpression, QueryFailure, QueryLimits,
-    QuerySelection, QueryTerminalState, ValidatedQuery,
+    QueryDefinition, QueryDefinitionBuilder, QueryDomain, QueryExecution, QueryExpression,
+    QueryFailure, QueryLimits, QuerySelection, QueryTerminalState, ValidatedQuery,
 };
 pub use value::{
     BigInteger, BinaryFloat32, BinaryFloat64, Date, Decimal, EntryMappingBuilder,

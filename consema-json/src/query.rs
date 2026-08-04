@@ -71,7 +71,8 @@ pub fn execute_json_query(
         cancellation,
         steps: 0,
     };
-    context.step(0)?;
+    // The root is the first standard result; it must not bypass result limits.
+    context.step(1)?;
     let input = vec![JsonMatch::Value {
         node: root.node_ref(),
         kind: match root.kind() {
@@ -323,6 +324,34 @@ mod tests {
         let mut capabilities = CapabilitySet::new();
         capabilities.insert(CapabilityId::new("core.query.ordered-results", 1));
         capabilities
+    }
+
+    #[test]
+    fn operator_free_root_result_obeys_max_results() {
+        let document = parse(
+            br#"{"a":1}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let executable = QueryDefinition::new(QueryDomain::json_native_v1())
+            .validate()
+            .unwrap()
+            .bind(&capabilities())
+            .unwrap();
+        let limits = QueryLimits {
+            max_results: 0,
+            ..QueryLimits::default()
+        };
+        assert!(matches!(
+            execute_json_query(
+                &executable,
+                &document,
+                limits,
+                &CancellationToken::new()
+            ),
+            Err(QueryFailure::ResourceLimitExceeded)
+        ));
     }
 
     #[test]
