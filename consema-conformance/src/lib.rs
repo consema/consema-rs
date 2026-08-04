@@ -9,6 +9,7 @@ mod semantic_model_v5;
 mod source_v1;
 mod syntax_query_v1;
 mod toml_v1;
+mod yaml_v1;
 
 use consema_core::{
     BigInteger, BinaryFloat64, CapabilityId, CapabilitySet, Decimal, ObjectBuilder, OperatorCall,
@@ -45,6 +46,7 @@ pub use syntax_query_v1::{
     SYNTAX_QUERY_V1_VECTORS_JSON, run_syntax_query_v1, run_syntax_query_v1_json,
 };
 pub use toml_v1::{TOML_V1_VECTORS_JSON, run_toml_v1};
+pub use yaml_v1::{YAML_V1_VECTORS_JSON, run_yaml_v1, run_yaml_v1_json};
 
 /// Embedded language-neutral suite bytes.
 pub const V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/v1.json");
