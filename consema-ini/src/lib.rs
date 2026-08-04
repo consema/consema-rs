@@ -7,11 +7,16 @@ use consema_document::{
 };
 use std::sync::Arc;
 
+mod edit;
 mod materialization;
 mod parser;
 mod projection;
 mod query;
 
+pub use edit::{
+    EditCommit, EditFailure, EditOperation, EditTransaction, EditTransactionBuilder,
+    RepresentationPolicy, ValueReplacement,
+};
 pub use materialization::materialize;
 pub use projection::{
     CollisionPolicy, CompleteProjection, FailedProjectionAttempt, Fidelity, NameComparison,
