@@ -8,10 +8,12 @@ use consema_document::{
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+mod materialization;
 mod parser;
 mod projection;
 mod query;
 
+pub use materialization::materialize;
 pub use projection::{
     CompleteProjection, DuplicatePolicy, FailedProjectionAttempt, Fidelity, ProjectedLocation,
     ProjectionEvent, ProjectionLimits, ProjectionReport, ProjectionRequest, ProjectionResult,
