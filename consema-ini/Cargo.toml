@@ -9,6 +9,7 @@ description = "Lossless explicit-profile INI implementation for Consema"
 [dependencies]
 consema-core = { path = "../consema-core", version = "0.7.0" }
 consema-document = { path = "../consema-document", version = "0.7.0" }
+encoding_rs.workspace = true
 
 [lints]
 workspace = true

@@ -7,10 +7,12 @@ use consema_document::{
 };
 use std::sync::Arc;
 
+mod materialization;
 mod parser;
 mod projection;
 mod query;
 
+pub use materialization::materialize;
 pub use projection::{
     CollisionPolicy, CompleteProjection, FailedProjectionAttempt, Fidelity, NameComparison,
     ProjectedLocation, ProjectionEvent, ProjectionEventKind, ProjectionFailure, ProjectionLimits,
