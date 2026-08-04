@@ -17,6 +17,10 @@ pub enum DiagnosticCategory {
     Query,
     /// Projection policy or loss event.
     Projection,
+    /// Materialization request, representability, or transformation event.
+    Materialization,
+    /// Cross-profile projection-to-materialization composition event.
+    Conversion,
     /// Edit validation or conflict issue.
     Edit,
     /// Resource limit issue.

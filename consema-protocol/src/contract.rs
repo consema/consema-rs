@@ -3,8 +3,8 @@
 use crate::payload::validate_registered_payload;
 use crate::schema::{object, schema_fields, string, unsigned_u32};
 use crate::{
-    ProtocolError, ProtocolErrorKind, ProtocolLimits, decode_json, decode_pvce, encode_json,
-    encode_pvce,
+    ErrorCodeRegistry, ProtocolError, ProtocolErrorKind, ProtocolLimits, decode_json, decode_pvce,
+    encode_json, encode_pvce,
 };
 use consema_core::{BigInteger, PortableValue};
 
@@ -108,6 +108,37 @@ const CONTRACTS_V2: &[ContractDescriptor] = &[
     descriptor("core.source-snapshot", ContractStability::Stable),
 ];
 
+const CONTRACTS_V3: &[ContractDescriptor] = &[
+    descriptor("core.cancellation-request", ContractStability::Stable),
+    descriptor("core.capability-declaration", ContractStability::Stable),
+    descriptor("core.change-set", ContractStability::Stable),
+    descriptor("core.completion", ContractStability::Stable),
+    descriptor("core.conversion-report", ContractStability::Stable),
+    descriptor("core.diagnostic", ContractStability::Stable),
+    descriptor("core.edit-plan", ContractStability::Stable),
+    descriptor("core.error-code-registry", ContractStability::Stable),
+    descriptor("core.execution-policy", ContractStability::Stable),
+    descriptor("core.format-operation-registry", ContractStability::Stable),
+    descriptor(
+        "core.materialization-provenance-map",
+        ContractStability::Stable,
+    ),
+    descriptor("core.materialization-report", ContractStability::Stable),
+    descriptor("core.materialization-request", ContractStability::Stable),
+    descriptor("core.materialization-result", ContractStability::Stable),
+    descriptor("core.profile-descriptor", ContractStability::Stable),
+    descriptor("core.projection-report", ContractStability::Stable),
+    descriptor("core.projection-request", ContractStability::Stable),
+    descriptor("core.projection-result", ContractStability::Stable),
+    descriptor("core.protocol-message", ContractStability::Transport),
+    descriptor("core.provenance-map", ContractStability::Stable),
+    descriptor("core.query-definition", ContractStability::Stable),
+    descriptor("core.query-result", ContractStability::Stable),
+    descriptor("core.registry-manifest", ContractStability::Stable),
+    descriptor("core.source-patch", ContractStability::Stable),
+    descriptor("core.source-snapshot", ContractStability::Stable),
+];
+
 const fn descriptor(id: &'static str, stability: ContractStability) -> ContractDescriptor {
     ContractDescriptor {
         id,
@@ -126,6 +157,7 @@ pub struct ContractRegistry {
 enum RegistryVersion {
     V1,
     V2,
+    V3,
 }
 
 impl Default for ContractRegistry {
@@ -151,12 +183,21 @@ impl ContractRegistry {
         }
     }
 
+    /// Consema 0.5 semantic-model v3 registry.
+    #[must_use]
+    pub const fn v3() -> Self {
+        Self {
+            version: RegistryVersion::V3,
+        }
+    }
+
     /// Sorted registered contracts.
     #[must_use]
     pub const fn contracts(self) -> &'static [ContractDescriptor] {
         match self.version {
             RegistryVersion::V1 => CONTRACTS_V1,
             RegistryVersion::V2 => CONTRACTS_V2,
+            RegistryVersion::V3 => CONTRACTS_V3,
         }
     }
 
@@ -174,6 +215,14 @@ impl ContractRegistry {
             })
             .ok()
             .map(|index| &contracts[index])
+    }
+
+    pub(crate) const fn error_code_registry(self) -> ErrorCodeRegistry {
+        match self.version {
+            RegistryVersion::V1 => ErrorCodeRegistry::v1(),
+            RegistryVersion::V2 => ErrorCodeRegistry::v2(),
+            RegistryVersion::V3 => ErrorCodeRegistry::v3(),
+        }
     }
 }
 
@@ -206,7 +255,7 @@ impl ProtocolMessage {
             ));
         }
         validate_payload_schema(&payload, &contract)?;
-        validate_registered_payload(&contract, &payload)?;
+        validate_registered_payload(&contract, &payload, registry)?;
         Ok(Self { contract, payload })
     }
 
@@ -343,7 +392,11 @@ fn validate_identifier(identifier: &str, path: &str) -> Result<(), ProtocolError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use consema_document::{SourceLimits, SourcePatch, SourcePatchLimits, SourceSnapshot};
+    use consema_document::{
+        ContentDigest, FormatOperationRegistry, MaterializationFailure, MaterializationFidelity,
+        MaterializationRequest, MaterializationStyleId, NewlinePolicy, ProfileId, SourceLimits,
+        SourcePatch, SourcePatchLimits, SourceSnapshot,
+    };
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
@@ -434,7 +487,11 @@ mod tests {
 
     #[test]
     fn registry_is_sorted_and_identifiers_are_strict() {
-        for registry in [ContractRegistry::v1(), ContractRegistry::v2()] {
+        for registry in [
+            ContractRegistry::v1(),
+            ContractRegistry::v2(),
+            ContractRegistry::v3(),
+        ] {
             assert!(
                 registry
                     .contracts()
@@ -444,6 +501,7 @@ mod tests {
         }
         assert_eq!(ContractRegistry::v1().contracts().len(), 16);
         assert_eq!(ContractRegistry::v2().contracts().len(), 18);
+        assert_eq!(ContractRegistry::v3().contracts().len(), 25);
         assert!(
             !ContractRegistry::v1()
                 .recognizes(&ContractId::new("core.source-snapshot", 1).unwrap())
@@ -518,5 +576,99 @@ mod tests {
         )
         .unwrap();
         assert_eq!(decoded.snapshot(), &snapshot);
+    }
+
+    #[test]
+    fn v3_envelopes_every_new_contract_without_changing_v2() {
+        let source_profile = ProfileId::new("toml.1.0", 1);
+        let target_profile = ProfileId::new("json.strict", 1);
+        let digest = ContentDigest::of(b"unchanged");
+        let conversion = crate::ConversionReportMessage::new(
+            source_profile.clone(),
+            target_profile.clone(),
+            crate::ConversionFidelityMessage::Exact,
+            crate::ProjectionReportMessage::default(),
+            MaterializationFidelity::Exact,
+            crate::MaterializationReportMessage::default(),
+            crate::ConversionFidelityMessage::Exact,
+        )
+        .unwrap();
+        let edit_plan = crate::EditPlanMessage::new(
+            "source:one",
+            digest,
+            target_profile.clone(),
+            Vec::new(),
+            Vec::new(),
+            digest,
+            Vec::new(),
+        )
+        .unwrap();
+        let operations = FormatOperationRegistry::new(target_profile.clone(), Vec::new()).unwrap();
+        let request = MaterializationRequest::new(
+            target_profile.clone(),
+            MaterializationStyleId::new("json.canonical-compact", 1),
+        )
+        .with_newline(NewlinePolicy::None);
+        let result = crate::MaterializationResultMessage::failed(
+            target_profile,
+            crate::MaterializationFailureMessage::from_failure(
+                &MaterializationFailure::UnsupportedStyle,
+            ),
+            crate::MaterializationReportMessage::default(),
+            Vec::new(),
+        )
+        .unwrap();
+        let payloads = [
+            ("core.conversion-report", conversion.to_value()),
+            ("core.edit-plan", edit_plan.to_value().unwrap()),
+            (
+                "core.format-operation-registry",
+                crate::FormatOperationRegistryMessage::from_registry(&operations).to_value(),
+            ),
+            (
+                "core.materialization-provenance-map",
+                crate::MaterializationProvenanceMapMessage::default().to_value(),
+            ),
+            (
+                "core.materialization-report",
+                crate::MaterializationReportMessage::default().to_value(),
+            ),
+            (
+                "core.materialization-request",
+                crate::MaterializationRequestMessage::from_request(&request)
+                    .to_value()
+                    .unwrap(),
+            ),
+            ("core.materialization-result", result.to_value()),
+        ];
+        let limits = ProtocolLimits::default();
+        for (id, payload) in payloads {
+            let contract = ContractId::new(id, 1).unwrap();
+            assert_eq!(
+                ProtocolMessage::new(contract.clone(), payload.clone(), ContractRegistry::v2(),)
+                    .unwrap_err()
+                    .kind(),
+                ProtocolErrorKind::UnknownContract
+            );
+            let message = ProtocolMessage::new(contract, payload, ContractRegistry::v3()).unwrap();
+            assert_eq!(
+                ProtocolMessage::from_json(
+                    &message.to_json(limits).unwrap(),
+                    limits,
+                    ContractRegistry::v3(),
+                )
+                .unwrap(),
+                message
+            );
+            assert_eq!(
+                ProtocolMessage::from_pvce(
+                    &message.to_pvce(limits).unwrap(),
+                    limits,
+                    ContractRegistry::v3(),
+                )
+                .unwrap(),
+                message
+            );
+        }
     }
 }

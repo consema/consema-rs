@@ -123,6 +123,15 @@ impl DiagnosticMessage {
         diagnostic: &Diagnostic,
         source_id: Option<&str>,
     ) -> Result<Self, ProtocolError> {
+        Self::from_core_with_registry(diagnostic, source_id, ErrorCodeRegistry::v1())
+    }
+
+    /// Converts a core diagnostic under one explicit semantic-model error registry.
+    pub fn from_core_with_registry(
+        diagnostic: &Diagnostic,
+        source_id: Option<&str>,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let primary = diagnostic
             .primary
             .as_ref()
@@ -149,7 +158,7 @@ impl DiagnosticMessage {
             fixes: Vec::new(),
             occurrence: diagnostic.occurrence,
         };
-        validate_diagnostic_code(&result.code, result.category)?;
+        validate_diagnostic_code(&result.code, result.category, registry)?;
         Ok(result)
     }
 
@@ -242,6 +251,14 @@ impl DiagnosticMessage {
 
     /// Strictly decodes `core.diagnostic@1`.
     pub fn from_value(value: &PortableValue) -> Result<Self, ProtocolError> {
+        Self::from_value_with_registry(value, ErrorCodeRegistry::v1())
+    }
+
+    /// Strictly decodes `core.diagnostic@1` under an explicit error registry.
+    pub fn from_value_with_registry(
+        value: &PortableValue,
+        registry: ErrorCodeRegistry,
+    ) -> Result<Self, ProtocolError> {
         let fields = schema_fields(
             value,
             "core.diagnostic@1",
@@ -311,13 +328,17 @@ impl DiagnosticMessage {
             fixes,
             occurrence: unsigned_u64(fields[9], "$.occurrence")?,
         };
-        validate_diagnostic_code(&result.code, result.category)?;
+        validate_diagnostic_code(&result.code, result.category, registry)?;
         Ok(result)
     }
 }
 
-fn validate_diagnostic_code(code: &str, category: DiagnosticCategory) -> Result<(), ProtocolError> {
-    let descriptor = ErrorCodeRegistry::v1().descriptor(code).ok_or_else(|| {
+fn validate_diagnostic_code(
+    code: &str,
+    category: DiagnosticCategory,
+    registry: ErrorCodeRegistry,
+) -> Result<(), ProtocolError> {
+    let descriptor = registry.descriptor(code).ok_or_else(|| {
         crate::schema::invalid("$.code", format!("unregistered public code: {code}"))
     })?;
     if descriptor.category != category {
@@ -423,6 +444,8 @@ const fn category_name(category: DiagnosticCategory) -> &'static str {
         DiagnosticCategory::Semantic => "Semantic",
         DiagnosticCategory::Query => "Query",
         DiagnosticCategory::Projection => "Projection",
+        DiagnosticCategory::Materialization => "Materialization",
+        DiagnosticCategory::Conversion => "Conversion",
         DiagnosticCategory::Edit => "Edit",
         DiagnosticCategory::Resource => "Resource",
         DiagnosticCategory::Encoding => "Encoding",
@@ -437,6 +460,8 @@ fn parse_category(value: &str) -> Result<DiagnosticCategory, ProtocolError> {
         "Semantic" => Ok(DiagnosticCategory::Semantic),
         "Query" => Ok(DiagnosticCategory::Query),
         "Projection" => Ok(DiagnosticCategory::Projection),
+        "Materialization" => Ok(DiagnosticCategory::Materialization),
+        "Conversion" => Ok(DiagnosticCategory::Conversion),
         "Edit" => Ok(DiagnosticCategory::Edit),
         "Resource" => Ok(DiagnosticCategory::Resource),
         "Encoding" => Ok(DiagnosticCategory::Encoding),

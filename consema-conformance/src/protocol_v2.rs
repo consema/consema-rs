@@ -131,7 +131,9 @@ fn registry_case(case: &VectorCase<'_>, frozen_v1: bool) -> Result<(), String> {
             && decoded.error_codes().len() == expected_usize(case, "error_code_count")?
             && registry.recognizes(&source_contract)
                 == expected_bool(case, "recognizes_source_snapshot")?
-            && decoded.is_current() == expected_bool(case, "is_current")?,
+            // Protocol-v2 conformance binds semantic-model v2 explicitly. This
+            // suite-local "current" fact must not follow a later library model.
+            && (decoded == RegistryManifest::v2()) == expected_bool(case, "is_current")?,
     )
 }
 

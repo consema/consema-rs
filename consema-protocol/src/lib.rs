@@ -7,11 +7,14 @@
 
 mod change;
 mod contract;
+mod conversion;
 mod diagnostic;
 mod error;
 mod error_registry;
 mod execution;
 mod limits;
+mod materialization;
+mod operation;
 mod payload;
 mod projection;
 mod query;
@@ -24,16 +27,26 @@ mod value_transport;
 pub use contract::{
     ContractDescriptor, ContractId, ContractRegistry, ContractStability, ProtocolMessage,
 };
+pub use conversion::{ConversionFidelityMessage, ConversionReportMessage};
 pub use diagnostic::{
     DiagnosticMessage, FixApplicability, FixProposal, RelatedSourceLocation, SourceLocation,
 };
 pub use error::{ProtocolError, ProtocolErrorKind};
 pub use error_registry::{
     ErrorCodeDescriptor, ErrorCodeRegistry, error_code_manifest_value,
-    error_code_manifest_value_v2, query_failure_code, validate_error_code_manifest_value,
+    error_code_manifest_value_v2, error_code_manifest_value_v3, query_failure_code,
+    validate_error_code_manifest_value,
 };
 pub use execution::{CancellationRequest, Completion, CompletionStatus, ExecutionPolicy};
 pub use limits::ProtocolLimits;
+pub use materialization::{
+    MaterializationFailureMessage, MaterializationInputLocationMessage,
+    MaterializationOutcomeMessage, MaterializationProvenanceEntryMessage,
+    MaterializationProvenanceMapMessage, MaterializationRelationMessage,
+    MaterializationReportMessage, MaterializationRequestMessage, MaterializationResultMessage,
+    MaterializedOriginMessage,
+};
+pub use operation::{EditOperationSummaryMessage, EditPlanMessage, FormatOperationRegistryMessage};
 pub use projection::{
     LossClassification, ProjectedLocationMessage, ProjectionEventMessage, ProjectionFidelity,
     ProjectionPolicy, ProjectionReportMessage, ProjectionRequestMessage, ProjectionResultMessage,

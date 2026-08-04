@@ -158,7 +158,7 @@ fn prepare_root<'a>(
     }
     let mut event = Diagnostic::new(
         "core.materialization.mapping-transformed@1",
-        DiagnosticCategory::Conformance,
+        DiagnosticCategory::Materialization,
         DiagnosticSeverity::Info,
         None,
         0,
