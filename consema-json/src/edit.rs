@@ -76,6 +76,13 @@ pub enum EditOperation {
         /// Exact ObjectMember target.
         target: NodeRef,
     },
+    /// Moves one exact member within its current Object.
+    MoveMember {
+        /// Exact ObjectMember target.
+        target: NodeRef,
+        /// Placement within the same Object after removing the target.
+        placement: AssociationPlacement,
+    },
     /// Replaces only one exact member's key literal.
     RenameMember {
         /// Exact ObjectMember target.
@@ -186,6 +193,13 @@ impl EditTransactionBuilder {
         self
     }
 
+    /// Adds one exact same-Object member move.
+    pub fn move_member(&mut self, target: NodeRef, placement: AssociationPlacement) -> &mut Self {
+        self.operations
+            .push(EditOperation::MoveMember { target, placement });
+        self
+    }
+
     /// Adds one exact JSON Object member rename.
     pub fn rename_member(&mut self, target: NodeRef, name: impl Into<String>) -> &mut Self {
         self.operations.push(EditOperation::RenameMember {
@@ -269,6 +283,8 @@ pub enum EditFailure {
     AncestorDescendantConflict,
     /// An insertion anchor is removed by the same transaction.
     PlacementAnchorRemoved,
+    /// A move target or anchor is modified by another operation in the transaction.
+    PlacementAnchorModified,
     /// A target or placement anchor is not present in its declared container.
     TargetNotFound,
     /// A structural value cannot be represented by the JSON target profile.
@@ -463,6 +479,9 @@ impl Document {
                 placement,
             } => self.prepare_insert_member(*object, name, value, *placement),
             EditOperation::RemoveMember { target } => self.prepare_remove_member(*target),
+            EditOperation::MoveMember { target, placement } => {
+                self.prepare_move_member(*target, *placement)
+            }
             EditOperation::RenameMember { target, name } => {
                 Ok(vec![self.prepare_rename_member(*target, name)?])
             }
@@ -681,6 +700,79 @@ impl Document {
             ordinal,
             self.span(container).end_byte(),
         )
+    }
+
+    fn prepare_move_member(
+        &self,
+        target: NodeRef,
+        placement: AssociationPlacement,
+    ) -> Result<Vec<PreparedEdit>, EditFailure> {
+        let index = self.resolve_target(target, &[NodeRole::ObjectMember])?;
+        let (container, members, ordinal) = self
+            .parent_object(index)
+            .ok_or(EditFailure::TargetNotFound)?;
+        let mut remaining = Vec::new();
+        remaining
+            .try_reserve(members.len().saturating_sub(1))
+            .map_err(|_| EditFailure::ResourceLimit("move-members"))?;
+        remaining.extend(members.iter().copied().filter(|member| *member != index));
+        let destination = match placement {
+            AssociationPlacement::Start => 0,
+            AssociationPlacement::End => remaining.len(),
+            AssociationPlacement::Before(anchor) | AssociationPlacement::After(anchor) => {
+                if anchor == target {
+                    return Err(EditFailure::PlacementAnchorModified);
+                }
+                let anchor = self.resolve_anchor(anchor, NodeRole::ObjectMember, &remaining)?;
+                let position = remaining
+                    .iter()
+                    .position(|candidate| *candidate == anchor)
+                    .expect("resolved anchor is in remaining members");
+                if matches!(placement, AssociationPlacement::After(_)) {
+                    position.saturating_add(1)
+                } else {
+                    position
+                }
+            }
+        };
+        if destination == ordinal {
+            return Ok(Vec::new());
+        }
+
+        let target_span = self.span(index);
+        let source_fragment =
+            &self.source.bytes()[target_span.start_byte()..target_span.end_byte()];
+        let mut fragment = Vec::new();
+        fragment
+            .try_reserve_exact(source_fragment.len())
+            .map_err(|_| EditFailure::ResourceLimit("move-fragment"))?;
+        fragment.extend_from_slice(source_fragment);
+        let container_ref = self.node_ref(container, NodeRole::Value);
+        let mut edits = self.prepare_removal(
+            target,
+            index,
+            members,
+            ordinal,
+            self.span(container).end_byte(),
+        )?;
+        for edit in &mut edits {
+            if edit.mapping.is_some_and(|(old, _)| old == target) {
+                edit.mapping = Some((target, MappingPlan::Unmapped("member-reparsed-after-move")));
+            }
+        }
+        edits.push(self.prepare_insertion(
+            container_ref,
+            self.span(container),
+            &remaining,
+            InsertionSyntax {
+                anchor_role: NodeRole::ObjectMember,
+                open: JsonSyntaxKind::LeftBrace,
+                close: JsonSyntaxKind::RightBrace,
+            },
+            placement,
+            fragment,
+        )?);
+        Ok(edits)
     }
 
     fn prepare_remove_array_element(
@@ -928,10 +1020,13 @@ fn validate_dependencies(transaction: &EditTransaction) -> Result<(), EditFailur
     let mut destructive = HashSet::new();
     let mut removed = HashSet::new();
     let mut anchors = Vec::new();
+    let mut moved = HashSet::new();
+    let mut move_anchors = Vec::new();
     for operation in transaction.operations.iter() {
         let target = match operation {
             EditOperation::ReplaceScalar(operation) => Some(operation.target()),
             EditOperation::RemoveMember { target }
+            | EditOperation::MoveMember { target, .. }
             | EditOperation::RenameMember { target, .. }
             | EditOperation::RemoveArrayElement { target } => Some(*target),
             EditOperation::InsertMember { .. } | EditOperation::InsertArrayElement { .. } => None,
@@ -947,17 +1042,31 @@ fn validate_dependencies(transaction: &EditTransaction) -> Result<(), EditFailur
                 removed.insert(*target);
             }
             EditOperation::InsertMember { placement, .. }
-            | EditOperation::InsertArrayElement { placement, .. } => match placement {
+            | EditOperation::InsertArrayElement { placement, .. }
+            | EditOperation::MoveMember { placement, .. } => match placement {
                 AssociationPlacement::Before(anchor) | AssociationPlacement::After(anchor) => {
                     anchors.push(*anchor);
+                    if matches!(operation, EditOperation::MoveMember { .. }) {
+                        move_anchors.push(*anchor);
+                    }
                 }
                 AssociationPlacement::Start | AssociationPlacement::End => {}
             },
             EditOperation::ReplaceScalar(_) | EditOperation::RenameMember { .. } => {}
         }
+        if let EditOperation::MoveMember { target, .. } = operation {
+            moved.insert(*target);
+        }
     }
     if anchors.iter().any(|anchor| removed.contains(anchor)) {
         return Err(EditFailure::PlacementAnchorRemoved);
+    }
+    if anchors.iter().any(|anchor| moved.contains(anchor))
+        || move_anchors
+            .iter()
+            .any(|anchor| destructive.contains(anchor))
+    {
+        return Err(EditFailure::PlacementAnchorModified);
     }
     Ok(())
 }
@@ -1007,6 +1116,7 @@ fn operation_metadata(transaction: &EditTransaction) -> BTreeMap<String, String>
                 }
                 EditOperation::InsertMember { .. } => "json.edit.insert-member@1",
                 EditOperation::RemoveMember { .. } => "json.edit.remove-member@1",
+                EditOperation::MoveMember { .. } => "json.edit.move-member@1",
                 EditOperation::RenameMember { .. } => "json.edit.rename-member@1",
                 EditOperation::InsertArrayElement { .. } => "json.edit.insert-array-element@1",
                 EditOperation::RemoveArrayElement { .. } => "json.edit.remove-array-element@1",
@@ -1069,6 +1179,14 @@ fn operation_summaries(
                     "json.edit.remove-member",
                     "json.object-member@1",
                     BTreeMap::new(),
+                ),
+                EditOperation::MoveMember { placement, .. } => (
+                    "json.edit.move-member",
+                    "json.object-member@1",
+                    BTreeMap::from([(
+                        "placement".to_owned(),
+                        placement_name(*placement).to_owned(),
+                    )]),
                 ),
                 EditOperation::RenameMember { name, .. } => (
                     "json.edit.rename-member",
@@ -1159,7 +1277,8 @@ impl consema_core::StableFailure for EditFailure {
             | Self::DuplicateTarget
             | Self::OverlappingOwnership
             | Self::AncestorDescendantConflict
-            | Self::PlacementAnchorRemoved => consema_core::FailureKind::InvalidInput,
+            | Self::PlacementAnchorRemoved
+            | Self::PlacementAnchorModified => consema_core::FailureKind::InvalidInput,
             Self::TargetNotFound | Self::RepresentationIncompatible => {
                 consema_core::FailureKind::NotApplicable
             }
@@ -1189,7 +1308,8 @@ impl consema_core::StableFailure for EditFailure {
             | Self::DuplicateTarget
             | Self::OverlappingOwnership
             | Self::AncestorDescendantConflict
-            | Self::PlacementAnchorRemoved => "core.edit.conflicting-edits@1",
+            | Self::PlacementAnchorRemoved
+            | Self::PlacementAnchorModified => "core.edit.conflicting-edits@1",
             Self::TargetNotFound => "core.edit.target-not-found@1",
             Self::ResourceLimit(_) => "core.edit.resource-limit@1",
             Self::NewDocumentFormationFailed => "core.edit.formation-failed@1",
@@ -1999,6 +2119,155 @@ mod tests {
             EditFailure::AncestorDescendantConflict
         );
         assert_eq!(document.render(), b"{\"a\":1,\"b\":2}");
+    }
+
+    #[test]
+    fn move_member_keeps_trivia_in_place_and_publishes_exact_artifacts() {
+        let document = parse(
+            b"{ /*before-a*/ a:1, /*between*/ b:2, c:3, }".as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let members = object_members(&document);
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.move_member(members[1].node_ref(), AssociationPlacement::Start);
+        let transaction = builder.build();
+        let plan = document
+            .dry_run(&transaction, EditPlanSourceId::new("config.json5").unwrap())
+            .unwrap();
+        let commit = document.commit(&transaction).unwrap();
+        assert_eq!(
+            commit.document.render(),
+            b"{ /*before-a*/ b:2,a:1, /*between*/  c:3, }"
+        );
+        assert_eq!(plan.replacements(), commit.source_patch.replacements());
+        assert_eq!(plan.target_digest(), commit.source_patch.target_digest());
+        assert_eq!(
+            commit
+                .source_patch
+                .apply(
+                    document.source(),
+                    source_patch_limits(
+                        document.parse_limits,
+                        commit.source_patch.replacements().len(),
+                    ),
+                )
+                .unwrap()
+                .bytes(),
+            commit.document.render()
+        );
+        assert_eq!(
+            commit.untouched_proof.verify(
+                document.source(),
+                commit.document.source(),
+                commit.source_patch.replacements(),
+            ),
+            Ok(())
+        );
+        assert!(commit.change_set.node_mappings().iter().any(|mapping| {
+            mapping.old == members[1].node_ref()
+                && mapping.status == NodeMappingStatus::Unmapped
+                && mapping.reason.as_deref() == Some("member-reparsed-after-move")
+        }));
+
+        let mut to_end = EditTransactionBuilder::new(&document);
+        to_end.move_member(members[0].node_ref(), AssociationPlacement::End);
+        assert_eq!(
+            document.commit(&to_end.build()).unwrap().document.render(),
+            b"{ /*before-a*/  /*between*/ b:2, c:3,a:1, }"
+        );
+
+        let mut no_op = EditTransactionBuilder::new(&document);
+        no_op.move_member(
+            members[1].node_ref(),
+            AssociationPlacement::Before(members[2].node_ref()),
+        );
+        let no_op = document.commit(&no_op.build()).unwrap();
+        assert_eq!(no_op.document.render(), document.render());
+        assert!(no_op.change_set.source_edits().is_empty());
+    }
+
+    #[test]
+    fn move_member_rejects_cross_object_self_and_concurrent_conflicts() {
+        let document = parse(
+            br#"{"left":{"a":1,"x":2},"right":{"b":3}}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let roots = object_members(&document);
+        let left = match roots[0].value().object_members() {
+            SemanticAvailability::Available(Some(members)) => members,
+            other => panic!("expected left object: {other:?}"),
+        };
+        let right = match roots[1].value().object_members() {
+            SemanticAvailability::Available(Some(members)) => members,
+            other => panic!("expected right object: {other:?}"),
+        };
+
+        let mut cross = EditTransactionBuilder::new(&document);
+        cross.move_member(
+            left[0].node_ref(),
+            AssociationPlacement::Before(right[0].node_ref()),
+        );
+        assert_eq!(
+            document.commit(&cross.build()).unwrap_err(),
+            EditFailure::TargetNotFound
+        );
+
+        let mut self_anchor = EditTransactionBuilder::new(&document);
+        self_anchor.move_member(
+            left[0].node_ref(),
+            AssociationPlacement::After(left[0].node_ref()),
+        );
+        assert_eq!(
+            document.commit(&self_anchor.build()).unwrap_err(),
+            EditFailure::PlacementAnchorModified
+        );
+
+        let mut anchor_renamed = EditTransactionBuilder::new(&document);
+        anchor_renamed
+            .move_member(
+                left[0].node_ref(),
+                AssociationPlacement::After(left[1].node_ref()),
+            )
+            .rename_member(left[1].node_ref(), "renamed");
+        assert_eq!(
+            document.commit(&anchor_renamed.build()).unwrap_err(),
+            EditFailure::PlacementAnchorModified
+        );
+
+        let mut descendant = EditTransactionBuilder::new(&document);
+        descendant
+            .move_member(left[0].node_ref(), AssociationPlacement::End)
+            .semantic_scalar(
+                left[0].value_node_ref(),
+                PortableValue::integer(BigInteger::from(9_i64)),
+                RepresentationPolicy::PreserveCompatible,
+            );
+        assert_eq!(
+            document.commit(&descendant.build()).unwrap_err(),
+            EditFailure::AncestorDescendantConflict
+        );
+
+        let mut target_as_anchor = EditTransactionBuilder::new(&document);
+        target_as_anchor
+            .move_member(left[0].node_ref(), AssociationPlacement::End)
+            .insert_member(
+                roots[0].value_node_ref(),
+                "new",
+                PortableValue::null(),
+                AssociationPlacement::Before(left[0].node_ref()),
+            );
+        assert_eq!(
+            document.commit(&target_as_anchor.build()).unwrap_err(),
+            EditFailure::PlacementAnchorModified
+        );
+        assert_eq!(
+            document.render(),
+            br#"{"left":{"a":1,"x":2},"right":{"b":3}}"#
+        );
     }
 
     #[test]

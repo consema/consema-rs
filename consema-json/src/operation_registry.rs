@@ -32,6 +32,12 @@ fn descriptors() -> Vec<FormatOperationDescriptor> {
             OperationSupport::Supported,
         ),
         descriptor(
+            "json.edit.move-member",
+            "json.object-member",
+            vec![argument("placement", OperationArgumentKind::Placement)],
+            OperationSupport::Supported,
+        ),
+        descriptor(
             "json.edit.rename-member",
             "json.object-member",
             vec![argument("name", OperationArgumentKind::String)],
@@ -100,11 +106,16 @@ mod tests {
         let expected = [
             "json.edit.insert-array-element@1",
             "json.edit.insert-member@1",
+            "json.edit.move-member@1",
             "json.edit.remove-array-element@1",
             "json.edit.remove-member@1",
             "json.edit.rename-member@1",
         ];
-        for profile in [JsonProfile::StrictV1, JsonProfile::JsoncBoundedV1] {
+        for profile in [
+            JsonProfile::StrictV1,
+            JsonProfile::JsoncBoundedV1,
+            JsonProfile::Json5StandardV1,
+        ] {
             let registry = format_operation_registry(profile);
             let structural: Vec<_> = registry
                 .operations()
@@ -113,7 +124,7 @@ mod tests {
                 .map(|descriptor| descriptor.id().to_string())
                 .collect();
             assert_eq!(structural, expected);
-            assert_eq!(registry.operations().len(), 7);
+            assert_eq!(registry.operations().len(), 8);
         }
     }
 }
