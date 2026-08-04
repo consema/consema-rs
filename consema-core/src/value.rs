@@ -132,6 +132,20 @@ impl BigInteger {
         })
     }
 
+    /// Multiplies by `10^exponent` exactly.
+    #[must_use]
+    pub fn mul_pow10(&self, exponent: usize) -> Self {
+        if self.signum() == 0 || exponent == 0 {
+            return self.clone();
+        }
+        let mut magnitude = self.magnitude.to_vec();
+        for _ in 0..exponent {
+            multiply_add_magnitude(&mut magnitude, 10, 0);
+        }
+        Self::from_sign_and_magnitude(self.signum(), &magnitude)
+            .expect("power of ten preserves canonical sign")
+    }
+
     fn add_one(&self) -> Self {
         match self.sign {
             IntegerSign::Zero => Self::from(1_i64),

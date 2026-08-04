@@ -5,6 +5,7 @@ use consema_core::{
 use consema_document::{
     ChangeSet, NodeMapping, NodeMappingStatus, NodeRef, NodeRole, SnapshotIdentity, SourceEdit,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Explicit semantic scalar representation policy.
@@ -207,7 +208,17 @@ impl Document {
                     {
                         return Err(EditFailure::UnsupportedSemanticValue(value.kind()));
                     }
-                    semantic_literal(value, &entity.kind, *policy, target, &mut diagnostics)?
+                    let old_span = entity.literal_span.expect("checked literal span");
+                    let old_literal =
+                        &self.source.bytes()[old_span.start_byte()..old_span.end_byte()];
+                    semantic_literal(
+                        value,
+                        &entity.kind,
+                        old_literal,
+                        *policy,
+                        target,
+                        &mut diagnostics,
+                    )?
                 }
             };
             prepared.push(PreparedEdit {
@@ -289,6 +300,7 @@ struct PreparedEdit {
 fn semantic_literal(
     value: &PortableValue,
     old: &InternalValueKind,
+    old_literal: &[u8],
     policy: RepresentationPolicy,
     target: NodeRef,
     diagnostics: &mut Vec<Diagnostic>,
@@ -296,29 +308,277 @@ fn semantic_literal(
     if policy == RepresentationPolicy::ExactLiteral {
         return Err(EditFailure::ExactLiteralRequiresLiteralOperation);
     }
-    let new_kind = portable_json_kind(value)
-        .ok_or_else(|| EditFailure::UnsupportedSemanticValue(value.kind()))?;
-    let compatible = internal_json_kind(old) == Some(new_kind);
+    portable_json_kind(value).ok_or_else(|| EditFailure::UnsupportedSemanticValue(value.kind()))?;
+    let preserved = analyze_lexical_style(old_literal, old)
+        .and_then(|style| render_preserving_style(value, &style));
     match policy {
-        RepresentationPolicy::PreserveCompatible if !compatible => {
-            return Err(EditFailure::RepresentationIncompatible);
+        RepresentationPolicy::PreserveCompatible => {
+            preserved.ok_or(EditFailure::RepresentationIncompatible)
         }
-        RepresentationPolicy::PreserveElseCanonical if !compatible => {
-            let mut diagnostic = Diagnostic::new(
-                "json.edit.representation-fallback@1",
-                DiagnosticCategory::Edit,
-                DiagnosticSeverity::Warning,
-                None,
-                diagnostics.len() as u64,
-            );
-            diagnostic
-                .arguments
-                .insert("target".to_owned(), format!("{target:?}"));
-            diagnostics.push(diagnostic);
+        RepresentationPolicy::CanonicalForProfile => canonical_literal(value),
+        RepresentationPolicy::PreserveElseCanonical => match preserved {
+            Some(bytes) => Ok(bytes),
+            None => {
+                let mut diagnostic = Diagnostic::new(
+                    "json.edit.representation-fallback@1",
+                    DiagnosticCategory::Edit,
+                    DiagnosticSeverity::Warning,
+                    None,
+                    diagnostics.len() as u64,
+                );
+                diagnostic
+                    .arguments
+                    .insert("target".to_owned(), format!("{target:?}"));
+                diagnostics.push(diagnostic);
+                canonical_literal(value)
+            }
+        },
+        RepresentationPolicy::ExactLiteral => {
+            unreachable!("ExactLiteral is rejected before matching")
         }
-        _ => {}
     }
-    canonical_literal(value)
+}
+
+/// Maximum digits a preserved fixed-fraction rendering may produce.
+const MAX_PRESERVED_FRACTION_DIGITS: usize = 1_000_000;
+
+/// Bounded lexical style retained by `PreserveCompatible` edits.
+///
+/// v1 preserves: integer digit form; decimal fraction digit count and
+/// exponent marker case / explicit plus sign; per-character string escape
+/// choices. A decimal literal that mixes a fraction and an exponent keeps
+/// the fraction scale and absorbs the exponent into the fixed form.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum JsonScalarLexicalStyle {
+    Null,
+    Boolean,
+    Integer,
+    Decimal(DecimalLexicalStyle),
+    String(StringLexicalStyle),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DecimalLexicalStyle {
+    fraction_scale: Option<usize>,
+    exponent_marker: Option<u8>,
+    explicit_plus: bool,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct StringLexicalStyle {
+    escapes: HashMap<char, String>,
+}
+
+fn analyze_lexical_style(
+    literal: &[u8],
+    old: &InternalValueKind,
+) -> Option<JsonScalarLexicalStyle> {
+    match old {
+        InternalValueKind::Null => Some(JsonScalarLexicalStyle::Null),
+        InternalValueKind::Boolean(_) => Some(JsonScalarLexicalStyle::Boolean),
+        InternalValueKind::Integer(_) => Some(JsonScalarLexicalStyle::Integer),
+        InternalValueKind::Decimal(_) => {
+            let text = std::str::from_utf8(literal).ok()?;
+            let fraction_scale = text
+                .find('.')
+                .map(|index| text.len().saturating_sub(index + 1));
+            let exponent_index = text.find(['e', 'E']);
+            let (exponent_marker, explicit_plus) = match exponent_index {
+                Some(index) => {
+                    let plus = text.as_bytes().get(index + 1) == Some(&b'+');
+                    (Some(text.as_bytes()[index]), plus)
+                }
+                None => (None, false),
+            };
+            Some(JsonScalarLexicalStyle::Decimal(DecimalLexicalStyle {
+                fraction_scale,
+                exponent_marker,
+                explicit_plus,
+            }))
+        }
+        InternalValueKind::String(_) => {
+            let mut style = StringLexicalStyle::default();
+            let bytes = literal;
+            let mut index = 1;
+            while index + 1 < bytes.len() {
+                if bytes[index] != b'\\' {
+                    index += 1;
+                    continue;
+                }
+                let escape_start = index;
+                index += 1;
+                let Some(&kind_byte) = bytes.get(index) else {
+                    break;
+                };
+                index += 1;
+                match kind_byte {
+                    b'"' => {
+                        style.escapes.insert('"', "\\\"".to_owned());
+                    }
+                    b'\\' => {
+                        style.escapes.insert('\\', "\\\\".to_owned());
+                    }
+                    b'/' => {
+                        style.escapes.insert('/', "\\/".to_owned());
+                    }
+                    b'b' => {
+                        style.escapes.insert('\u{0008}', "\\b".to_owned());
+                    }
+                    b'f' => {
+                        style.escapes.insert('\u{000c}', "\\f".to_owned());
+                    }
+                    b'n' => {
+                        style.escapes.insert('\n', "\\n".to_owned());
+                    }
+                    b'r' => {
+                        style.escapes.insert('\r', "\\r".to_owned());
+                    }
+                    b't' => {
+                        style.escapes.insert('\t', "\\t".to_owned());
+                    }
+                    b'u' => {
+                        let Some(hex) = bytes.get(index..index + 4) else {
+                            break;
+                        };
+                        let Some(value) =
+                            u32::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok()
+                        else {
+                            break;
+                        };
+                        index += 4;
+                        let text = std::str::from_utf8(&bytes[escape_start..index])
+                            .ok()?
+                            .to_owned();
+                        if (0xd800..=0xdbff).contains(&value)
+                            && bytes.get(index) == Some(&b'\\')
+                            && bytes.get(index + 1) == Some(&b'u')
+                        {
+                            let low_start = index + 2;
+                            if let Some(low_value) = bytes
+                                .get(low_start..low_start + 4)
+                                .and_then(|low| std::str::from_utf8(low).ok())
+                                .and_then(|low| u32::from_str_radix(low, 16).ok())
+                            {
+                                if (0xdc00..=0xdfff).contains(&low_value) {
+                                    let combined =
+                                        0x1_0000 + ((value - 0xd800) << 10) + (low_value - 0xdc00);
+                                    if let Some(character) = char::from_u32(combined) {
+                                        index += 6;
+                                        let pair = std::str::from_utf8(&bytes[escape_start..index])
+                                            .ok()?
+                                            .to_owned();
+                                        style.escapes.insert(character, pair);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(character) = char::from_u32(value) {
+                            style.escapes.insert(character, text);
+                        }
+                    }
+                    _ => break,
+                }
+            }
+            Some(JsonScalarLexicalStyle::String(style))
+        }
+        InternalValueKind::Array(_)
+        | InternalValueKind::Object(_)
+        | InternalValueKind::Unavailable(_) => None,
+    }
+}
+
+fn render_preserving_style(
+    value: &PortableValue,
+    style: &JsonScalarLexicalStyle,
+) -> Option<Vec<u8>> {
+    match style {
+        JsonScalarLexicalStyle::Null if value.kind() == PortableValueKind::Null => {
+            Some(b"null".to_vec())
+        }
+        JsonScalarLexicalStyle::Boolean if value.kind() == PortableValueKind::Boolean => {
+            Some(value.as_boolean()?.to_string().into_bytes())
+        }
+        JsonScalarLexicalStyle::Integer if value.kind() == PortableValueKind::Integer => {
+            Some(value.as_integer()?.to_string().into_bytes())
+        }
+        JsonScalarLexicalStyle::Decimal(style)
+            if matches!(
+                value.kind(),
+                PortableValueKind::Decimal | PortableValueKind::Integer
+            ) =>
+        {
+            render_decimal_style(value, style)
+        }
+        JsonScalarLexicalStyle::String(style) if value.kind() == PortableValueKind::String => {
+            Some(render_string_style(value.as_string()?, style).into_bytes())
+        }
+        _ => None,
+    }
+}
+
+fn render_decimal_style(value: &PortableValue, style: &DecimalLexicalStyle) -> Option<Vec<u8>> {
+    let coefficient = match value.kind() {
+        PortableValueKind::Decimal => value.as_decimal()?.coefficient(),
+        PortableValueKind::Integer => value.as_integer()?,
+        _ => return None,
+    };
+    let exponent = match value.kind() {
+        PortableValueKind::Decimal => value.as_decimal()?.exponent(),
+        PortableValueKind::Integer => &consema_core::BigInteger::zero(),
+        _ => return None,
+    };
+    if let Some(scale) = style.fraction_scale {
+        let shift = match exponent.to_i64() {
+            Some(shift) if shift >= 0 => (shift as usize).checked_add(scale)?,
+            Some(negative) => scale.checked_sub(negative.unsigned_abs() as usize)?,
+            None => return None,
+        };
+        if shift > MAX_PRESERVED_FRACTION_DIGITS {
+            return None;
+        }
+        let mantissa = coefficient.mul_pow10(shift);
+        return Some(decimal_fixed_text(&mantissa, scale).into_bytes());
+    }
+    if let Some(marker) = style.exponent_marker {
+        let mut output = coefficient.to_string();
+        output.push(marker as char);
+        let exponent = exponent.to_string();
+        if !exponent.starts_with('-') && style.explicit_plus {
+            output.push('+');
+        }
+        output.push_str(&exponent);
+        return Some(output.into_bytes());
+    }
+    None
+}
+
+fn decimal_fixed_text(mantissa: &consema_core::BigInteger, scale: usize) -> String {
+    let text = mantissa.to_string();
+    let (sign, digits) = match text.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", text.as_str()),
+    };
+    if digits.len() <= scale {
+        format!("{sign}0.{}{}", "0".repeat(scale - digits.len()), digits)
+    } else {
+        let split = digits.len() - scale;
+        format!("{sign}{}.{}", &digits[..split], &digits[split..])
+    }
+}
+
+fn render_string_style(value: &str, style: &StringLexicalStyle) -> String {
+    let mut output = String::with_capacity(value.len() + 2);
+    output.push('"');
+    for character in value.chars() {
+        if let Some(escape) = style.escapes.get(&character) {
+            output.push_str(escape);
+        } else {
+            push_json_char(&mut output, character);
+        }
+    }
+    output.push('"');
+    output
 }
 
 fn portable_json_kind(value: &PortableValue) -> Option<JsonValueKind> {
@@ -329,19 +589,6 @@ fn portable_json_kind(value: &PortableValue) -> Option<JsonValueKind> {
         PortableValueKind::Decimal => Some(JsonValueKind::Decimal),
         PortableValueKind::String => Some(JsonValueKind::String),
         _ => None,
-    }
-}
-
-const fn internal_json_kind(value: &InternalValueKind) -> Option<JsonValueKind> {
-    match value {
-        InternalValueKind::Null => Some(JsonValueKind::Null),
-        InternalValueKind::Boolean(_) => Some(JsonValueKind::Boolean),
-        InternalValueKind::Integer(_) => Some(JsonValueKind::Integer),
-        InternalValueKind::Decimal(_) => Some(JsonValueKind::Decimal),
-        InternalValueKind::String(_) => Some(JsonValueKind::String),
-        InternalValueKind::Array(_) => Some(JsonValueKind::Array),
-        InternalValueKind::Object(_) => Some(JsonValueKind::Object),
-        InternalValueKind::Unavailable(_) => None,
     }
 }
 
@@ -364,23 +611,27 @@ fn encode_json_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
     output.push('"');
     for character in value.chars() {
-        match character {
-            '"' => output.push_str("\\\""),
-            '\\' => output.push_str("\\\\"),
-            '\u{0008}' => output.push_str("\\b"),
-            '\u{000c}' => output.push_str("\\f"),
-            '\n' => output.push_str("\\n"),
-            '\r' => output.push_str("\\r"),
-            '\t' => output.push_str("\\t"),
-            '\u{0000}'..='\u{001f}' => {
-                use std::fmt::Write;
-                write!(output, "\\u{:04X}", u32::from(character)).expect("String write");
-            }
-            _ => output.push(character),
-        }
+        push_json_char(&mut output, character);
     }
     output.push('"');
     output
+}
+
+fn push_json_char(output: &mut String, character: char) {
+    match character {
+        '"' => output.push_str("\\\""),
+        '\\' => output.push_str("\\\\"),
+        '\u{0008}' => output.push_str("\\b"),
+        '\u{000c}' => output.push_str("\\f"),
+        '\n' => output.push_str("\\n"),
+        '\r' => output.push_str("\\r"),
+        '\t' => output.push_str("\\t"),
+        '\u{0000}'..='\u{001f}' => {
+            use std::fmt::Write;
+            write!(output, "\\u{:04X}", u32::from(character)).expect("String write");
+        }
+        _ => output.push(character),
+    }
 }
 
 fn validate_literal(
@@ -439,7 +690,7 @@ fn find_value_by_literal_span(document: &Document, start: usize, end: usize) -> 
 mod tests {
     use super::*;
     use crate::{JsonProfile, parse};
-    use consema_core::{BigInteger, PortableValue};
+    use consema_core::{BigInteger, Decimal, PortableValue};
     use consema_document::ParseLimits;
 
     #[test]
@@ -514,5 +765,167 @@ mod tests {
             Err(EditFailure::InvalidLiteral)
         ));
         assert_eq!(document.render(), br#"{"a":1}"#);
+    }
+
+    fn member_value_ref(document: &Document) -> NodeRef {
+        match document.root().object_members() {
+            SemanticAvailability::Available(Some(members)) => members[0].value_node_ref(),
+            _ => panic!("missing member"),
+        }
+    }
+
+    #[test]
+    fn preserve_compatible_keeps_decimal_fraction_scale() {
+        let document = parse(
+            br#"{"a": 1.00}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.semantic_scalar(
+            member_value_ref(&document),
+            PortableValue::decimal(Decimal::new(
+                BigInteger::from(25_i64),
+                BigInteger::from(-1_i64),
+            )),
+            RepresentationPolicy::PreserveCompatible,
+        );
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.render(), br#"{"a": 2.50}"#);
+    }
+
+    #[test]
+    fn preserve_compatible_keeps_exponent_marker_and_sign() {
+        let document = parse(
+            br#"{"a": 1E+02}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.semantic_scalar(
+            member_value_ref(&document),
+            PortableValue::integer(BigInteger::from(2_i64)),
+            RepresentationPolicy::PreserveCompatible,
+        );
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.render(), br#"{"a": 2E+0}"#);
+    }
+
+    #[test]
+    fn preserve_compatible_rejects_unrepresentable_fraction_scale() {
+        let document = parse(
+            br#"{"a": 1.000}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.semantic_scalar(
+            member_value_ref(&document),
+            PortableValue::decimal(Decimal::new(
+                BigInteger::from(1_i64),
+                BigInteger::from(-4_i64),
+            )),
+            RepresentationPolicy::PreserveCompatible,
+        );
+        assert!(matches!(
+            document.commit(&builder.build()),
+            Err(EditFailure::RepresentationIncompatible)
+        ));
+        assert_eq!(document.render(), br#"{"a": 1.000}"#);
+    }
+
+    #[test]
+    fn preserve_compatible_keeps_string_escape_style() {
+        let document = parse(
+            br#"{"a": "a\u0041"}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.semantic_scalar(
+            member_value_ref(&document),
+            PortableValue::string("xA"),
+            RepresentationPolicy::PreserveCompatible,
+        );
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.render(), br#"{"a": "x\u0041"}"#);
+    }
+
+    #[test]
+    fn canonical_for_profile_is_independent_of_old_spelling() {
+        let document = parse(
+            br#"{"a": 1.00}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.semantic_scalar(
+            member_value_ref(&document),
+            PortableValue::decimal(Decimal::new(
+                BigInteger::from(25_i64),
+                BigInteger::from(-1_i64),
+            )),
+            RepresentationPolicy::CanonicalForProfile,
+        );
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.render(), br#"{"a": 25e-1}"#);
+    }
+
+    #[test]
+    fn preserve_else_canonical_reports_actual_fallback() {
+        let document = parse(
+            br#"{"a": 1.000}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.semantic_scalar(
+            member_value_ref(&document),
+            PortableValue::decimal(Decimal::new(
+                BigInteger::from(1_i64),
+                BigInteger::from(-4_i64),
+            )),
+            RepresentationPolicy::PreserveElseCanonical,
+        );
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.render(), br#"{"a": 1e-4}"#);
+        assert_eq!(
+            commit
+                .change_set
+                .diagnostics()
+                .iter()
+                .filter(|item| item.code == "json.edit.representation-fallback@1")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn preserve_compatible_rejects_category_change() {
+        let document = parse(
+            br#"{"a": 1}"#.as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.semantic_scalar(
+            member_value_ref(&document),
+            PortableValue::decimal(Decimal::new(
+                BigInteger::from(1_i64),
+                BigInteger::from(0_i64),
+            )),
+            RepresentationPolicy::PreserveCompatible,
+        );
+        assert!(matches!(
+            document.commit(&builder.build()),
+            Err(EditFailure::RepresentationIncompatible)
+        ));
     }
 }
