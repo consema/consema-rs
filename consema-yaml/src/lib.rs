@@ -921,6 +921,30 @@ mod tests {
     }
 
     #[test]
+    fn multiline_plain_scalar_does_not_fabricate_node_properties() {
+        let source = b"---\nk:#foo\n &a !t s\n";
+        let document = parse(
+            source.as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let scalar = document.document(0).unwrap().root().scalar().unwrap();
+        assert_eq!(scalar.decoded(), "k:#foo &a !t s");
+        assert_eq!(document.alias_count(), 0);
+        assert!(
+            !document
+                .lossless_syntax_kinds()
+                .contains(&YamlSyntaxKind::Anchor)
+        );
+        assert!(
+            !document
+                .lossless_syntax_kinds()
+                .contains(&YamlSyntaxKind::Tag)
+        );
+    }
+
+    #[test]
     fn syntax_and_resource_failures_form_no_document() {
         let syntax = parse(
             b"[unterminated".as_slice(),

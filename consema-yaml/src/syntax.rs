@@ -88,6 +88,8 @@ struct Scanner<'a> {
     max_tokens: usize,
     output: Vec<Lexeme>,
     pending_block_parent_indent: Option<usize>,
+    plain_line_active: bool,
+    plain_parent_indent: Option<usize>,
 }
 
 impl<'a> Scanner<'a> {
@@ -99,6 +101,8 @@ impl<'a> Scanner<'a> {
             max_tokens,
             output: Vec::new(),
             pending_block_parent_indent: None,
+            plain_line_active: false,
+            plain_parent_indent: None,
         }
     }
 
@@ -112,9 +116,22 @@ impl<'a> Scanner<'a> {
             }
             let start = self.offset;
             let current = self.chars[start];
+            if !matches!(current, ' ' | '\t' | '\r' | '\n')
+                && !self.plain_line_active
+                && self.plain_parent_indent.is_some()
+            {
+                if self.line_indent() > self.plain_parent_indent.expect("checked above") {
+                    self.take_until_break();
+                    self.push(start, self.offset, YamlSyntaxKind::PlainScalar)?;
+                    self.plain_line_active = true;
+                    continue;
+                }
+                self.plain_parent_indent = None;
+            }
             if current == '\u{feff}' {
                 self.offset += 1;
                 self.push(start, self.offset, YamlSyntaxKind::Bom)?;
+                self.end_plain_scalar();
                 if start == self.line_start {
                     self.line_start = self.offset;
                 }
@@ -126,15 +143,19 @@ impl<'a> Scanner<'a> {
             } else if current == '#' {
                 self.take_until_break();
                 self.push(start, self.offset, YamlSyntaxKind::Comment)?;
+                self.end_plain_scalar();
             } else if self.at_directive() {
                 self.take_until_break();
                 self.push(start, self.offset, YamlSyntaxKind::Directive)?;
+                self.end_plain_scalar();
             } else if self.at_document_indicator('-', '-', '-') {
                 self.offset += 3;
                 self.push(start, self.offset, YamlSyntaxKind::DocumentStart)?;
+                self.end_plain_scalar();
             } else if self.at_document_indicator('.', '.', '.') {
                 self.offset += 3;
                 self.push(start, self.offset, YamlSyntaxKind::DocumentEnd)?;
+                self.end_plain_scalar();
             } else if matches!(current, '\'' | '"') {
                 self.scan_quoted(current);
                 self.push(
@@ -146,6 +167,7 @@ impl<'a> Scanner<'a> {
                         YamlSyntaxKind::DoubleQuotedScalar
                     },
                 )?;
+                self.end_plain_scalar();
             } else if matches!(current, '|' | '>') && self.is_block_header() {
                 let parent_indent = self.line_indent();
                 self.take_until_break();
@@ -159,7 +181,8 @@ impl<'a> Scanner<'a> {
                     },
                 )?;
                 self.pending_block_parent_indent = Some(parent_indent);
-            } else if matches!(current, '&' | '*' | '!') {
+                self.end_plain_scalar();
+            } else if matches!(current, '&' | '*' | '!') && !self.plain_line_active {
                 self.offset += 1;
                 self.take_while(|item| !is_separation(item) && !is_flow_indicator(item));
                 self.push(
@@ -172,12 +195,18 @@ impl<'a> Scanner<'a> {
                         _ => unreachable!(),
                     },
                 )?;
+                self.end_plain_scalar();
             } else if let Some(kind) = self.indicator_kind() {
                 self.offset += 1;
                 self.push(start, self.offset, kind)?;
+                self.end_plain_scalar();
             } else {
                 self.scan_plain();
                 self.push(start, self.offset, YamlSyntaxKind::PlainScalar)?;
+                if !self.plain_line_active {
+                    self.plain_parent_indent = Some(self.line_indent());
+                }
+                self.plain_line_active = true;
             }
         }
         Ok(self.output)
@@ -210,7 +239,13 @@ impl<'a> Scanner<'a> {
         }
         self.push(start, self.offset, YamlSyntaxKind::Newline)?;
         self.line_start = self.offset;
+        self.plain_line_active = false;
         Ok(())
+    }
+
+    fn end_plain_scalar(&mut self) {
+        self.plain_line_active = false;
+        self.plain_parent_indent = None;
     }
 
     fn scan_quoted(&mut self, quote: char) {
@@ -431,6 +466,29 @@ mod tests {
                 YamlSyntaxKind::PlainScalar,
                 YamlSyntaxKind::Newline,
             ]
+        );
+    }
+
+    #[test]
+    fn node_property_characters_inside_plain_scalars_remain_scalar_text() {
+        let result = kinds("---\nk:#foo\n &a !t s\n");
+        assert!(!result.contains(&YamlSyntaxKind::Anchor));
+        assert!(!result.contains(&YamlSyntaxKind::Tag));
+
+        let result = kinds("plain &a !t text\nkey: &real !tag value\n");
+        assert_eq!(
+            result
+                .iter()
+                .filter(|kind| **kind == YamlSyntaxKind::Anchor)
+                .count(),
+            1
+        );
+        assert_eq!(
+            result
+                .iter()
+                .filter(|kind| **kind == YamlSyntaxKind::Tag)
+                .count(),
+            1
         );
     }
 }
