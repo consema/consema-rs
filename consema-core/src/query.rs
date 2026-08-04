@@ -68,6 +68,12 @@ impl QueryDomain {
         Self::new("ini.native-semantic-query", 1)
     }
 
+    /// `java-properties.native-semantic-query@1`.
+    #[must_use]
+    pub fn java_properties_native_v1() -> Self {
+        Self::new("java-properties.native-semantic-query", 1)
+    }
+
     /// `json.lossless-syntax-query@1`.
     #[must_use]
     pub fn json_lossless_syntax_v1() -> Self {
@@ -96,6 +102,12 @@ impl QueryDomain {
     #[must_use]
     pub fn ini_lossless_syntax_v1() -> Self {
         Self::new("ini.lossless-syntax-query", 1)
+    }
+
+    /// `java-properties.lossless-syntax-query@1`.
+    #[must_use]
+    pub fn java_properties_lossless_syntax_v1() -> Self {
+        Self::new("java-properties.lossless-syntax-query", 1)
     }
 
     /// Domain namespace.
@@ -156,14 +168,34 @@ pub enum MatchRole {
     IniDocument,
     /// One INI section occurrence.
     IniSection,
+    /// One Python ConfigParser default-section occurrence.
+    IniDefaultSection,
     /// One INI entry occurrence.
     IniEntry,
     /// One physical INI source line.
     IniPhysicalLine,
     /// One logical INI record.
     IniLogicalLine,
+    /// One recovered INI error line.
+    IniErrorLine,
     /// INI lossless syntax piece.
     IniSyntaxPiece,
+    /// Complete Java Properties document.
+    PropertiesDocument,
+    /// One Java Properties natural source line.
+    PropertiesNaturalLine,
+    /// One Java Properties logical line.
+    PropertiesLogicalLine,
+    /// One stored Java Properties property occurrence.
+    PropertiesProperty,
+    /// One Java Properties comment occurrence.
+    PropertiesComment,
+    /// One Java Properties escape occurrence.
+    PropertiesEscape,
+    /// One recovered Java Properties error line.
+    PropertiesErrorLine,
+    /// Java Properties lossless syntax piece.
+    PropertiesSyntaxPiece,
     /// PortableGraph node.
     GraphNode,
     /// PortableGraph sequence element association.
@@ -363,10 +395,12 @@ impl QueryDefinition {
             ("toml.native-semantic-query", 1) => MatchRole::TomlItem,
             ("yaml.native-semantic-query", 1) => MatchRole::YamlStream,
             ("ini.native-semantic-query", 1) => MatchRole::IniDocument,
+            ("java-properties.native-semantic-query", 1) => MatchRole::PropertiesDocument,
             ("json.lossless-syntax-query", 1 | 2) => MatchRole::JsonSyntaxPiece,
             ("toml.lossless-syntax-query", 1) => MatchRole::TomlSyntaxPiece,
             ("yaml.lossless-syntax-query", 1) => MatchRole::YamlSyntaxPiece,
             ("ini.lossless-syntax-query", 1) => MatchRole::IniSyntaxPiece,
+            ("java-properties.lossless-syntax-query", 1) => MatchRole::PropertiesSyntaxPiece,
             _ => return Err(QueryFailure::DomainMismatch(self.domain.clone())),
         };
         let output_role = validate_expression(&self.domain, &self.expression, input_role)?;
@@ -2601,6 +2635,36 @@ mod tests {
             )
             .validate()
             .unwrap();
+    }
+
+    #[test]
+    fn line_format_domains_have_distinct_root_and_syntax_roles() {
+        let cases = [
+            (QueryDomain::ini_native_v1(), MatchRole::IniDocument),
+            (
+                QueryDomain::ini_lossless_syntax_v1(),
+                MatchRole::IniSyntaxPiece,
+            ),
+            (
+                QueryDomain::java_properties_native_v1(),
+                MatchRole::PropertiesDocument,
+            ),
+            (
+                QueryDomain::java_properties_lossless_syntax_v1(),
+                MatchRole::PropertiesSyntaxPiece,
+            ),
+        ];
+        for (domain, role) in cases {
+            assert_eq!(
+                QueryDefinition::new(domain)
+                    .validate()
+                    .unwrap()
+                    .output_role(),
+                role
+            );
+        }
+        assert_ne!(MatchRole::IniDefaultSection, MatchRole::IniSection);
+        assert_ne!(MatchRole::IniErrorLine, MatchRole::IniLogicalLine);
     }
 
     #[test]

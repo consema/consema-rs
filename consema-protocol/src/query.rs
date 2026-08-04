@@ -573,10 +573,20 @@ fn role_name(role: MatchRole) -> &'static str {
         | MatchRole::YamlSyntaxPiece
         | MatchRole::IniDocument
         | MatchRole::IniSection
+        | MatchRole::IniDefaultSection
         | MatchRole::IniEntry
         | MatchRole::IniPhysicalLine
         | MatchRole::IniLogicalLine
-        | MatchRole::IniSyntaxPiece => {
+        | MatchRole::IniErrorLine
+        | MatchRole::IniSyntaxPiece
+        | MatchRole::PropertiesDocument
+        | MatchRole::PropertiesNaturalLine
+        | MatchRole::PropertiesLogicalLine
+        | MatchRole::PropertiesProperty
+        | MatchRole::PropertiesComment
+        | MatchRole::PropertiesEscape
+        | MatchRole::PropertiesErrorLine
+        | MatchRole::PropertiesSyntaxPiece => {
             unreachable!("core.query-result@1 construction rejects newer roles")
         }
     }
@@ -598,10 +608,20 @@ const fn is_v1_role(role: MatchRole) -> bool {
             | MatchRole::YamlSyntaxPiece
             | MatchRole::IniDocument
             | MatchRole::IniSection
+            | MatchRole::IniDefaultSection
             | MatchRole::IniEntry
             | MatchRole::IniPhysicalLine
             | MatchRole::IniLogicalLine
+            | MatchRole::IniErrorLine
             | MatchRole::IniSyntaxPiece
+            | MatchRole::PropertiesDocument
+            | MatchRole::PropertiesNaturalLine
+            | MatchRole::PropertiesLogicalLine
+            | MatchRole::PropertiesProperty
+            | MatchRole::PropertiesComment
+            | MatchRole::PropertiesEscape
+            | MatchRole::PropertiesErrorLine
+            | MatchRole::PropertiesSyntaxPiece
     )
 }
 
