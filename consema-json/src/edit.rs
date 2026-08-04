@@ -265,6 +265,8 @@ pub enum EditFailure {
     DuplicateTarget,
     /// Prepared source ownership intervals overlap or reuse one insertion point.
     OverlappingOwnership,
+    /// One transaction edits an association and one of its owned descendants.
+    AncestorDescendantConflict,
     /// An insertion anchor is removed by the same transaction.
     PlacementAnchorRemoved,
     /// A target or placement anchor is not present in its declared container.
@@ -294,8 +296,14 @@ impl Document {
         }
         prepared.sort_by_key(|edit| (edit.old_span.start_byte(), edit.old_span.end_byte()));
         for pair in prepared.windows(2) {
-            if pair[0].old_span.end_byte() > pair[1].old_span.start_byte()
-                || pair[0].old_span == pair[1].old_span
+            if !pair[0].old_span.is_empty()
+                && !pair[1].old_span.is_empty()
+                && (pair[0].old_span.end_byte() > pair[1].old_span.start_byte()
+                    || pair[0].old_span == pair[1].old_span)
+            {
+                return Err(EditFailure::AncestorDescendantConflict);
+            }
+            if pair[0].old_span == pair[1].old_span
                 || (pair[0].old_span.is_empty()
                     && pair[1].old_span.is_empty()
                     && pair[0].old_span.start_byte() == pair[1].old_span.start_byte())
@@ -1005,6 +1013,7 @@ impl consema_core::StableFailure for EditFailure {
             | Self::ConflictingEdits
             | Self::DuplicateTarget
             | Self::OverlappingOwnership
+            | Self::AncestorDescendantConflict
             | Self::PlacementAnchorRemoved => consema_core::FailureKind::InvalidInput,
             Self::TargetNotFound | Self::RepresentationIncompatible => {
                 consema_core::FailureKind::NotApplicable
@@ -1034,6 +1043,7 @@ impl consema_core::StableFailure for EditFailure {
             Self::ConflictingEdits
             | Self::DuplicateTarget
             | Self::OverlappingOwnership
+            | Self::AncestorDescendantConflict
             | Self::PlacementAnchorRemoved => "core.edit.conflicting-edits@1",
             Self::TargetNotFound => "core.edit.target-not-found@1",
             Self::ResourceLimit(_) => "core.edit.resource-limit@1",
@@ -1681,6 +1691,19 @@ mod tests {
         assert_eq!(
             document.commit(&same_boundary.build()).unwrap_err(),
             EditFailure::OverlappingOwnership
+        );
+
+        let mut ancestor_descendant = EditTransactionBuilder::new(&document);
+        ancestor_descendant
+            .semantic_scalar(
+                members[0].value_node_ref(),
+                PortableValue::integer(BigInteger::from(3_i64)),
+                RepresentationPolicy::PreserveCompatible,
+            )
+            .remove_member(members[0].node_ref());
+        assert_eq!(
+            document.commit(&ancestor_descendant.build()).unwrap_err(),
+            EditFailure::AncestorDescendantConflict
         );
         assert_eq!(document.render(), b"{\"a\":1,\"b\":2}");
     }
