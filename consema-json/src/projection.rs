@@ -1,6 +1,6 @@
 use crate::{
-    Document, InternalValueKind, JsonObjectMember, JsonValue, JsonValueKind, SemanticAvailability,
-    SemanticUnavailable,
+    Document, InternalValueKind, JsonObjectMember, JsonProfile, JsonValue, JsonValueKind,
+    SemanticAvailability, SemanticUnavailable,
 };
 use consema_core::{
     AssociationLocation, AssociationRole, Diagnostic, DiagnosticCategory, DiagnosticSeverity,
@@ -19,6 +19,8 @@ pub enum ProjectionTarget {
     ProjectAsEntryMappingV1,
     /// Frozen exact-first core selection algorithm.
     BestExactCoreV1,
+    /// JSON5 exact-first core selection including frozen non-finite binary64 values.
+    Json5BestExactCoreV1,
 }
 
 /// Explicit duplicate member policy.
@@ -354,6 +356,16 @@ impl Document {
     /// Applies an immutable request. A failure never contains a partial value.
     #[must_use]
     pub fn project(&self, request: &ProjectionRequest) -> ProjectionResult {
+        if (request.target == ProjectionTarget::Json5BestExactCoreV1
+            && self.profile != JsonProfile::Json5StandardV1)
+            || (request.target == ProjectionTarget::BestExactCoreV1
+                && self.profile == JsonProfile::Json5StandardV1)
+        {
+            return failed(
+                ProjectionFailure::TargetNotApplicable,
+                ProjectionReport::default(),
+            );
+        }
         for rule in &request.duplicate_rules {
             let ProjectionPolicyScope::ExactNodeRef(node) = rule.scope else {
                 continue;
@@ -503,8 +515,14 @@ impl ProjectionContext<'_> {
         };
         let use_mapping = match self.request.target {
             ProjectionTarget::ProjectAsEntryMappingV1 => true,
-            ProjectionTarget::BestExactCoreV1 if has_duplicates => true,
-            ProjectionTarget::ProjectAsObjectV1 | ProjectionTarget::BestExactCoreV1 => false,
+            ProjectionTarget::BestExactCoreV1 | ProjectionTarget::Json5BestExactCoreV1
+                if has_duplicates =>
+            {
+                true
+            }
+            ProjectionTarget::ProjectAsObjectV1
+            | ProjectionTarget::BestExactCoreV1
+            | ProjectionTarget::Json5BestExactCoreV1 => false,
         };
         if use_mapping {
             if self.request.target != ProjectionTarget::ProjectAsObjectV1 {
@@ -958,6 +976,59 @@ mod tests {
             .unwrap();
         assert!(matches!(
             scalar.project(&invalid),
+            ProjectionResult::Failed(_)
+        ));
+    }
+
+    #[test]
+    fn json5_target_is_profile_bound_and_keeps_non_finite_bits() {
+        let json5 = parse(
+            b"{a:Infinity,a:-NaN}".as_slice(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let old = ProjectionRequestBuilder::new(ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        assert!(matches!(json5.project(&old), ProjectionResult::Failed(_)));
+
+        let request = ProjectionRequestBuilder::new(ProjectionTarget::Json5BestExactCoreV1)
+            .build()
+            .unwrap();
+        let ProjectionResult::Complete(result) = json5.project(&request) else {
+            panic!("JSON5 projection failed");
+        };
+        let entries = result
+            .value
+            .as_entry_mapping()
+            .expect("duplicates map exactly");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries[0]
+                .value()
+                .as_binary_float64()
+                .expect("positive infinity")
+                .bits(),
+            0x7ff0_0000_0000_0000
+        );
+        assert_eq!(
+            entries[1]
+                .value()
+                .as_binary_float64()
+                .expect("negative NaN")
+                .bits(),
+            0xfff8_0000_0000_0000
+        );
+
+        let strict = parse(
+            b"null".as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        assert!(matches!(
+            strict.project(&request),
             ProjectionResult::Failed(_)
         ));
     }
