@@ -11,8 +11,8 @@ use consema_core::{
 use consema_document::{FormationStatus, ParseLimits};
 use consema_json::{
     DuplicateKeyPolicy, EditFailure, EditTransactionBuilder, Fidelity, JsonMatch, JsonProfile,
-    ProjectionEventKind, ProjectionLimits, ProjectionRequestBuilder, ProjectionResult,
-    ProjectionTarget, RepresentationPolicy, SemanticAvailability, execute_json_query, parse,
+    ProjectionEventKind, ProjectionRequestBuilder, ProjectionResult, ProjectionTarget,
+    RepresentationPolicy, SemanticAvailability, execute_json_query, parse,
 };
 use consema_pvce::{
     DecodeError, DecodeLimits, EncodeError, EncodeLimits, decode, encode, encode_bounded,
@@ -708,18 +708,6 @@ fn duplicate_document(case: &VectorCase<'_>) -> Result<consema_json::Document, S
         ParseLimits::default(),
     )
     .map_err(|error| format!("{error:?}"))
-}
-
-fn projection_target(case: &VectorCase<'_>) -> Result<ProjectionTarget, String> {
-    match case_field(case, "target")
-        .and_then(PortableValue::as_string)
-        .ok_or("missing input.target")?
-    {
-        "ProjectAsObject@1" => Ok(ProjectionTarget::ProjectAsObjectV1),
-        "ProjectAsEntryMapping@1" => Ok(ProjectionTarget::ProjectAsEntryMappingV1),
-        "BestExactCore@1" => Ok(ProjectionTarget::BestExactCoreV1),
-        other => Err(format!("unknown target {other}")),
-    }
 }
 
 fn projection_best(case: &VectorCase<'_>) -> Result<(), String> {
