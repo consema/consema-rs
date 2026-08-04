@@ -4,10 +4,10 @@ use crate::{
 };
 use consema_core::{Diagnostic, DiagnosticCategory, DiagnosticSeverity};
 use consema_document::{
-    ChangeSet, EditOperationSummary, EditPlan, EditPlanSourceId, FormatOperationId,
-    FormationStatus, MaterializationFailure, NodeMapping, NodeMappingStatus, NodeRef, NodeRole,
-    SnapshotIdentity, SourceEdit, SourceLimits, SourcePatch, SourcePatchLimits, Span,
-    UntouchedByteProof,
+    AssociationPlacement, ChangeSet, EditOperationSummary, EditPlan, EditPlanSourceId,
+    FormatOperationId, FormationStatus, MaterializationFailure, NodeMapping, NodeMappingStatus,
+    NodeRef, NodeRole, SnapshotIdentity, SourceEdit, SourceLimits, SourcePatch, SourcePatchLimits,
+    Span, UntouchedByteProof,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
@@ -59,6 +59,27 @@ impl ValueReplacement {
 pub enum EditOperation {
     /// Replaces one exact entry's value.
     ReplaceValue(ValueReplacement),
+    /// Inserts one new section occurrence.
+    InsertSection {
+        /// Exact INI document target.
+        document: NodeRef,
+        /// Decoded section name.
+        name: String,
+        /// Placement among section occurrences.
+        placement: AssociationPlacement,
+    },
+    /// Removes one exact section and all entries owned by that occurrence.
+    RemoveSection {
+        /// Exact ordinary or default-section target.
+        target: NodeRef,
+    },
+    /// Replaces one exact section name.
+    RenameSection {
+        /// Exact ordinary or default-section target.
+        target: NodeRef,
+        /// New decoded section name.
+        name: String,
+    },
 }
 
 /// Immutable edit transaction; every operation resolves against one base snapshot.
@@ -125,6 +146,37 @@ impl EditTransactionBuilder {
         self
     }
 
+    /// Adds one canonical section insertion.
+    pub fn insert_section(
+        &mut self,
+        document: NodeRef,
+        name: impl Into<String>,
+        placement: AssociationPlacement,
+    ) -> &mut Self {
+        self.operations.push(EditOperation::InsertSection {
+            document,
+            name: name.into(),
+            placement,
+        });
+        self
+    }
+
+    /// Adds one exact section removal, including that occurrence's owned entries.
+    pub fn remove_section(&mut self, target: NodeRef) -> &mut Self {
+        self.operations
+            .push(EditOperation::RemoveSection { target });
+        self
+    }
+
+    /// Adds one exact section-name replacement.
+    pub fn rename_section(&mut self, target: NodeRef, name: impl Into<String>) -> &mut Self {
+        self.operations.push(EditOperation::RenameSection {
+            target,
+            name: name.into(),
+        });
+        self
+    }
+
     /// Completes the request; validation occurs atomically at commit or dry-run.
     #[must_use]
     pub fn build(self) -> EditTransaction {
@@ -161,6 +213,16 @@ pub enum EditFailure {
     DuplicateTarget,
     /// Prepared value ownership intervals overlap.
     OverlappingOwnership,
+    /// One operation removes a section while another edits its owned entry.
+    AncestorDescendantConflict,
+    /// An insertion anchor is removed by the same transaction.
+    PlacementAnchorRemoved,
+    /// A target or placement anchor does not exist in its declared container.
+    TargetNotFound,
+    /// A section name is invalid under the selected profile.
+    InvalidName,
+    /// A strict profile would become ambiguous after insertion or rename.
+    NameCollision,
     /// `PreserveCompatible` cannot retain the target representation.
     RepresentationIncompatible,
     /// `ExactLiteral` was requested without literal bytes.
@@ -186,6 +248,7 @@ impl Document {
         if transaction.base != self.snapshot_identity() {
             return Err(EditFailure::WrongSnapshot);
         }
+        self.validate_dependencies(transaction)?;
         let mut targets = HashSet::new();
         let mut diagnostics = Vec::new();
         let mut prepared = Vec::new();
@@ -193,21 +256,30 @@ impl Document {
             .try_reserve_exact(transaction.operations.len())
             .map_err(|_| EditFailure::ResourceLimit("prepared-edits"))?;
         for operation in transaction.operations.iter() {
-            let EditOperation::ReplaceValue(replacement) = operation;
-            if !targets.insert(replacement.target()) {
-                return Err(EditFailure::DuplicateTarget);
+            if let Some(target) = destructive_target(operation) {
+                if !targets.insert(target) {
+                    return Err(EditFailure::DuplicateTarget);
+                }
             }
-            prepared.push(self.prepare_value(replacement, &mut diagnostics)?);
+            prepared.extend(self.prepare_operation(operation, &mut diagnostics)?);
         }
         prepared.sort_by_key(|edit| (edit.old_span.start_byte(), edit.old_span.end_byte()));
+        prepared = self.coalesce_adjacent_deletions(prepared)?;
         for pair in prepared.windows(2) {
-            if pair[0].old_span.end_byte() > pair[1].old_span.start_byte()
-                || pair[0].old_span == pair[1].old_span
-            {
+            if pair[0].old_span == pair[1].old_span {
                 return Err(EditFailure::OverlappingOwnership);
             }
+            if pair[0].old_span.end_byte() > pair[1].old_span.start_byte() {
+                return Err(EditFailure::AncestorDescendantConflict);
+            }
         }
-        let contains_literal = prepared.iter().any(|edit| edit.literal);
+        let literal_only = !transaction.operations().is_empty()
+            && transaction.operations().iter().all(|operation| {
+                matches!(
+                    operation,
+                    EditOperation::ReplaceValue(ValueReplacement::Literal { .. })
+                )
+            });
 
         let target_len = prepared
             .iter()
@@ -243,17 +315,14 @@ impl Document {
             self.parse_limits,
         )
         .map_err(|_| {
-            if contains_literal {
+            if literal_only {
                 EditFailure::InvalidLiteral
             } else {
                 EditFailure::NewDocumentFormationFailed
             }
         })?;
-        if new_document.formation_status() != FormationStatus::Complete
-            || new_document.entries().len() != self.entries().len()
-            || new_document.sections().len() != self.sections().len()
-        {
-            return Err(if contains_literal {
+        if new_document.formation_status() != FormationStatus::Complete {
+            return Err(if literal_only {
                 EditFailure::InvalidLiteral
             } else {
                 EditFailure::NewDocumentFormationFailed
@@ -263,12 +332,21 @@ impl Document {
         let mut delta = 0isize;
         let mut source_edits = Vec::new();
         let mut mappings = Vec::new();
+        let mapping_count = prepared.iter().try_fold(0usize, |count, edit| {
+            count
+                .checked_add(edit.mappings.len())
+                .ok_or(EditFailure::ResourceLimit("node-mappings"))
+        })?;
+        if mapping_count > self.parse_limits.common.max_node_count {
+            return Err(EditFailure::ResourceLimit("node-mappings"));
+        }
         source_edits
             .try_reserve_exact(prepared.len())
             .map_err(|_| EditFailure::ResourceLimit("source-edits"))?;
         mappings
-            .try_reserve_exact(prepared.len())
+            .try_reserve_exact(mapping_count)
             .map_err(|_| EditFailure::ResourceLimit("node-mappings"))?;
+        let mut mapped_old = HashSet::new();
         for edit in prepared {
             let new_start = edit
                 .old_span
@@ -282,32 +360,54 @@ impl Document {
                 .authority
                 .span(new_start, new_end)
                 .map_err(|_| EditFailure::NewDocumentFormationFailed)?;
-            let new_entry = new_document
-                .entries()
-                .get(edit.entry_ordinal)
-                .ok_or(EditFailure::NewDocumentFormationFailed)?;
-            let new_owned = new_document.value_ownership(new_entry)?;
-            if new_owned != new_span
-                || new_entry.key() != self.entries()[edit.entry_ordinal].key()
-                || new_entry.section() != new_document.sections()[edit.section_ordinal].node_ref()
-            {
-                return Err(if edit.literal {
-                    EditFailure::InvalidLiteral
-                } else {
-                    EditFailure::NewDocumentFormationFailed
-                });
-            }
             source_edits.push(SourceEdit {
                 old_span: edit.old_span,
                 new_span,
                 replacement: Arc::from(edit.replacement.clone()),
             });
-            mappings.push(NodeMapping {
-                old: edit.target,
-                new: Some(new_entry.node_ref()),
-                status: NodeMappingStatus::Replaced,
-                reason: None,
-            });
+            for mapping in edit.mappings {
+                if !mapped_old.insert(mapping.old) {
+                    continue;
+                }
+                let (new, status, reason) = match mapping.plan {
+                    MappingPlan::ReplacedValue {
+                        ref expected_key,
+                        literal,
+                    } => {
+                        let new = new_document.entries().iter().find(|entry| {
+                            entry.key() == expected_key
+                                && new_document.value_ownership(entry) == Ok(new_span)
+                        });
+                        let Some(new) = new else {
+                            return Err(if literal {
+                                EditFailure::InvalidLiteral
+                            } else {
+                                EditFailure::NewDocumentFormationFailed
+                            });
+                        };
+                        (Some(new.node_ref()), NodeMappingStatus::Replaced, None)
+                    }
+                    MappingPlan::ReplacedSection { ref expected_name } => {
+                        let new = new_document.sections().iter().find(|section| {
+                            section.name() == expected_name && section.name_span() == new_span
+                        });
+                        let Some(new) = new else {
+                            return Err(EditFailure::NewDocumentFormationFailed);
+                        };
+                        (Some(new.node_ref()), NodeMappingStatus::Replaced, None)
+                    }
+                    MappingPlan::Deleted => (None, NodeMappingStatus::Deleted, None),
+                    MappingPlan::Unmapped(reason) => {
+                        (None, NodeMappingStatus::Unmapped, Some(reason.to_owned()))
+                    }
+                };
+                mappings.push(NodeMapping {
+                    old: mapping.old,
+                    new,
+                    status,
+                    reason,
+                });
+            }
             let replacement_len = isize::try_from(edit.replacement.len())
                 .map_err(|_| EditFailure::ResourceLimit("target-coordinate"))?;
             let old_len = isize::try_from(edit.old_span.len())
@@ -381,11 +481,6 @@ impl Document {
             .position(|entry| entry.node_ref() == target)
             .ok_or(EditFailure::WrongRole)?;
         let entry = &self.entries()[entry_ordinal];
-        let section_ordinal = self
-            .sections()
-            .iter()
-            .position(|section| section.node_ref() == entry.section())
-            .ok_or(EditFailure::NewDocumentFormationFailed)?;
         let old_span = self.value_ownership(entry)?;
         let (replacement, literal) = match operation {
             ValueReplacement::Literal { literal, .. } => {
@@ -402,11 +497,299 @@ impl Document {
         Ok(PreparedEdit {
             old_span,
             replacement,
-            target,
-            entry_ordinal,
-            section_ordinal,
-            literal,
+            mappings: vec![PlannedMapping {
+                old: target,
+                plan: MappingPlan::ReplacedValue {
+                    expected_key: entry.key().to_owned(),
+                    literal,
+                },
+            }],
+            mergeable_deletion: false,
         })
+    }
+
+    fn prepare_operation(
+        &self,
+        operation: &EditOperation,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) -> Result<Vec<PreparedEdit>, EditFailure> {
+        match operation {
+            EditOperation::ReplaceValue(replacement) => {
+                Ok(vec![self.prepare_value(replacement, diagnostics)?])
+            }
+            EditOperation::InsertSection {
+                document,
+                name,
+                placement,
+            } => Ok(vec![
+                self.prepare_insert_section(*document, name, *placement)?,
+            ]),
+            EditOperation::RemoveSection { target } => self.prepare_remove_section(*target),
+            EditOperation::RenameSection { target, name } => {
+                Ok(vec![self.prepare_rename_section(*target, name)?])
+            }
+        }
+    }
+
+    fn prepare_insert_section(
+        &self,
+        document: NodeRef,
+        name: &str,
+        placement: AssociationPlacement,
+    ) -> Result<PreparedEdit, EditFailure> {
+        self.resolve_document(document)?;
+        self.validate_section_name(name)?;
+        self.validate_section_collision(name, None)?;
+        let position = match placement {
+            AssociationPlacement::Start => self.section_line_start(&self.sections()[0])?,
+            AssociationPlacement::End => self.source().len(),
+            AssociationPlacement::Before(anchor) => {
+                self.section_line_start(self.resolve_section(anchor)?)?
+            }
+            AssociationPlacement::After(anchor) => {
+                self.resolve_section(anchor)?;
+                let ordinal = self
+                    .sections()
+                    .iter()
+                    .position(|section| section.node_ref() == anchor)
+                    .ok_or(EditFailure::TargetNotFound)?;
+                self.sections().get(ordinal + 1).map_or_else(
+                    || Ok(self.source().len()),
+                    |section| self.section_line_start(section),
+                )?
+            }
+        };
+        let mut text = String::new();
+        if position == self.source().len()
+            && !self
+                .source()
+                .decoded_text()
+                .is_some_and(|source| source.ends_with(['\n', '\r']))
+        {
+            text.push_str(profile_newline(self.profile));
+        }
+        text.push('[');
+        text.push_str(name);
+        text.push(']');
+        text.push_str(profile_newline(self.profile));
+        Ok(PreparedEdit {
+            old_span: self
+                .authority
+                .span(position, position)
+                .map_err(|_| EditFailure::TargetNotFound)?,
+            replacement: self.encode_value(&text)?,
+            mappings: vec![PlannedMapping {
+                old: document,
+                plan: MappingPlan::Unmapped("document-reparsed-after-section-insertion"),
+            }],
+            mergeable_deletion: false,
+        })
+    }
+
+    fn prepare_remove_section(&self, target: NodeRef) -> Result<Vec<PreparedEdit>, EditFailure> {
+        let section = self.resolve_section(target)?;
+        let header = self.logical_physical_spans(section.logical_line())?;
+        let entry_count = self
+            .entries()
+            .iter()
+            .filter(|entry| entry.section() == target)
+            .count();
+        let mut edits = Vec::new();
+        edits
+            .try_reserve_exact(header.len().saturating_add(entry_count))
+            .map_err(|_| EditFailure::ResourceLimit("prepared-edits"))?;
+        for (index, span) in header.into_iter().enumerate() {
+            edits.push(deletion_edit(span, (index == 0).then_some(target)));
+        }
+        for entry in self
+            .entries()
+            .iter()
+            .filter(|entry| entry.section() == target)
+        {
+            for (index, span) in self
+                .logical_physical_spans(entry.logical_line())?
+                .into_iter()
+                .enumerate()
+            {
+                edits.push(deletion_edit(
+                    span,
+                    (index == 0).then_some(entry.node_ref()),
+                ));
+            }
+        }
+        Ok(edits)
+    }
+
+    fn prepare_rename_section(
+        &self,
+        target: NodeRef,
+        name: &str,
+    ) -> Result<PreparedEdit, EditFailure> {
+        let section = self.resolve_section(target)?;
+        self.validate_section_name(name)?;
+        self.validate_section_collision(name, Some(target))?;
+        Ok(PreparedEdit {
+            old_span: section.name_span(),
+            replacement: self.encode_value(name)?,
+            mappings: vec![PlannedMapping {
+                old: target,
+                plan: MappingPlan::ReplacedSection {
+                    expected_name: name.to_owned(),
+                },
+            }],
+            mergeable_deletion: false,
+        })
+    }
+
+    fn validate_dependencies(&self, transaction: &EditTransaction) -> Result<(), EditFailure> {
+        let removed: HashSet<_> = transaction
+            .operations()
+            .iter()
+            .filter_map(|operation| match operation {
+                EditOperation::RemoveSection { target } => Some(*target),
+                _ => None,
+            })
+            .collect();
+        for operation in transaction.operations() {
+            match operation {
+                EditOperation::InsertSection {
+                    placement:
+                        AssociationPlacement::Before(anchor) | AssociationPlacement::After(anchor),
+                    ..
+                } if removed.contains(anchor) => return Err(EditFailure::PlacementAnchorRemoved),
+                EditOperation::ReplaceValue(replacement)
+                    if self
+                        .entry(replacement.target())
+                        .is_ok_and(|entry| removed.contains(&entry.section())) =>
+                {
+                    return Err(EditFailure::AncestorDescendantConflict);
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn resolve_document(&self, target: NodeRef) -> Result<(), EditFailure> {
+        if target.snapshot() != self.snapshot_identity() {
+            return Err(EditFailure::WrongSnapshot);
+        }
+        if target.role() != NodeRole::IniDocument {
+            return Err(EditFailure::WrongRole);
+        }
+        (target == self.node_ref())
+            .then_some(())
+            .ok_or(EditFailure::TargetNotFound)
+    }
+
+    fn resolve_section(&self, target: NodeRef) -> Result<&crate::IniSection, EditFailure> {
+        if target.snapshot() != self.snapshot_identity() {
+            return Err(EditFailure::WrongSnapshot);
+        }
+        if !matches!(
+            target.role(),
+            NodeRole::IniSection | NodeRole::IniDefaultSection
+        ) {
+            return Err(EditFailure::WrongRole);
+        }
+        self.sections()
+            .iter()
+            .find(|section| section.node_ref() == target)
+            .ok_or(EditFailure::TargetNotFound)
+    }
+
+    fn validate_section_name(&self, name: &str) -> Result<(), EditFailure> {
+        let valid = match self.profile {
+            IniProfile::PortableV1 => {
+                !name.is_empty()
+                    && name.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+                    })
+            }
+            IniProfile::WindowsV1 => {
+                !name.is_empty()
+                    && name.bytes().all(|byte| {
+                        (byte.is_ascii_graphic() || byte == b' ')
+                            && !matches!(byte, b'[' | b']' | b'=' | b'\0' | b'\r' | b'\n')
+                    })
+            }
+            IniProfile::PythonConfigParserV1 => {
+                !name.is_empty() && !name.contains(['\0', '\r', '\n'])
+            }
+        };
+        valid.then_some(()).ok_or(EditFailure::InvalidName)
+    }
+
+    fn validate_section_collision(
+        &self,
+        name: &str,
+        except: Option<NodeRef>,
+    ) -> Result<(), EditFailure> {
+        if self.profile != IniProfile::WindowsV1
+            && self
+                .sections()
+                .iter()
+                .any(|section| Some(section.node_ref()) != except && section.name() == name)
+        {
+            Err(EditFailure::NameCollision)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn section_line_start(&self, section: &crate::IniSection) -> Result<usize, EditFailure> {
+        self.logical_line(section.logical_line())
+            .ok()
+            .and_then(|logical| logical.physical_lines().first().copied())
+            .and_then(|line| self.physical_line(line).ok())
+            .map(|line| line.span().start_byte())
+            .ok_or(EditFailure::TargetNotFound)
+    }
+
+    fn logical_physical_spans(&self, logical: NodeRef) -> Result<Vec<Span>, EditFailure> {
+        let logical = self
+            .logical_line(logical)
+            .map_err(|_| EditFailure::TargetNotFound)?;
+        let mut spans = Vec::new();
+        spans
+            .try_reserve_exact(logical.physical_lines().len())
+            .map_err(|_| EditFailure::ResourceLimit("prepared-edits"))?;
+        for line in logical.physical_lines() {
+            spans.push(
+                self.physical_line(*line)
+                    .map_err(|_| EditFailure::TargetNotFound)?
+                    .span(),
+            );
+        }
+        Ok(spans)
+    }
+
+    fn coalesce_adjacent_deletions(
+        &self,
+        edits: Vec<PreparedEdit>,
+    ) -> Result<Vec<PreparedEdit>, EditFailure> {
+        let mut merged: Vec<PreparedEdit> = Vec::new();
+        merged
+            .try_reserve_exact(edits.len())
+            .map_err(|_| EditFailure::ResourceLimit("prepared-edits"))?;
+        for edit in edits {
+            let merge = merged.last().is_some_and(|previous| {
+                previous.mergeable_deletion
+                    && edit.mergeable_deletion
+                    && previous.old_span.end_byte() == edit.old_span.start_byte()
+            });
+            if merge {
+                let previous = merged.last_mut().expect("merge requires previous edit");
+                previous.old_span = self
+                    .authority
+                    .span(previous.old_span.start_byte(), edit.old_span.end_byte())
+                    .map_err(|_| EditFailure::NewDocumentFormationFailed)?;
+                previous.mappings.extend(edit.mappings);
+            } else {
+                merged.push(edit);
+            }
+        }
+        Ok(merged)
     }
 
     fn semantic_value(
@@ -699,6 +1082,38 @@ fn validate_semantic_value(profile: IniProfile, value: &str) -> Result<(), EditF
     valid.then_some(()).ok_or(EditFailure::UnrepresentableValue)
 }
 
+const fn destructive_target(operation: &EditOperation) -> Option<NodeRef> {
+    match operation {
+        EditOperation::ReplaceValue(replacement) => Some(replacement.target()),
+        EditOperation::RemoveSection { target } | EditOperation::RenameSection { target, .. } => {
+            Some(*target)
+        }
+        EditOperation::InsertSection { .. } => None,
+    }
+}
+
+fn deletion_edit(span: Span, target: Option<NodeRef>) -> PreparedEdit {
+    PreparedEdit {
+        old_span: span,
+        replacement: Vec::new(),
+        mappings: target
+            .map(|old| PlannedMapping {
+                old,
+                plan: MappingPlan::Deleted,
+            })
+            .into_iter()
+            .collect(),
+        mergeable_deletion: true,
+    }
+}
+
+const fn profile_newline(profile: IniProfile) -> &'static str {
+    match profile {
+        IniProfile::WindowsV1 => "\r\n",
+        IniProfile::PortableV1 | IniProfile::PythonConfigParserV1 => "\n",
+    }
+}
+
 fn original_encoding_selection(document: &Document) -> IniEncodingSelection {
     document.source().encoding_facts().caller_override().map_or(
         IniEncodingSelection::ProfileDefault,
@@ -746,6 +1161,9 @@ fn operation_metadata(transaction: &EditTransaction) -> BTreeMap<String, String>
                 EditOperation::ReplaceValue(ValueReplacement::Literal { .. }) => {
                     "ini.edit.replace-literal-value@1"
                 }
+                EditOperation::InsertSection { .. } => "ini.edit.insert-section@1",
+                EditOperation::RemoveSection { .. } => "ini.edit.remove-section@1",
+                EditOperation::RenameSection { .. } => "ini.edit.rename-section@1",
             };
             (format!("operation.{index}"), id.to_owned())
         })
@@ -779,6 +1197,23 @@ fn operation_summaries(
                     "ini.edit.replace-literal-value",
                     BTreeMap::from([("literal_bytes".to_owned(), literal.len().to_string())]),
                 ),
+                EditOperation::InsertSection {
+                    name, placement, ..
+                } => (
+                    "ini.edit.insert-section",
+                    BTreeMap::from([
+                        ("name_scalars".to_owned(), name.chars().count().to_string()),
+                        (
+                            "placement".to_owned(),
+                            placement_name(*placement).to_owned(),
+                        ),
+                    ]),
+                ),
+                EditOperation::RemoveSection { .. } => ("ini.edit.remove-section", BTreeMap::new()),
+                EditOperation::RenameSection { name, .. } => (
+                    "ini.edit.rename-section",
+                    BTreeMap::from([("name_scalars".to_owned(), name.chars().count().to_string())]),
+                ),
             };
             EditOperationSummary::new(FormatOperationId::new(id, 1), arguments)
                 .map_err(|_| EditFailure::NewDocumentFormationFailed)
@@ -795,6 +1230,15 @@ const fn policy_name(policy: RepresentationPolicy) -> &'static str {
     }
 }
 
+const fn placement_name(placement: AssociationPlacement) -> &'static str {
+    match placement {
+        AssociationPlacement::Start => "start",
+        AssociationPlacement::End => "end",
+        AssociationPlacement::Before(_) => "before",
+        AssociationPlacement::After(_) => "after",
+    }
+}
+
 impl consema_core::StableFailure for EditFailure {
     fn operation_kind(&self) -> consema_core::OperationKind {
         consema_core::OperationKind::Edit
@@ -803,13 +1247,18 @@ impl consema_core::StableFailure for EditFailure {
     fn failure_kind(&self) -> consema_core::FailureKind {
         match self {
             Self::WrongSnapshot => consema_core::FailureKind::TargetMismatch,
-            Self::WrongRole | Self::DuplicateTarget | Self::OverlappingOwnership => {
-                consema_core::FailureKind::InvalidInput
-            }
+            Self::WrongRole
+            | Self::DuplicateTarget
+            | Self::OverlappingOwnership
+            | Self::AncestorDescendantConflict
+            | Self::PlacementAnchorRemoved
+            | Self::InvalidName
+            | Self::NameCollision => consema_core::FailureKind::InvalidInput,
             Self::RecoveredDocument
             | Self::RepresentationIncompatible
             | Self::ExactLiteralRequiresLiteralOperation
-            | Self::InvalidLiteral => consema_core::FailureKind::NotApplicable,
+            | Self::InvalidLiteral
+            | Self::TargetNotFound => consema_core::FailureKind::NotApplicable,
             Self::UnrepresentableValue | Self::EncodingUnrepresentable => {
                 consema_core::FailureKind::Unsupported
             }
@@ -823,7 +1272,13 @@ impl consema_core::StableFailure for EditFailure {
             Self::RecoveredDocument => "ini.edit.recovered-document@1",
             Self::WrongSnapshot => "core.edit.wrong-snapshot@1",
             Self::WrongRole => "core.edit.wrong-role@1",
-            Self::DuplicateTarget | Self::OverlappingOwnership => "core.edit.conflicting-edits@1",
+            Self::DuplicateTarget
+            | Self::OverlappingOwnership
+            | Self::AncestorDescendantConflict
+            | Self::PlacementAnchorRemoved => "core.edit.conflicting-edits@1",
+            Self::TargetNotFound => "core.edit.target-not-found@1",
+            Self::InvalidName => "ini.edit.invalid-name@1",
+            Self::NameCollision => "ini.edit.name-collision@1",
             Self::RepresentationIncompatible => "core.edit.representation-incompatible@1",
             Self::ExactLiteralRequiresLiteralOperation => {
                 "core.edit.exact-literal-requires-literal@1"
@@ -840,10 +1295,20 @@ impl consema_core::StableFailure for EditFailure {
 struct PreparedEdit {
     old_span: Span,
     replacement: Vec<u8>,
-    target: NodeRef,
-    entry_ordinal: usize,
-    section_ordinal: usize,
-    literal: bool,
+    mappings: Vec<PlannedMapping>,
+    mergeable_deletion: bool,
+}
+
+struct PlannedMapping {
+    old: NodeRef,
+    plan: MappingPlan,
+}
+
+enum MappingPlan {
+    ReplacedValue { expected_key: String, literal: bool },
+    ReplacedSection { expected_name: String },
+    Deleted,
+    Unmapped(&'static str),
 }
 
 #[cfg(test)]
@@ -1051,6 +1516,16 @@ mod tests {
             document.source().encoding_facts()
         );
 
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.insert_section(document.node_ref(), "Next", AssociationPlacement::End);
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.sections().len(), 2);
+        assert_eq!(commit.document.sections()[1].name(), "Next");
+        assert_eq!(
+            commit.document.source().encoding_facts(),
+            document.source().encoding_facts()
+        );
+
         let code_page = WindowsCodePage::from_number(1252).unwrap();
         let document = parse(
             b"[S]\r\nk=old\r\n".as_slice(),
@@ -1068,5 +1543,153 @@ mod tests {
         let commit = document.commit(&builder.build()).unwrap();
         assert_eq!(commit.document.entries()[0].value(), "\u{20ac}");
         assert!(commit.document.render().contains(&0x80));
+    }
+
+    #[test]
+    fn section_insert_rename_and_remove_have_exact_ownership() {
+        let source = "[one]\na=1\n; independent\n[two]\nb=2\n";
+        let document = parsed(IniProfile::PortableV1, source);
+
+        let mut insert = EditTransactionBuilder::new(&document);
+        insert.insert_section(
+            document.node_ref(),
+            "middle",
+            AssociationPlacement::After(document.sections()[0].node_ref()),
+        );
+        let commit = document.commit(&insert.build()).unwrap();
+        assert_eq!(
+            commit.document.render(),
+            b"[one]\na=1\n; independent\n[middle]\n[two]\nb=2\n"
+        );
+        assert_eq!(commit.document.sections()[1].name(), "middle");
+
+        let mut rename = EditTransactionBuilder::new(&document);
+        rename.rename_section(document.sections()[1].node_ref(), "renamed");
+        let commit = document.commit(&rename.build()).unwrap();
+        assert_eq!(
+            commit.document.render(),
+            b"[one]\na=1\n; independent\n[renamed]\nb=2\n"
+        );
+        assert_eq!(
+            commit.change_set.node_mappings()[0].status,
+            NodeMappingStatus::Replaced
+        );
+
+        let mut remove = EditTransactionBuilder::new(&document);
+        remove.remove_section(document.sections()[0].node_ref());
+        let commit = document.commit(&remove.build()).unwrap();
+        assert_eq!(commit.document.render(), b"; independent\n[two]\nb=2\n");
+        assert_eq!(commit.change_set.node_mappings().len(), 2);
+        assert!(
+            commit
+                .change_set
+                .node_mappings()
+                .iter()
+                .all(|mapping| mapping.status == NodeMappingStatus::Deleted)
+        );
+        commit
+            .untouched_proof
+            .verify(
+                document.source(),
+                commit.document.source(),
+                commit.source_patch.replacements(),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn section_removal_owns_python_continuations_but_not_comments() {
+        let document = parsed(
+            IniProfile::PythonConfigParserV1,
+            "[one]\nk=first\n  second\n\n  fourth\n# keep\n[two]\nx=y\n",
+        );
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.remove_section(document.sections()[0].node_ref());
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.render(), b"# keep\n[two]\nx=y\n");
+        assert_eq!(commit.document.entries().len(), 1);
+    }
+
+    #[test]
+    fn appending_after_an_eof_entry_introduces_one_profile_newline() {
+        let document = parsed(IniProfile::PortableV1, "[one]\na=1");
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder.insert_section(document.node_ref(), "two", AssociationPlacement::End);
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.render(), b"[one]\na=1\n[two]\n");
+    }
+
+    #[test]
+    fn multiple_section_insertions_map_the_old_document_once() {
+        let document = parsed(IniProfile::PortableV1, "[one]\na=1\n");
+        let mut builder = EditTransactionBuilder::new(&document);
+        builder
+            .insert_section(document.node_ref(), "zero", AssociationPlacement::Start)
+            .insert_section(document.node_ref(), "last", AssociationPlacement::End);
+        let commit = document.commit(&builder.build()).unwrap();
+        assert_eq!(commit.document.render(), b"[zero]\n[one]\na=1\n[last]\n");
+        assert_eq!(commit.change_set.node_mappings().len(), 1);
+        assert_eq!(
+            commit.change_set.node_mappings()[0].status,
+            NodeMappingStatus::Unmapped
+        );
+    }
+
+    #[test]
+    fn section_dependencies_names_and_collisions_fail_atomically() {
+        let document = parsed(IniProfile::PortableV1, "[one]\na=1\n[two]\nb=2\n");
+        let first = document.sections()[0].node_ref();
+        let mut conflict = EditTransactionBuilder::new(&document);
+        conflict.remove_section(first).semantic_value(
+            document.entries()[0].node_ref(),
+            "new",
+            RepresentationPolicy::CanonicalForProfile,
+        );
+        assert!(matches!(
+            document.commit(&conflict.build()),
+            Err(EditFailure::AncestorDescendantConflict)
+        ));
+
+        let mut removed_anchor = EditTransactionBuilder::new(&document);
+        removed_anchor.remove_section(first).insert_section(
+            document.node_ref(),
+            "three",
+            AssociationPlacement::After(first),
+        );
+        assert!(matches!(
+            document.commit(&removed_anchor.build()),
+            Err(EditFailure::PlacementAnchorRemoved)
+        ));
+
+        let mut invalid = EditTransactionBuilder::new(&document);
+        invalid.rename_section(first, "bad name");
+        assert!(matches!(
+            document.commit(&invalid.build()),
+            Err(EditFailure::InvalidName)
+        ));
+
+        let mut collision = EditTransactionBuilder::new(&document);
+        collision.rename_section(first, "two");
+        assert!(matches!(
+            document.commit(&collision.build()),
+            Err(EditFailure::NameCollision)
+        ));
+
+        let mut same_position = EditTransactionBuilder::new(&document);
+        same_position
+            .insert_section(document.node_ref(), "three", AssociationPlacement::End)
+            .insert_section(document.node_ref(), "four", AssociationPlacement::End);
+        assert!(matches!(
+            document.commit(&same_position.build()),
+            Err(EditFailure::OverlappingOwnership)
+        ));
+
+        let only = parsed(IniProfile::PortableV1, "[only]\nk=v\n");
+        let mut remove_only = EditTransactionBuilder::new(&only);
+        remove_only.remove_section(only.sections()[0].node_ref());
+        assert!(matches!(
+            only.commit(&remove_only.build()),
+            Err(EditFailure::NewDocumentFormationFailed)
+        ));
     }
 }
