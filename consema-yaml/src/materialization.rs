@@ -3,18 +3,31 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display, Formatter, Write as _};
 
-use consema_core::{FailureKind, OperationKind, StableFailure};
-use consema_document::{
-    MaterializationFailure, MaterializationFidelity, MaterializationLimits, MaterializationReport,
-    MaterializationRequest, MaterializedOrigin, NewlinePolicy, ParseLimits, SourceEncoding,
+use consema_core::{
+    AssociationLocation, AssociationRole, Diagnostic, DiagnosticCategory, DiagnosticSeverity,
+    EntryMappingBuilder, FailureKind, ObjectBuilder, OperationKind, PortableValue,
+    PortableValueKind, SequenceBuilder, StableFailure, ValuePath, ValuePathSegment,
 };
-use consema_graph::{GraphNodeId, GraphNodeKind, PortableGraph};
+use consema_document::{
+    CompleteMaterialization, FailedMaterializationAttempt, MappingPolicy, MaterializationFailure,
+    MaterializationFidelity, MaterializationInputLocation, MaterializationLimits,
+    MaterializationProvenanceEntry, MaterializationProvenanceMap, MaterializationRelation,
+    MaterializationReport, MaterializationRequest, MaterializationResult, MaterializedOrigin,
+    NewlinePolicy, ParseLimits, SourceEncoding,
+};
+use consema_graph::{
+    GraphBuildError, GraphBuilder, GraphLimits, GraphMappingEntry, GraphNodeId, GraphNodeKind,
+    PortableGraph,
+};
 
 use crate::native::{
     TAG_BINARY, TAG_BOOL, TAG_FLOAT, TAG_INT, TAG_MAP, TAG_MERGE, TAG_NULL, TAG_OMAP, TAG_PAIRS,
     TAG_SEQ, TAG_SET, TAG_STR, TAG_TIMESTAMP, TAG_VALUE, TAG_YAML,
 };
-use crate::{Document, YamlNode, YamlNodeKind, YamlProfile, parse};
+use crate::{
+    Document, Fidelity, ValueProjectionRequest, ValueProjectionResult, YamlNode, YamlNodeKind,
+    YamlProfile, parse,
+};
 
 /// A PortableGraph location consumed by YAML materialization.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -476,7 +489,10 @@ impl<'a> GraphWriter<'a> {
         match node.kind() {
             GraphNodeKind::Scalar => {
                 self.output.push_char(' ')?;
-                self.write_quoted(node.scalar_content().expect("kind agrees"))
+                self.write_quoted(&scalar_presentation(
+                    node.tag(),
+                    node.scalar_content().expect("kind agrees"),
+                ))
             }
             GraphNodeKind::Sequence => {
                 self.output.push_str(" [")?;
@@ -541,7 +557,10 @@ impl<'a> GraphWriter<'a> {
             match node.kind() {
                 GraphNodeKind::Scalar => {
                     self.output.push_char(' ')?;
-                    self.write_quoted(node.scalar_content().expect("kind agrees"))
+                    self.write_quoted(&scalar_presentation(
+                        node.tag(),
+                        node.scalar_content().expect("kind agrees"),
+                    ))
                 }
                 GraphNodeKind::Sequence => self.output.push_str(" []"),
                 GraphNodeKind::Mapping => self.output.push_str(" {}"),
@@ -688,6 +707,17 @@ impl<'a> GraphWriter<'a> {
             self.output.push_char(' ')?;
         }
         Ok(())
+    }
+}
+
+fn scalar_presentation(tag: &str, canonical: &str) -> String {
+    if tag == TAG_FLOAT
+        && !matches!(canonical, ".inf" | "-.inf" | ".nan")
+        && !canonical.contains(['.', 'e', 'E'])
+    {
+        format!("{canonical}e0")
+    } else {
+        canonical.to_owned()
     }
 }
 
@@ -1013,6 +1043,778 @@ impl GraphProvenanceBuilder<'_> {
     }
 }
 
+/// Materializes one complete PortableValue into a canonical YAML document.
+///
+/// Exact local Object/EntryMapping reconstruction is verified through the
+/// frozen best-exact YAML projection. A unique-string EntryMapping therefore
+/// requires the explicit `UniqueStringEntriesToObject` transformation policy.
+#[must_use]
+pub fn materialize_value(
+    value: &PortableValue,
+    request: &MaterializationRequest,
+) -> MaterializationResult<Document> {
+    let mut attempt = ValueAttempt::default();
+    match materialize_value_complete(value, request, &mut attempt) {
+        Ok(complete) => MaterializationResult::Complete(complete),
+        Err(failure) => MaterializationResult::Failed(FailedMaterializationAttempt {
+            failure,
+            report: MaterializationReport::new(attempt.events, request.limits())
+                .unwrap_or_default(),
+            analyzed_input_paths: attempt.analyzed,
+        }),
+    }
+}
+
+#[derive(Default)]
+struct ValueAttempt {
+    analyzed: Vec<ValuePath>,
+    events: Vec<Diagnostic>,
+    input_nodes: usize,
+}
+
+fn materialize_value_complete(
+    value: &PortableValue,
+    request: &MaterializationRequest,
+    attempt: &mut ValueAttempt,
+) -> Result<CompleteMaterialization<Document>, MaterializationFailure> {
+    requested_profile(request)?;
+    requested_style(request)?;
+    requested_output_contract(request)?;
+    let prepared = prepare_value(value, &ValuePath::root(), 0, request, attempt)?;
+    let graph = value_graph(&prepared, request.limits())?;
+    let mut graph_limits = request.limits();
+    graph_limits.max_input_nodes = graph_limits
+        .max_input_nodes
+        .saturating_mul(2)
+        .saturating_add(1);
+    let graph_request = request.clone().with_limits(graph_limits);
+    let mut graph_analyzed = Vec::new();
+    let graph_complete = materialize_graph_complete(&graph, &graph_request, &mut graph_analyzed)
+        .map_err(|failure| match failure {
+            GraphMaterializationFailure::Materialization(failure) => failure,
+            GraphMaterializationFailure::UnsupportedTag { .. }
+            | GraphMaterializationFailure::TagKindMismatch { .. }
+            | GraphMaterializationFailure::CrossDocumentSharing { .. }
+            | GraphMaterializationFailure::RoundTripMismatch => {
+                MaterializationFailure::FormationFailed
+            }
+        })?;
+    let document = graph_complete.document;
+    let projected = match document.project_value(ValueProjectionRequest::best_exact_v1()) {
+        ValueProjectionResult::Complete(projected) => projected,
+        ValueProjectionResult::Failed(_) => return Err(MaterializationFailure::FormationFailed),
+    };
+    if projected.fidelity != Fidelity::Exact || projected.value != prepared {
+        return Err(MaterializationFailure::FormationFailed);
+    }
+    let mut provenance = ValueProvenanceBuilder::new(&document, request);
+    provenance.collect(
+        value,
+        &ValuePath::root(),
+        document.document(0).expect("one root").root(),
+    )?;
+    let provenance = MaterializationProvenanceMap::new(
+        provenance.entries,
+        document.snapshot_identity(),
+        request.limits(),
+    )?;
+    let report = MaterializationReport::new(attempt.events.clone(), request.limits())?;
+    Ok(CompleteMaterialization {
+        document,
+        fidelity: if report.events().is_empty() {
+            MaterializationFidelity::Exact
+        } else {
+            MaterializationFidelity::Transformed
+        },
+        report,
+        provenance,
+    })
+}
+
+fn prepare_value(
+    value: &PortableValue,
+    path: &ValuePath,
+    depth: usize,
+    request: &MaterializationRequest,
+    attempt: &mut ValueAttempt,
+) -> Result<PortableValue, MaterializationFailure> {
+    if depth > request.limits().max_depth {
+        return Err(MaterializationFailure::ResourceLimit("input-depth"));
+    }
+    attempt.input_nodes = attempt.input_nodes.saturating_add(1);
+    if attempt.input_nodes > request.limits().max_input_nodes {
+        return Err(MaterializationFailure::ResourceLimit("input-nodes"));
+    }
+    attempt
+        .analyzed
+        .try_reserve(1)
+        .map_err(|_| MaterializationFailure::ResourceLimit("analysis-allocation"))?;
+    attempt.analyzed.push(path.clone());
+    let child_depth = depth.saturating_add(1);
+    match value.kind() {
+        PortableValueKind::Null
+        | PortableValueKind::Boolean
+        | PortableValueKind::Integer
+        | PortableValueKind::Decimal
+        | PortableValueKind::String
+        | PortableValueKind::Bytes => Ok(value.clone()),
+        PortableValueKind::BinaryFloat64
+            if matches!(
+                value.as_binary_float64().expect("kind agrees").bits(),
+                0x7ff0_0000_0000_0000 | 0xfff0_0000_0000_0000 | 0x7ff8_0000_0000_0000
+            ) =>
+        {
+            Ok(value.clone())
+        }
+        PortableValueKind::Date => {
+            canonical_date(value.as_date().expect("kind agrees")).ok_or_else(|| {
+                MaterializationFailure::Unrepresentable {
+                    path: path.clone(),
+                    kind: value.kind(),
+                }
+            })?;
+            Ok(value.clone())
+        }
+        PortableValueKind::OffsetDateTime => {
+            canonical_offset_date_time(
+                value.as_offset_date_time().expect("kind agrees"),
+                request.limits().max_output_bytes,
+            )?
+            .ok_or_else(|| MaterializationFailure::Unrepresentable {
+                path: path.clone(),
+                kind: value.kind(),
+            })?;
+            Ok(value.clone())
+        }
+        PortableValueKind::Sequence => {
+            let mut output = SequenceBuilder::new();
+            for (index, child) in value.as_sequence().expect("kind agrees").iter().enumerate() {
+                let ordinal = u64::try_from(index)
+                    .map_err(|_| MaterializationFailure::ResourceLimit("input-nodes"))?;
+                output.push(prepare_value(
+                    child,
+                    &path.child(ValuePathSegment::SequenceElement(ordinal)),
+                    child_depth,
+                    request,
+                    attempt,
+                )?);
+            }
+            Ok(output.build())
+        }
+        PortableValueKind::Object => {
+            let mut output = ObjectBuilder::new();
+            for entry in value.as_object().expect("kind agrees") {
+                output
+                    .insert(
+                        entry.key(),
+                        prepare_value(
+                            entry.value(),
+                            &path.child(ValuePathSegment::ObjectValue(entry.key().to_owned())),
+                            child_depth,
+                            request,
+                            attempt,
+                        )?,
+                    )
+                    .map_err(|_| MaterializationFailure::FormationFailed)?;
+            }
+            Ok(output.build())
+        }
+        PortableValueKind::EntryMapping => prepare_mapping(
+            value.as_entry_mapping().expect("kind agrees"),
+            path,
+            child_depth,
+            request,
+            attempt,
+        ),
+        kind => Err(MaterializationFailure::Unrepresentable {
+            path: path.clone(),
+            kind,
+        }),
+    }
+}
+
+fn prepare_mapping(
+    entries: &[consema_core::EntryMappingEntry],
+    path: &ValuePath,
+    child_depth: usize,
+    request: &MaterializationRequest,
+    attempt: &mut ValueAttempt,
+) -> Result<PortableValue, MaterializationFailure> {
+    let mut names = HashSet::new();
+    names
+        .try_reserve(entries.len())
+        .map_err(|_| MaterializationFailure::ResourceLimit("mapping-key-allocation"))?;
+    let object = entries.iter().all(|entry| {
+        entry
+            .key()
+            .as_string()
+            .is_some_and(|name| names.insert(name.to_owned()))
+    });
+    if object {
+        if request.mapping_policy() != MappingPolicy::UniqueStringEntriesToObject {
+            return Err(MaterializationFailure::Unrepresentable {
+                path: path.clone(),
+                kind: PortableValueKind::EntryMapping,
+            });
+        }
+        let observed = attempt.events.len().saturating_add(1);
+        if observed > request.limits().max_report_entries {
+            return Err(MaterializationFailure::ResourceLimit("report-entries"));
+        }
+        let mut event = Diagnostic::new(
+            "core.materialization.mapping-transformed@1",
+            DiagnosticCategory::Materialization,
+            DiagnosticSeverity::Info,
+            None,
+            u64::try_from(attempt.events.len())
+                .map_err(|_| MaterializationFailure::ResourceLimit("report-entries"))?,
+        );
+        event
+            .arguments
+            .insert("from".to_owned(), "EntryMapping".to_owned());
+        event.arguments.insert(
+            "policy".to_owned(),
+            "UniqueStringEntriesToObject".to_owned(),
+        );
+        event.arguments.insert("to".to_owned(), "Object".to_owned());
+        event
+            .arguments
+            .insert("path".to_owned(), format!("{path:?}"));
+        attempt.events.push(event);
+    }
+    let mut prepared = Vec::new();
+    prepared
+        .try_reserve(entries.len())
+        .map_err(|_| MaterializationFailure::ResourceLimit("mapping-allocation"))?;
+    for (index, entry) in entries.iter().enumerate() {
+        let ordinal = u64::try_from(index)
+            .map_err(|_| MaterializationFailure::ResourceLimit("input-nodes"))?;
+        let key = prepare_value(
+            entry.key(),
+            &path.child(ValuePathSegment::EntryKey(ordinal)),
+            child_depth,
+            request,
+            attempt,
+        )?;
+        let value = prepare_value(
+            entry.value(),
+            &path.child(ValuePathSegment::EntryValue(ordinal)),
+            child_depth,
+            request,
+            attempt,
+        )?;
+        prepared.push((key, value));
+    }
+    if object {
+        let mut output = ObjectBuilder::new();
+        for (key, value) in prepared {
+            output
+                .insert(key.as_string().expect("object eligibility checked"), value)
+                .map_err(|_| MaterializationFailure::FormationFailed)?;
+        }
+        Ok(output.build())
+    } else {
+        let mut output = EntryMappingBuilder::new();
+        for (key, value) in prepared {
+            output.push(key, value);
+        }
+        Ok(output.build())
+    }
+}
+
+fn value_graph(
+    value: &PortableValue,
+    limits: MaterializationLimits,
+) -> Result<PortableGraph, MaterializationFailure> {
+    let max_nodes = limits.max_input_nodes.saturating_mul(2).saturating_add(1);
+    let mut builder = GraphBuilder::new(GraphLimits {
+        max_roots: 1,
+        max_nodes,
+        max_edges: max_nodes.saturating_mul(2),
+        max_container_entries: limits.max_input_nodes,
+        max_tag_bytes: 64,
+        max_scalar_bytes: limits.max_output_bytes,
+        max_traversal_depth: limits.max_depth,
+    });
+    let root = define_value_node(&mut builder, value, limits.max_output_bytes)?;
+    builder.push_root(root).map_err(graph_build_failure)?;
+    builder.build().map_err(graph_build_failure)
+}
+
+fn define_value_node(
+    builder: &mut GraphBuilder,
+    value: &PortableValue,
+    max_output_bytes: usize,
+) -> Result<GraphNodeId, MaterializationFailure> {
+    let id = builder.reserve_node().map_err(graph_build_failure)?;
+    match value.kind() {
+        PortableValueKind::Null => {
+            builder
+                .define_scalar(id, TAG_NULL, "")
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::Boolean => {
+            builder
+                .define_scalar(
+                    id,
+                    TAG_BOOL,
+                    if value.as_boolean().expect("kind agrees") {
+                        "true"
+                    } else {
+                        "false"
+                    },
+                )
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::Integer => {
+            builder
+                .define_scalar(
+                    id,
+                    TAG_INT,
+                    value.as_integer().expect("kind agrees").to_string(),
+                )
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::Decimal => {
+            let decimal = value.as_decimal().expect("kind agrees");
+            let canonical = if decimal.exponent().signum() == 0 {
+                decimal.coefficient().to_string()
+            } else {
+                format!("{}e{}", decimal.coefficient(), decimal.exponent())
+            };
+            builder
+                .define_scalar(id, TAG_FLOAT, canonical)
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::BinaryFloat64 => {
+            let canonical = match value.as_binary_float64().expect("kind agrees").bits() {
+                0x7ff0_0000_0000_0000 => ".inf",
+                0xfff0_0000_0000_0000 => "-.inf",
+                0x7ff8_0000_0000_0000 => ".nan",
+                _ => return Err(MaterializationFailure::FormationFailed),
+            };
+            builder
+                .define_scalar(id, TAG_FLOAT, canonical)
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::String => {
+            builder
+                .define_scalar(id, TAG_STR, value.as_string().expect("kind agrees"))
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::Bytes => {
+            builder
+                .define_scalar(
+                    id,
+                    TAG_BINARY,
+                    encode_base64(value.as_bytes().expect("kind agrees"), max_output_bytes)?,
+                )
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::Date => {
+            builder
+                .define_scalar(
+                    id,
+                    TAG_TIMESTAMP,
+                    canonical_date(value.as_date().expect("kind agrees"))
+                        .ok_or(MaterializationFailure::FormationFailed)?,
+                )
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::OffsetDateTime => {
+            builder
+                .define_scalar(
+                    id,
+                    TAG_TIMESTAMP,
+                    canonical_offset_date_time(
+                        value.as_offset_date_time().expect("kind agrees"),
+                        max_output_bytes,
+                    )?
+                    .ok_or(MaterializationFailure::FormationFailed)?,
+                )
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::Sequence => {
+            let mut children = Vec::new();
+            for child in value.as_sequence().expect("kind agrees") {
+                children.push(define_value_node(builder, child, max_output_bytes)?);
+            }
+            builder
+                .define_sequence(id, TAG_SEQ, children)
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::Object => {
+            let mut entries = Vec::new();
+            for entry in value.as_object().expect("kind agrees") {
+                let key = builder.reserve_node().map_err(graph_build_failure)?;
+                builder
+                    .define_scalar(key, TAG_STR, entry.key())
+                    .map_err(graph_build_failure)?;
+                let child = define_value_node(builder, entry.value(), max_output_bytes)?;
+                entries.push(GraphMappingEntry::new(key, child));
+            }
+            builder
+                .define_mapping(id, TAG_MAP, entries)
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::EntryMapping => {
+            let mut entries = Vec::new();
+            for entry in value.as_entry_mapping().expect("kind agrees") {
+                let key = define_value_node(builder, entry.key(), max_output_bytes)?;
+                let child = define_value_node(builder, entry.value(), max_output_bytes)?;
+                entries.push(GraphMappingEntry::new(key, child));
+            }
+            builder
+                .define_mapping(id, TAG_MAP, entries)
+                .map_err(graph_build_failure)?;
+        }
+        PortableValueKind::BinaryFloat32
+        | PortableValueKind::Time
+        | PortableValueKind::LocalDateTime => {
+            return Err(MaterializationFailure::FormationFailed);
+        }
+    }
+    Ok(id)
+}
+
+fn graph_build_failure(error: GraphBuildError) -> MaterializationFailure {
+    match error {
+        GraphBuildError::ResourceLimit { name, .. } => MaterializationFailure::ResourceLimit(name),
+        GraphBuildError::SizeOverflow => MaterializationFailure::ResourceLimit("graph-size"),
+        GraphBuildError::UnknownNode(_)
+        | GraphBuildError::WrongGraph
+        | GraphBuildError::DuplicateDefinition(_)
+        | GraphBuildError::UndefinedNode(_)
+        | GraphBuildError::UnreachableNode(_)
+        | GraphBuildError::InvalidTag => MaterializationFailure::FormationFailed,
+    }
+}
+
+fn canonical_date(value: &consema_core::Date) -> Option<String> {
+    let year = value.year().to_i64()?;
+    (0..=9999)
+        .contains(&year)
+        .then(|| format!("{year:04}-{:02}-{:02}", value.month(), value.day()))
+}
+
+fn canonical_offset_date_time(
+    value: &consema_core::OffsetDateTime,
+    max_output_bytes: usize,
+) -> Result<Option<String>, MaterializationFailure> {
+    let Some(date) = canonical_date(value.local().date()) else {
+        return Ok(None);
+    };
+    let time = value.local().time();
+    let fraction = canonical_fraction(time.fractional_second(), max_output_bytes)?;
+    let seconds = value.offset_seconds();
+    if seconds % 60 != 0 {
+        return Ok(None);
+    }
+    let zone = if seconds == 0 {
+        "Z".to_owned()
+    } else {
+        let sign = if seconds < 0 { '-' } else { '+' };
+        let absolute = seconds.unsigned_abs();
+        format!("{sign}{:02}:{:02}", absolute / 3600, (absolute % 3600) / 60)
+    };
+    let output = format!(
+        "{date}T{:02}:{:02}:{:02}{fraction}{zone}",
+        time.hour(),
+        time.minute(),
+        time.second()
+    );
+    if output.len() > max_output_bytes {
+        Err(MaterializationFailure::ResourceLimit("output-bytes"))
+    } else {
+        Ok(Some(output))
+    }
+}
+
+fn canonical_fraction(
+    value: &consema_core::Decimal,
+    max: usize,
+) -> Result<String, MaterializationFailure> {
+    if value.coefficient().signum() == 0 {
+        return Ok(String::new());
+    }
+    if value.coefficient().signum() < 0 {
+        return Err(MaterializationFailure::FormationFailed);
+    }
+    let Some(exponent) = value.exponent().to_i64() else {
+        return Err(MaterializationFailure::ResourceLimit("output-bytes"));
+    };
+    let places = usize::try_from(
+        exponent
+            .checked_neg()
+            .ok_or(MaterializationFailure::ResourceLimit("output-bytes"))?,
+    )
+    .map_err(|_| MaterializationFailure::FormationFailed)?;
+    let digits = value.coefficient().to_string();
+    if exponent >= 0 || digits.len() > places {
+        return Err(MaterializationFailure::FormationFailed);
+    }
+    if places.saturating_add(1) > max {
+        return Err(MaterializationFailure::ResourceLimit("output-bytes"));
+    }
+    Ok(format!(".{}{digits}", "0".repeat(places - digits.len())))
+}
+
+fn encode_base64(value: &[u8], max: usize) -> Result<String, MaterializationFailure> {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let length = value
+        .len()
+        .checked_add(2)
+        .and_then(|length| length.checked_div(3))
+        .and_then(|length| length.checked_mul(4))
+        .ok_or(MaterializationFailure::ResourceLimit("output-bytes"))?;
+    if length > max {
+        return Err(MaterializationFailure::ResourceLimit("output-bytes"));
+    }
+    let mut output = String::new();
+    output
+        .try_reserve(length)
+        .map_err(|_| MaterializationFailure::ResourceLimit("output-allocation"))?;
+    for chunk in value.chunks(3) {
+        let first = chunk[0];
+        let second = chunk.get(1).copied().unwrap_or(0);
+        let third = chunk.get(2).copied().unwrap_or(0);
+        output.push(char::from(ALPHABET[usize::from(first >> 2)]));
+        output.push(char::from(
+            ALPHABET[usize::from(((first & 0x03) << 4) | (second >> 4))],
+        ));
+        output.push(if chunk.len() > 1 {
+            char::from(ALPHABET[usize::from(((second & 0x0f) << 2) | (third >> 6))])
+        } else {
+            '='
+        });
+        output.push(if chunk.len() > 2 {
+            char::from(ALPHABET[usize::from(third & 0x3f)])
+        } else {
+            '='
+        });
+    }
+    Ok(output)
+}
+
+struct ValueProvenanceBuilder<'a> {
+    document: &'a Document,
+    request: &'a MaterializationRequest,
+    units: usize,
+    entries: Vec<MaterializationProvenanceEntry>,
+}
+
+impl<'a> ValueProvenanceBuilder<'a> {
+    const fn new(document: &'a Document, request: &'a MaterializationRequest) -> Self {
+        Self {
+            document,
+            request,
+            units: 0,
+            entries: Vec::new(),
+        }
+    }
+
+    fn collect(
+        &mut self,
+        input: &PortableValue,
+        path: &ValuePath,
+        output: YamlNode<'_>,
+    ) -> Result<(), MaterializationFailure> {
+        let transformed = input
+            .as_entry_mapping()
+            .is_some_and(mapping_has_unique_string_keys);
+        self.push(
+            MaterializationInputLocation::Value(path.clone()),
+            self.origin(
+                output.node_ref(),
+                output.span(),
+                if transformed {
+                    MaterializationRelation::Reencoded
+                } else {
+                    MaterializationRelation::Direct
+                },
+            ),
+        )?;
+        match input.kind() {
+            PortableValueKind::Sequence => {
+                let values = input.as_sequence().expect("kind agrees");
+                if output.sequence_len() != Some(values.len()) {
+                    return Err(MaterializationFailure::FormationFailed);
+                }
+                for (index, value) in values.iter().enumerate() {
+                    let ordinal = u64::try_from(index)
+                        .map_err(|_| MaterializationFailure::ResourceLimit("provenance-entries"))?;
+                    let item = output
+                        .sequence_item(index)
+                        .ok_or(MaterializationFailure::FormationFailed)?;
+                    let child_path = path.child(ValuePathSegment::SequenceElement(ordinal));
+                    self.collect(value, &child_path, item.node())?;
+                    self.add(
+                        MaterializationInputLocation::Value(child_path),
+                        self.origin(
+                            item.node_ref(),
+                            item.span(),
+                            MaterializationRelation::Generated,
+                        ),
+                    )?;
+                }
+            }
+            PortableValueKind::Object => {
+                let values = input.as_object().expect("kind agrees");
+                if output.mapping_len() != Some(values.len()) {
+                    return Err(MaterializationFailure::FormationFailed);
+                }
+                for (index, value) in values.iter().enumerate() {
+                    let ordinal = u64::try_from(index)
+                        .map_err(|_| MaterializationFailure::ResourceLimit("provenance-entries"))?;
+                    let entry = output
+                        .mapping_entry(index)
+                        .ok_or(MaterializationFailure::FormationFailed)?;
+                    if entry.key().scalar().map(super::YamlScalar::canonical) != Some(value.key()) {
+                        return Err(MaterializationFailure::FormationFailed);
+                    }
+                    self.push(
+                        MaterializationInputLocation::Association(AssociationLocation::new(
+                            path.clone(),
+                            ordinal,
+                            AssociationRole::ObjectEntry,
+                        )),
+                        self.origin(
+                            entry.node_ref(),
+                            entry.span(),
+                            MaterializationRelation::Direct,
+                        ),
+                    )?;
+                    self.push(
+                        MaterializationInputLocation::Association(AssociationLocation::new(
+                            path.clone(),
+                            ordinal,
+                            AssociationRole::ObjectKey,
+                        )),
+                        self.origin(
+                            entry.key().node_ref(),
+                            entry.key().span(),
+                            MaterializationRelation::Direct,
+                        ),
+                    )?;
+                    self.collect(
+                        value.value(),
+                        &path.child(ValuePathSegment::ObjectValue(value.key().to_owned())),
+                        entry.value(),
+                    )?;
+                }
+            }
+            PortableValueKind::EntryMapping => {
+                let values = input.as_entry_mapping().expect("kind agrees");
+                if output.mapping_len() != Some(values.len()) {
+                    return Err(MaterializationFailure::FormationFailed);
+                }
+                for (index, value) in values.iter().enumerate() {
+                    let ordinal = u64::try_from(index)
+                        .map_err(|_| MaterializationFailure::ResourceLimit("provenance-entries"))?;
+                    let entry = output
+                        .mapping_entry(index)
+                        .ok_or(MaterializationFailure::FormationFailed)?;
+                    self.push(
+                        MaterializationInputLocation::Association(AssociationLocation::new(
+                            path.clone(),
+                            ordinal,
+                            AssociationRole::EntryMappingEntry,
+                        )),
+                        self.origin(
+                            entry.node_ref(),
+                            entry.span(),
+                            if transformed {
+                                MaterializationRelation::Reencoded
+                            } else {
+                                MaterializationRelation::Direct
+                            },
+                        ),
+                    )?;
+                    self.collect(
+                        value.key(),
+                        &path.child(ValuePathSegment::EntryKey(ordinal)),
+                        entry.key(),
+                    )?;
+                    self.collect(
+                        value.value(),
+                        &path.child(ValuePathSegment::EntryValue(ordinal)),
+                        entry.value(),
+                    )?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn origin(
+        &self,
+        node: consema_document::NodeRef,
+        span: consema_document::Span,
+        relation: MaterializationRelation,
+    ) -> MaterializedOrigin {
+        MaterializedOrigin {
+            snapshot: self.document.snapshot_identity(),
+            node,
+            span,
+            relation,
+        }
+    }
+
+    fn push(
+        &mut self,
+        input: MaterializationInputLocation,
+        output: MaterializedOrigin,
+    ) -> Result<(), MaterializationFailure> {
+        self.units = self
+            .units
+            .checked_add(2)
+            .ok_or(MaterializationFailure::ResourceLimit("provenance-entries"))?;
+        if self.units > self.request.limits().max_provenance_entries {
+            return Err(MaterializationFailure::ResourceLimit("provenance-entries"));
+        }
+        self.entries
+            .try_reserve(1)
+            .map_err(|_| MaterializationFailure::ResourceLimit("provenance-allocation"))?;
+        self.entries.push(MaterializationProvenanceEntry {
+            input,
+            outputs: vec![output],
+        });
+        Ok(())
+    }
+
+    fn add(
+        &mut self,
+        input: MaterializationInputLocation,
+        output: MaterializedOrigin,
+    ) -> Result<(), MaterializationFailure> {
+        self.units = self
+            .units
+            .checked_add(1)
+            .ok_or(MaterializationFailure::ResourceLimit("provenance-entries"))?;
+        if self.units > self.request.limits().max_provenance_entries {
+            return Err(MaterializationFailure::ResourceLimit("provenance-entries"));
+        }
+        self.entries
+            .iter_mut()
+            .find(|entry| entry.input == input)
+            .ok_or(MaterializationFailure::FormationFailed)?
+            .outputs
+            .push(output);
+        Ok(())
+    }
+}
+
+fn mapping_has_unique_string_keys(entries: &[consema_core::EntryMappingEntry]) -> bool {
+    let mut names = HashSet::new();
+    entries.iter().all(|entry| {
+        entry
+            .key()
+            .as_string()
+            .is_some_and(|name| names.insert(name))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1031,6 +1833,17 @@ mod tests {
             GraphMaterializationResult::Complete(complete) => *complete,
             GraphMaterializationResult::Failed(failed) => {
                 panic!("graph materialization failed: {failed:?}")
+            }
+        }
+    }
+
+    fn complete_value(
+        result: MaterializationResult<Document>,
+    ) -> CompleteMaterialization<Document> {
+        match result {
+            MaterializationResult::Complete(complete) => complete,
+            MaterializationResult::Failed(failed) => {
+                panic!("value materialization failed: {failed:?}")
             }
         }
     }
@@ -1120,5 +1933,132 @@ mod tests {
             SourceEncoding::Utf16Be
         );
         assert_eq!(complete.document.project_graph().unwrap(), graph);
+    }
+
+    #[test]
+    fn portable_value_materialization_reprojects_exact_scalars_and_mappings() {
+        use consema_core::{BigInteger, Date, Decimal, LocalDateTime, OffsetDateTime, Time};
+
+        let date = Date::new(BigInteger::from(2026), 8, 4).unwrap();
+        let time = Time::new(
+            12,
+            34,
+            56,
+            Decimal::new(BigInteger::from(125), BigInteger::from(-3)),
+        )
+        .unwrap();
+        let timestamp =
+            OffsetDateTime::new(LocalDateTime::new(date.clone(), time), 5 * 3600 + 30 * 60)
+                .unwrap();
+        let mut mapping = EntryMappingBuilder::new();
+        mapping.push(
+            PortableValue::integer(BigInteger::from(1)),
+            PortableValue::string("one"),
+        );
+        let mut root = ObjectBuilder::new();
+        root.insert("null", PortableValue::null()).unwrap();
+        root.insert(
+            "decimal",
+            PortableValue::decimal(Decimal::new(BigInteger::from(1), BigInteger::from(0))),
+        )
+        .unwrap();
+        root.insert("bytes", PortableValue::bytes(b"Hello".as_slice()))
+            .unwrap();
+        root.insert("date", PortableValue::date(date)).unwrap();
+        root.insert("timestamp", PortableValue::offset_date_time(timestamp))
+            .unwrap();
+        root.insert("mapping", mapping.build()).unwrap();
+        let input = root.build();
+
+        let complete = complete_value(materialize_value(&input, &request("yaml.canonical-flow")));
+        assert_eq!(complete.fidelity, MaterializationFidelity::Exact);
+        assert!(complete.report.events().is_empty());
+        let ValueProjectionResult::Complete(projected) = complete
+            .document
+            .project_value(ValueProjectionRequest::best_exact_v1())
+        else {
+            panic!("materialized YAML must project");
+        };
+        assert_eq!(projected.value, input);
+        assert!(
+            std::str::from_utf8(complete.document.render())
+                .unwrap()
+                .contains("!!float \"1e0\"")
+        );
+        assert!(!complete.provenance.entries().is_empty());
+    }
+
+    #[test]
+    fn ambiguous_entry_mapping_requires_explicit_object_transformation() {
+        use consema_core::BigInteger;
+
+        let mut mapping = EntryMappingBuilder::new();
+        mapping.push(
+            PortableValue::string("a"),
+            PortableValue::integer(BigInteger::from(1)),
+        );
+        let input = mapping.build();
+        assert!(matches!(
+            materialize_value(&input, &request("yaml.canonical-block")),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::Unrepresentable {
+                    kind: PortableValueKind::EntryMapping,
+                    ..
+                },
+                ..
+            })
+        ));
+
+        let complete = complete_value(materialize_value(
+            &input,
+            &request("yaml.canonical-block")
+                .with_mapping_policy(MappingPolicy::UniqueStringEntriesToObject),
+        ));
+        assert_eq!(complete.fidelity, MaterializationFidelity::Transformed);
+        assert_eq!(complete.report.events().len(), 1);
+        let ValueProjectionResult::Complete(projected) = complete
+            .document
+            .project_value(ValueProjectionRequest::best_exact_v1())
+        else {
+            panic!("transformed YAML must project");
+        };
+        assert_eq!(projected.value.kind(), PortableValueKind::Object);
+    }
+
+    #[test]
+    fn unsupported_value_categories_fail_without_partial_documents() {
+        use consema_core::{BigInteger, BinaryFloat64, Decimal, Time};
+
+        let time = PortableValue::time(
+            Time::new(
+                1,
+                2,
+                3,
+                Decimal::new(BigInteger::from(0), BigInteger::from(0)),
+            )
+            .unwrap(),
+        );
+        assert!(matches!(
+            materialize_value(&time, &request("yaml.canonical-flow")),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::Unrepresentable {
+                    kind: PortableValueKind::Time,
+                    ..
+                },
+                ..
+            })
+        ));
+        let negative_nan =
+            PortableValue::binary_float64(BinaryFloat64::from_bits(0xfff8_0000_0000_0000));
+        assert!(matches!(
+            materialize_value(&negative_nan, &request("yaml.canonical-flow")),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::Unrepresentable {
+                    kind: PortableValueKind::BinaryFloat64,
+                    ..
+                },
+                ..
+            })
+        ));
     }
 }

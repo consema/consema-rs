@@ -25,6 +25,7 @@ pub use materialization::{
     CompleteGraphMaterialization, FailedGraphMaterializationAttempt, GraphMaterializationFailure,
     GraphMaterializationInputLocation, GraphMaterializationProvenanceEntry,
     GraphMaterializationProvenanceMap, GraphMaterializationResult, materialize_graph,
+    materialize_value,
 };
 pub use native::GraphProjectionError;
 use native::{NativeContent, NativeStream, node_ref};
