@@ -383,6 +383,12 @@ impl Document {
         FormationStatus::Complete
     }
 
+    /// Complete YAML formation publishes no recovery diagnostics.
+    #[must_use]
+    pub const fn diagnostics(&self) -> &[Diagnostic] {
+        &[]
+    }
+
     /// Exhaustive token/trivia byte coverage.
     #[must_use]
     pub const fn lossless_structural_index(&self) -> &LosslessStructuralIndex {

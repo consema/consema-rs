@@ -1,18 +1,21 @@
-//! Consema public facade for core semantics, protocol, JSON, TOML and PVCE.
+//! Consema public facade for core semantics, protocol, JSON, TOML, YAML, and PVCE.
 
 mod conversion;
 
 pub use conversion::{
     CompleteConversion, ConversionFailure, ConversionFidelity, ConversionProjectionProvenance,
     ConversionProjectionReport, ConversionReport, ConversionResult, convert_json, convert_toml,
+    convert_yaml,
 };
 
 pub use consema_core as core;
 pub use consema_document as document;
+pub use consema_graph as graph;
 pub use consema_json as json;
 pub use consema_protocol as protocol;
 pub use consema_pvce as pvce;
 pub use consema_toml as toml;
+pub use consema_yaml as yaml;
 
 use std::sync::Arc;
 
@@ -23,6 +26,8 @@ pub enum FormatMismatch {
     Json,
     /// The snapshot is not a TOML document.
     Toml,
+    /// The snapshot is not a YAML document.
+    Yaml,
 }
 
 /// Common opaque document snapshot over the supported format documents.
@@ -38,6 +43,7 @@ pub struct Document {
 enum DocumentInner {
     Json(json::Document),
     Toml(toml::Document),
+    Yaml(Box<yaml::Document>),
 }
 
 impl Document {
@@ -63,12 +69,24 @@ impl Document {
         })
     }
 
+    /// Parses one YAML stream under one exact frozen profile.
+    pub fn parse_yaml(
+        source: impl Into<Arc<[u8]>>,
+        profile: yaml::YamlProfile,
+        limits: document::ParseLimits,
+    ) -> Result<Self, document::FatalFormationFailure> {
+        Ok(Self {
+            inner: DocumentInner::Yaml(Box::new(yaml::parse(source, profile, limits)?)),
+        })
+    }
+
     /// Default rendering is byte-for-byte identical to the source.
     #[must_use]
     pub fn render(&self) -> &[u8] {
         match &self.inner {
             DocumentInner::Json(document) => document.render(),
             DocumentInner::Toml(document) => document.render(),
+            DocumentInner::Yaml(document) => document.render(),
         }
     }
 
@@ -78,6 +96,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Json(document) => document.formation_status(),
             DocumentInner::Toml(document) => document.formation_status(),
+            DocumentInner::Yaml(document) => document.formation_status(),
         }
     }
 
@@ -87,6 +106,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Json(document) => document.diagnostics(),
             DocumentInner::Toml(document) => document.diagnostics(),
+            DocumentInner::Yaml(document) => document.diagnostics(),
         }
     }
 
@@ -96,6 +116,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Json(document) => document.snapshot_identity(),
             DocumentInner::Toml(document) => document.snapshot_identity(),
+            DocumentInner::Yaml(document) => document.snapshot_identity(),
         }
     }
 
@@ -105,6 +126,7 @@ impl Document {
         match &self.inner {
             DocumentInner::Json(document) => document.profile(),
             DocumentInner::Toml(document) => document.profile(),
+            DocumentInner::Yaml(document) => document.profile(),
         }
     }
 
@@ -112,15 +134,23 @@ impl Document {
     pub fn as_json(&self) -> Result<&json::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Json(document) => Ok(document),
-            DocumentInner::Toml(_) => Err(FormatMismatch::Json),
+            DocumentInner::Toml(_) | DocumentInner::Yaml(_) => Err(FormatMismatch::Json),
         }
     }
 
     /// Typed TOML adapter; fails only when the snapshot is not TOML.
     pub fn as_toml(&self) -> Result<&toml::Document, FormatMismatch> {
         match &self.inner {
-            DocumentInner::Json(_) => Err(FormatMismatch::Toml),
             DocumentInner::Toml(document) => Ok(document),
+            DocumentInner::Json(_) | DocumentInner::Yaml(_) => Err(FormatMismatch::Toml),
+        }
+    }
+
+    /// Typed YAML adapter; fails only when the snapshot is not YAML.
+    pub fn as_yaml(&self) -> Result<&yaml::Document, FormatMismatch> {
+        match &self.inner {
+            DocumentInner::Json(_) | DocumentInner::Toml(_) => Err(FormatMismatch::Yaml),
+            DocumentInner::Yaml(document) => Ok(document),
         }
     }
 }
@@ -153,7 +183,29 @@ mod tests {
         .expect("TOML facade");
         assert_eq!(toml.render(), b"value = 1");
         assert!(matches!(toml.as_json(), Err(FormatMismatch::Json)));
+        assert!(matches!(toml.as_yaml(), Err(FormatMismatch::Yaml)));
         assert_eq!(toml.as_toml().expect("toml adapter").render(), b"value = 1");
+
+        let yaml = Document::parse_yaml(
+            b"value: 1\n".as_slice(),
+            yaml::YamlProfile::Yaml12CoreV1,
+            document::ParseLimits::default(),
+        )
+        .expect("YAML facade");
+        assert_eq!(yaml.render(), b"value: 1\n");
+        assert_eq!(
+            yaml.as_yaml()
+                .unwrap()
+                .project_graph()
+                .unwrap()
+                .roots()
+                .len(),
+            1
+        );
+        assert!(matches!(yaml.as_json(), Err(FormatMismatch::Json)));
+        assert!(matches!(yaml.as_toml(), Err(FormatMismatch::Toml)));
+        assert_eq!(yaml.as_yaml().expect("yaml adapter").document_count(), 1);
+        assert!(yaml.diagnostics().is_empty());
 
         let other = Document::parse_json(
             b"{}".as_slice(),
@@ -166,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn facade_exposes_both_format_implementations() {
+    fn facade_exposes_all_format_implementations() {
         let json = json::parse(
             b"{\"value\":1}".as_slice(),
             json::JsonProfile::StrictV1,
@@ -179,8 +231,15 @@ mod tests {
             document::ParseLimits::default(),
         )
         .expect("TOML through facade");
+        let yaml = yaml::parse(
+            b"value: 1\n".as_slice(),
+            yaml::YamlProfile::Yaml12CoreV1,
+            document::ParseLimits::default(),
+        )
+        .expect("YAML through facade");
         assert_eq!(json.render(), b"{\"value\":1}");
         assert_eq!(toml.render(), b"value = 1");
+        assert_eq!(yaml.render(), b"value: 1\n");
     }
 
     #[test]

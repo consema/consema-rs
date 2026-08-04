@@ -633,6 +633,7 @@ fn conversion_case(case: &VectorCase<'_>) -> Result<(), String> {
                     materialization_failure_name(&failure)
                 }
                 ConversionFailure::ProjectionFailed { .. } => "ProjectionFailed",
+                ConversionFailure::YamlProjectionFailed { .. } => "YamlProjectionFailed",
                 ConversionFailure::UnauthorizedLoss => "UnauthorizedLoss",
             };
             ensure(actual == expected_string(case, "failure")?)

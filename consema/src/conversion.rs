@@ -1,6 +1,6 @@
 //! Audited projection-to-materialization composition.
 
-use crate::{Document, DocumentInner, core, document, json, toml};
+use crate::{Document, DocumentInner, core, document, json, toml, yaml};
 use core::{OperationKind, PortableValue, StableFailure};
 use document::{
     CompleteMaterialization, MaterializationFidelity, MaterializationProvenanceMap,
@@ -26,6 +26,8 @@ pub enum ConversionProjectionReport {
     Json(json::ProjectionReport),
     /// TOML projection report.
     Toml(toml::ProjectionReport),
+    /// YAML value-projection report.
+    Yaml(yaml::ProjectionReport),
 }
 
 /// Complete format-owned source provenance retained for local audit.
@@ -35,6 +37,8 @@ pub enum ConversionProjectionProvenance {
     Json(json::ProvenanceMap),
     /// TOML projection provenance.
     Toml(toml::ProvenanceMap),
+    /// YAML value-projection provenance.
+    Yaml(yaml::ProvenanceMap),
 }
 
 /// Complete ordered report for both conversion stages.
@@ -132,6 +136,11 @@ impl CompleteConversion {
             {
                 crate::protocol::ProjectionReportMessage::default()
             }
+            (ConversionProjectionReport::Yaml(report), ConversionProjectionProvenance::Yaml(_))
+                if report.events().is_empty() =>
+            {
+                crate::protocol::ProjectionReportMessage::default()
+            }
             _ => {
                 return Err(crate::protocol::ProtocolError::new(
                     crate::protocol::ProtocolErrorKind::InvalidValue,
@@ -167,6 +176,7 @@ impl CompleteConversion {
         let snapshot = match &self.document.inner {
             DocumentInner::Json(document) => document.source(),
             DocumentInner::Toml(document) => document.source(),
+            DocumentInner::Yaml(document) => document.source(),
         };
         let report = crate::protocol::MaterializationReportMessage::from_report(
             &self.report.materialization_report,
@@ -200,6 +210,11 @@ pub enum ConversionFailure {
         /// Stable locally analyzed paths.
         partial_analysis: Vec<String>,
     },
+    /// YAML value projection failed before a portable tree existed.
+    YamlProjectionFailed {
+        /// Exact format-owned projection failure.
+        failure: yaml::ValueProjectionFailure,
+    },
     /// Materialization did not produce target bytes or a target document.
     MaterializationFailed {
         /// Stable materialization failure.
@@ -220,16 +235,18 @@ impl StableFailure for ConversionFailure {
 
     fn failure_kind(&self) -> core::FailureKind {
         match self {
-            Self::ProjectionFailed { .. } | Self::MaterializationFailed { .. } => {
-                core::FailureKind::NotApplicable
-            }
+            Self::ProjectionFailed { .. }
+            | Self::YamlProjectionFailed { .. }
+            | Self::MaterializationFailed { .. } => core::FailureKind::NotApplicable,
             Self::UnauthorizedLoss => core::FailureKind::InvalidInput,
         }
     }
 
     fn diagnostic_code(&self) -> &str {
         match self {
-            Self::ProjectionFailed { .. } => "core.conversion.projection-failed@1",
+            Self::ProjectionFailed { .. } | Self::YamlProjectionFailed { .. } => {
+                "core.conversion.projection-failed@1"
+            }
             Self::MaterializationFailed { .. } => "core.conversion.materialization-failed@1",
             Self::UnauthorizedLoss => "core.conversion.unauthorized-loss@1",
         }
@@ -304,6 +321,28 @@ pub fn convert_toml(
                 diagnostics: failure.diagnostics,
                 partial_analysis: failure.partial_analysis,
             })
+        }
+    }
+}
+
+/// Converts one YAML stream through its explicit PortableValue projection.
+#[must_use]
+pub fn convert_yaml(
+    source: &yaml::Document,
+    projection_request: yaml::ValueProjectionRequest,
+    materialization_request: &MaterializationRequest,
+) -> ConversionResult {
+    match source.project_value(projection_request) {
+        yaml::ValueProjectionResult::Complete(projection) => complete_conversion(
+            source.profile(),
+            projection.value,
+            yaml_fidelity(projection.fidelity),
+            ConversionProjectionReport::Yaml(projection.report),
+            ConversionProjectionProvenance::Yaml(projection.provenance),
+            materialization_request,
+        ),
+        yaml::ValueProjectionResult::Failed(failure) => {
+            ConversionResult::Failed(ConversionFailure::YamlProjectionFailed { failure })
         }
     }
 }
@@ -397,6 +436,24 @@ fn materialize_target(
                 Err(materialization_failure(failure))
             }
         },
+        "yaml.1.2-core" | "yaml.1.1-compat" => match yaml::materialize_value(value, request) {
+            document::MaterializationResult::Complete(CompleteMaterialization {
+                document,
+                fidelity,
+                report,
+                provenance,
+            }) => Ok(MaterializedTarget {
+                document: Document {
+                    inner: DocumentInner::Yaml(Box::new(document)),
+                },
+                fidelity,
+                report,
+                provenance,
+            }),
+            document::MaterializationResult::Failed(failure) => {
+                Err(materialization_failure(failure))
+            }
+        },
         _ => Err(ConversionFailure::MaterializationFailed {
             failure: document::MaterializationFailure::UnsupportedProfile,
             report: MaterializationReport::default(),
@@ -426,6 +483,14 @@ const fn toml_fidelity(fidelity: toml::Fidelity) -> ConversionFidelity {
         toml::Fidelity::Exact => ConversionFidelity::Exact,
         toml::Fidelity::Transformed => ConversionFidelity::Transformed,
         toml::Fidelity::Lossy => ConversionFidelity::Lossy,
+    }
+}
+
+const fn yaml_fidelity(fidelity: yaml::Fidelity) -> ConversionFidelity {
+    match fidelity {
+        yaml::Fidelity::Exact => ConversionFidelity::Exact,
+        yaml::Fidelity::Transformed => ConversionFidelity::Transformed,
+        yaml::Fidelity::Lossy => ConversionFidelity::Lossy,
     }
 }
 
@@ -557,7 +622,9 @@ mod tests {
     fn projection_provenance_json(complete: &CompleteConversion) -> &[json::ProvenanceEntry] {
         match &complete.projection_provenance {
             ConversionProjectionProvenance::Json(provenance) => provenance.entries(),
-            ConversionProjectionProvenance::Toml(_) => &[],
+            ConversionProjectionProvenance::Toml(_) | ConversionProjectionProvenance::Yaml(_) => {
+                &[]
+            }
         }
     }
 
@@ -584,6 +651,14 @@ mod tests {
             MaterializationStyleId::new("json5.canonical-compact", 1),
         )
         .with_newline(NewlinePolicy::None)
+    }
+
+    fn yaml_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("yaml.1.2-core", 1),
+            MaterializationStyleId::new("yaml.canonical-flow", 1),
+        )
+        .with_newline(NewlinePolicy::Lf)
     }
 
     #[test]
@@ -810,6 +885,197 @@ mod tests {
                     ..
                 },
                 ..
+            })
+        ));
+    }
+
+    #[test]
+    fn yaml_and_json_conversion_closes_exactly_in_both_directions() {
+        let yaml_source = yaml::parse(
+            b"service:\n  port: 8080\n  enabled: true\n".as_slice(),
+            yaml::YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(json_target) = convert_yaml(
+            &yaml_source,
+            yaml::ValueProjectionRequest::best_exact_v1(),
+            &json_request(),
+        ) else {
+            panic!("YAML to JSON should complete exactly")
+        };
+        assert_eq!(
+            json_target.document.render(),
+            br#"{"service":{"port":8080,"enabled":true}}"#
+        );
+        assert_eq!(
+            json_target.report.overall_fidelity(),
+            ConversionFidelity::Exact
+        );
+        assert!(matches!(
+            json_target.projection_provenance,
+            ConversionProjectionProvenance::Yaml(_)
+        ));
+        let report = json_target
+            .protocol_report("source:yaml", "target:json")
+            .unwrap();
+        assert_eq!(
+            report.overall_fidelity(),
+            protocol::ConversionFidelityMessage::Exact
+        );
+
+        let json_source = json::parse(
+            br#"{"service":{"port":8080,"enabled":true}}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection = ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        let ConversionResult::Complete(yaml_target) =
+            convert_json(&json_source, &projection, &yaml_request())
+        else {
+            panic!("JSON to YAML should complete exactly")
+        };
+        assert_eq!(
+            yaml_target.report.target_profile(),
+            &ProfileId::new("yaml.1.2-core", 1)
+        );
+        assert_eq!(
+            yaml_target.report.overall_fidelity(),
+            ConversionFidelity::Exact
+        );
+        let yaml_document = yaml_target.document.as_yaml().unwrap();
+        let yaml::ValueProjectionResult::Complete(round_trip) =
+            yaml_document.project_value(yaml::ValueProjectionRequest::best_exact_v1())
+        else {
+            panic!("materialized YAML must project exactly")
+        };
+        assert_eq!(round_trip.value, yaml_target.projected_value);
+        let mut yaml_locators = HashMap::new();
+        let mut next_yaml_locator = 0_u64;
+        let materialization = yaml_target
+            .protocol_materialization_result("target:yaml", |node| {
+                Some(
+                    yaml_locators
+                        .entry(node)
+                        .or_insert_with(|| {
+                            let locator = format!("yaml:node:{next_yaml_locator}");
+                            next_yaml_locator += 1;
+                            locator
+                        })
+                        .clone(),
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            materialization.target_profile(),
+            &ProfileId::new("yaml.1.2-core", 1)
+        );
+    }
+
+    #[test]
+    fn yaml_compat_profile_is_explicit_at_both_conversion_stages() {
+        let source = yaml::parse(
+            b"%YAML 1.1\n---\nflag: yes\n".as_slice(),
+            yaml::YamlProfile::Yaml11CompatV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(json_target) = convert_yaml(
+            &source,
+            yaml::ValueProjectionRequest::best_exact_v1(),
+            &json_request(),
+        ) else {
+            panic!("YAML 1.1 compatibility source should convert")
+        };
+        assert_eq!(json_target.document.render(), br#"{"flag":true}"#);
+        assert_eq!(
+            json_target.report.source_profile(),
+            &ProfileId::new("yaml.1.1-compat", 1)
+        );
+
+        let json_source = json::parse(
+            br#"{"flag":true}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection = ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        let target = MaterializationRequest::new(
+            ProfileId::new("yaml.1.1-compat", 1),
+            MaterializationStyleId::new("yaml.canonical-flow", 1),
+        )
+        .with_newline(NewlinePolicy::Lf);
+        let ConversionResult::Complete(yaml_target) =
+            convert_json(&json_source, &projection, &target)
+        else {
+            panic!("YAML compatibility target should materialize")
+        };
+        assert_eq!(
+            yaml_target.report.target_profile(),
+            &ProfileId::new("yaml.1.1-compat", 1)
+        );
+        assert_eq!(
+            yaml_target.document.as_yaml().unwrap().profile(),
+            ProfileId::new("yaml.1.1-compat", 1)
+        );
+    }
+
+    #[test]
+    fn yaml_sharing_and_cycles_require_explicit_tree_projection_policy() {
+        let shared = yaml::parse(
+            b"value: &x [one]\ncopy: *x\n".as_slice(),
+            yaml::YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        assert!(matches!(
+            convert_yaml(
+                &shared,
+                yaml::ValueProjectionRequest::best_exact_v1(),
+                &json_request(),
+            ),
+            ConversionResult::Failed(ConversionFailure::YamlProjectionFailed {
+                failure: yaml::ValueProjectionFailure::Sharing { .. }
+            })
+        ));
+
+        let duplicated = yaml::ValueProjectionRequest::best_exact_v1()
+            .with_sharing(yaml::SharingPolicy::DuplicateAcyclic);
+        let ConversionResult::Complete(converted) =
+            convert_yaml(&shared, duplicated, &json_request())
+        else {
+            panic!("explicit acyclic duplication should complete")
+        };
+        assert_eq!(
+            converted.report.overall_fidelity(),
+            ConversionFidelity::Transformed
+        );
+        let ConversionProjectionReport::Yaml(report) = converted.report.projection_report() else {
+            panic!("YAML projection report expected")
+        };
+        assert!(!report.events().is_empty());
+        assert!(
+            report
+                .events()
+                .iter()
+                .all(|event| event.kind == yaml::ProjectionEventKind::SharingDuplicated)
+        );
+
+        let cyclic = yaml::parse(
+            b"&x [*x]\n".as_slice(),
+            yaml::YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        assert!(matches!(
+            convert_yaml(&cyclic, duplicated, &json_request()),
+            ConversionResult::Failed(ConversionFailure::YamlProjectionFailed {
+                failure: yaml::ValueProjectionFailure::Cycle { .. }
             })
         ));
     }
