@@ -13,17 +13,17 @@ use consema_json::{
     RepresentationPolicy, parse as parse_json,
 };
 use consema_protocol::{
-    CapabilityDeclaration, ChangeSetMessage, Completion, CompletionStatus, ContractId,
-    ContractRegistry, DiagnosticMessage, ErrorCodeRegistry, NativeMatchLocator, ProfileDescriptor,
-    ProjectedLocationMessage, ProjectionFidelity, ProjectionPolicy, ProjectionReportMessage,
-    ProjectionRequestMessage, ProjectionResultMessage, ProjectionRule, ProjectionScope,
-    ProtocolErrorKind, ProtocolLimits, ProtocolMessage, ProvenanceEntryMessage,
-    ProvenanceMapMessage, ProvenanceRelation, QueryResultMessage, RegistryManifest,
-    SourceOriginMessage, decode_json, decode_pvce, encode_json, encode_pvce,
-    error_code_manifest_value, query_definition_from_message, query_definition_message,
-    query_failure_code, validate_error_code_manifest_value,
+    CancellationRequest, CapabilityDeclaration, ChangeSetMessage, Completion, CompletionStatus,
+    ContractId, ContractRegistry, ContractStability, DiagnosticMessage, ErrorCodeRegistry,
+    ExecutionPolicy, NativeMatchLocator, ProfileDescriptor, ProjectedLocationMessage,
+    ProjectionFidelity, ProjectionPolicy, ProjectionReportMessage, ProjectionRequestMessage,
+    ProjectionResultMessage, ProjectionRule, ProjectionScope, ProtocolErrorKind, ProtocolLimits,
+    ProtocolMessage, ProvenanceEntryMessage, ProvenanceMapMessage, ProvenanceRelation,
+    QueryResultMessage, RegistryManifest, SourceOriginMessage, decode_json, decode_pvce,
+    encode_json, encode_pvce, error_code_manifest_value, query_definition_from_message,
+    query_definition_message, query_failure_code, validate_error_code_manifest_value,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Embedded language-neutral protocol suite bytes.
 pub const PROTOCOL_V1_VECTORS_JSON: &str =
@@ -87,6 +87,7 @@ fn run_case(id: &str) -> Result<(), String> {
         "protocol.pvce.roundtrip-equivalent" => pvce_equivalent(),
         "protocol.resource.depth-limit" => depth_limit(),
         "protocol.envelope.dual-transport" => envelope_dual_transport(),
+        "protocol.envelope.all-payloads-dual-transport" => all_payloads_dual_transport(),
         "protocol.envelope.reject-unknown-contract" => reject_unknown_contract(),
         "protocol.envelope.reject-schema-mismatch" => reject_schema_mismatch(),
         "protocol.envelope.reject-schema-only-payload" => reject_schema_only_payload(),
@@ -233,6 +234,163 @@ fn envelope_dual_transport() -> Result<(), String> {
                 .unwrap()
                 == message,
     )
+}
+
+fn all_payloads_dual_transport() -> Result<(), String> {
+    let registry = ContractRegistry::v1();
+    let profile =
+        ProfileDescriptor::new("toml", 1, "toml.1.0", 1, None, Vec::new(), Vec::new()).unwrap();
+    let capability = CapabilityDeclaration::new(
+        CapabilityId::new("core.query.ordered-results", 1),
+        ImplementationSupport::Conformant,
+        VerificationStatus::SelfDeclared,
+        None,
+    )
+    .unwrap();
+    let diagnostic = DiagnosticMessage::from_core(
+        &Diagnostic::new(
+            "json.syntax.expected-value@1",
+            DiagnosticCategory::Syntax,
+            DiagnosticSeverity::Error,
+            None,
+            0,
+        ),
+        None,
+    )
+    .unwrap();
+    let projection_policy = ProjectionPolicy::new(
+        ContractId::new("core.projection.exact-or-reject", 1).unwrap(),
+        BTreeMap::new(),
+    );
+    let projection_request = ProjectionRequestMessage::new(
+        ContractId::new("json.projection.best-exact-core", 1).unwrap(),
+        projection_policy,
+        Vec::new(),
+        BTreeMap::new(),
+    )
+    .unwrap();
+    let completion = Completion::new(CompletionStatus::Success, 0, 0, None, None).unwrap();
+    let query_definition = QueryDefinition::new(QueryDomain::portable_value_v1());
+    let query_result = QueryResultMessage::new(
+        QueryDomain::portable_value_v1(),
+        MatchRole::Value,
+        Vec::new(),
+        completion.clone(),
+        Vec::new(),
+    )
+    .unwrap();
+    let projection_result = ProjectionResultMessage::new(
+        completion.clone(),
+        Some(PortableValue::null()),
+        Some(ProjectionFidelity::Exact),
+        ProjectionReportMessage::default(),
+        ProvenanceMapMessage::default(),
+        Vec::new(),
+    )
+    .unwrap();
+    let payloads = vec![
+        (
+            ContractId::new("core.cancellation-request", 1).unwrap(),
+            CancellationRequest::new("request:1", None)
+                .unwrap()
+                .to_value(),
+        ),
+        (
+            ContractId::new("core.capability-declaration", 1).unwrap(),
+            capability.to_value(),
+        ),
+        (
+            ContractId::new("core.change-set", 1).unwrap(),
+            ChangeSetMessage::new(
+                "source:old",
+                "source:new",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap()
+            .to_value(),
+        ),
+        (
+            ContractId::new("core.completion", 1).unwrap(),
+            completion.to_value(),
+        ),
+        (
+            ContractId::new("core.diagnostic", 1).unwrap(),
+            diagnostic.to_value(),
+        ),
+        (
+            ContractId::new("core.error-code-registry", 1).unwrap(),
+            error_code_manifest_value(),
+        ),
+        (
+            ContractId::new("core.execution-policy", 1).unwrap(),
+            ExecutionPolicy::new(BTreeMap::new(), None)
+                .unwrap()
+                .to_value(),
+        ),
+        (
+            ContractId::new("core.profile-descriptor", 1).unwrap(),
+            profile.to_value(),
+        ),
+        (
+            ContractId::new("core.projection-report", 1).unwrap(),
+            ProjectionReportMessage::default().to_value(),
+        ),
+        (
+            ContractId::new("core.projection-request", 1).unwrap(),
+            projection_request.to_value(),
+        ),
+        (
+            ContractId::new("core.projection-result", 1).unwrap(),
+            projection_result.to_value(),
+        ),
+        (
+            ContractId::new("core.provenance-map", 1).unwrap(),
+            ProvenanceMapMessage::default().to_value(),
+        ),
+        (
+            ContractId::new("core.query-definition", 1).unwrap(),
+            query_definition.to_protocol_value().unwrap(),
+        ),
+        (
+            ContractId::new("core.query-result", 1).unwrap(),
+            query_result.to_value(),
+        ),
+        (
+            ContractId::new("core.registry-manifest", 1).unwrap(),
+            RegistryManifest::current().to_value(),
+        ),
+    ];
+    let expected = registry
+        .contracts()
+        .iter()
+        .filter(|descriptor| descriptor.stability == ContractStability::Stable)
+        .map(|descriptor| format!("{}@{}", descriptor.id, descriptor.version))
+        .collect::<BTreeSet<_>>();
+    let actual = payloads
+        .iter()
+        .map(|(contract, _)| contract.schema())
+        .collect::<BTreeSet<_>>();
+    if actual != expected || payloads.len() != 15 {
+        return Err("dual-transport samples do not exactly cover the stable registry".to_owned());
+    }
+    let limits = ProtocolLimits::default();
+    for (contract, payload) in payloads {
+        let message = ProtocolMessage::new(contract, payload, registry).unwrap();
+        if ProtocolMessage::from_json(&message.to_json(limits).unwrap(), limits, registry).unwrap()
+            != message
+            || ProtocolMessage::from_pvce(&message.to_pvce(limits).unwrap(), limits, registry)
+                .unwrap()
+                != message
+        {
+            return Err(format!(
+                "dual-transport mismatch for {}",
+                message.contract().schema()
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn reject_unknown_contract() -> Result<(), String> {
@@ -581,6 +739,6 @@ mod tests {
     fn published_protocol_v1_suite_is_conformant() {
         let report = run_protocol_v1();
         assert!(report.is_conformant(), "{report:#?}");
-        assert_eq!(report.passed.len(), 28);
+        assert_eq!(report.passed.len(), 29);
     }
 }
