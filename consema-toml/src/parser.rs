@@ -30,11 +30,12 @@ pub(crate) fn parse(
             FatalFormationFailure::invalid_utf8(valid_up_to)
         }
     })?;
-    let parsed = ImDocument::parse(source.text().to_owned()).map_err(syntax_failure)?;
     let authority = DocumentAuthority::fresh();
     let pieces = tokenize(source.text(), &authority, limits.max_token_count)?;
+    preflight_delimiter_nesting(source.text(), &pieces, limits.max_nesting_depth)?;
     let structural_index = LosslessStructuralIndex::new(authority.identity(), source.len(), pieces)
         .expect("TOML tokenizer creates exact source coverage");
+    let parsed = ImDocument::parse(source.text().to_owned()).map_err(syntax_failure)?;
 
     let (root, entities) = {
         let mut builder = EntityBuilder {
@@ -408,6 +409,36 @@ fn tokenize(
         cursor = end;
     }
     Ok(pieces)
+}
+
+fn preflight_delimiter_nesting(
+    source: &str,
+    pieces: &[StructuralPiece],
+    max_depth: usize,
+) -> Result<(), FatalFormationFailure> {
+    let mut depth = 0usize;
+    for piece in pieces {
+        if piece.kind() != StructuralPieceKind::Token {
+            continue;
+        }
+        let span = piece.span();
+        let token = &source[span.start_byte()..span.end_byte()];
+        match token {
+            "[" | "{" => {
+                depth = depth.saturating_add(1);
+                if depth > max_depth {
+                    return Err(FatalFormationFailure::resource_limit(
+                        "nesting_depth",
+                        depth,
+                        max_depth,
+                    ));
+                }
+            }
+            "]" | "}" => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn is_punctuation(byte: u8) -> bool {

@@ -686,6 +686,15 @@ name = "two"
         let limited =
             parse(b"x = 1".as_slice(), TomlProfile::Toml10V1, limits).expect_err("source limit");
         assert_eq!(limited.diagnostics()[0].code, "core.parse.resource-limit@1");
+
+        let limits = ParseLimits {
+            max_nesting_depth: 2,
+            ..ParseLimits::default()
+        };
+        let nested = parse(b"value = [[[[[".as_slice(), TomlProfile::Toml10V1, limits)
+            .expect_err("preflight nesting limit");
+        assert_eq!(nested.diagnostics()[0].code, "core.parse.resource-limit@1");
+        assert_eq!(nested.diagnostics()[0].arguments["name"], "nesting_depth");
     }
 
     #[test]
