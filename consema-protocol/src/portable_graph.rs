@@ -185,6 +185,10 @@ impl PortableGraphMessage {
             .ok()
             .and_then(|index| canonical_layout(&self.graph).order.get(index).copied())
     }
+
+    pub(crate) fn wire_layout(&self) -> CanonicalLayout {
+        canonical_layout(&self.graph)
+    }
 }
 
 #[derive(Debug)]
