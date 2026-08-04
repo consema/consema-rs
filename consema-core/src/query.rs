@@ -951,6 +951,46 @@ fn validate_operator(
             ("ini.native-semantic-query", "ini.logical-lines") => {
                 (MatchRole::IniDocument, MatchRole::IniLogicalLine, &[])
             }
+            ("java-properties.native-semantic-query", "properties.document-properties") => (
+                MatchRole::PropertiesDocument,
+                MatchRole::PropertiesProperty,
+                &[],
+            ),
+            ("java-properties.native-semantic-query", "properties.natural-lines") => (
+                MatchRole::PropertiesDocument,
+                MatchRole::PropertiesNaturalLine,
+                &[],
+            ),
+            ("java-properties.native-semantic-query", "properties.logical-lines") => (
+                MatchRole::PropertiesDocument,
+                MatchRole::PropertiesLogicalLine,
+                &[],
+            ),
+            ("java-properties.native-semantic-query", "properties.logical-line-natural-lines") => (
+                MatchRole::PropertiesLogicalLine,
+                MatchRole::PropertiesNaturalLine,
+                &[],
+            ),
+            ("java-properties.native-semantic-query", "properties.property-key-equals") => (
+                MatchRole::PropertiesProperty,
+                MatchRole::PropertiesProperty,
+                &[("key", PortableValueKind::Bytes)],
+            ),
+            ("java-properties.native-semantic-query", "properties.property-value-state-is") => (
+                MatchRole::PropertiesProperty,
+                MatchRole::PropertiesProperty,
+                &[("state", PortableValueKind::String)],
+            ),
+            ("java-properties.native-semantic-query", "properties.property-escapes") => (
+                MatchRole::PropertiesProperty,
+                MatchRole::PropertiesEscape,
+                &[],
+            ),
+            ("java-properties.native-semantic-query", "properties.duplicate-group") => (
+                MatchRole::PropertiesProperty,
+                MatchRole::PropertiesProperty,
+                &[],
+            ),
             ("json.lossless-syntax-query", "json.syntax-kind-is") => (
                 MatchRole::JsonSyntaxPiece,
                 MatchRole::JsonSyntaxPiece,
@@ -990,6 +1030,26 @@ fn validate_operator(
                 MatchRole::IniSyntaxPiece,
                 MatchRole::IniSyntaxPiece,
                 &[("text", PortableValueKind::String)],
+            ),
+            ("java-properties.lossless-syntax-query", "properties.syntax-kind-is") => (
+                MatchRole::PropertiesSyntaxPiece,
+                MatchRole::PropertiesSyntaxPiece,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("java-properties.lossless-syntax-query", "properties.syntax-text-equals") => (
+                MatchRole::PropertiesSyntaxPiece,
+                MatchRole::PropertiesSyntaxPiece,
+                &[("text", PortableValueKind::String)],
+            ),
+            ("java-properties.lossless-syntax-query", "properties.syntax-raw-bytes-equals") => (
+                MatchRole::PropertiesSyntaxPiece,
+                MatchRole::PropertiesSyntaxPiece,
+                &[("bytes", PortableValueKind::Bytes)],
+            ),
+            ("java-properties.lossless-syntax-query", "properties.syntax-utf16be-equals") => (
+                MatchRole::PropertiesSyntaxPiece,
+                MatchRole::PropertiesSyntaxPiece,
+                &[("code_units", PortableValueKind::Bytes)],
             ),
             ("core.portable-graph-query", "graph.reachable-nodes") => {
                 (MatchRole::GraphNode, MatchRole::GraphNode, &[])
@@ -1120,6 +1180,55 @@ fn validate_operator(
         return Err(QueryFailure::InvalidArgument {
             operator: operator.id.clone(),
             argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "properties.syntax-kind-is"
+        && !is_properties_syntax_kind(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if matches!(
+        operator.id(),
+        "properties.property-key-equals" | "properties.syntax-utf16be-equals"
+    ) && operator.arguments()[if operator.id() == "properties.property-key-equals" {
+        "key"
+    } else {
+        "code_units"
+    }]
+    .as_bytes()
+    .expect("validated bytes")
+    .len()
+        % 2
+        != 0
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: if operator.id() == "properties.property-key-equals" {
+                "key"
+            } else {
+                "code_units"
+            }
+            .to_owned(),
+        });
+    }
+    if operator.id() == "properties.property-value-state-is"
+        && !matches!(
+            operator.arguments()["state"]
+                .as_string()
+                .expect("validated string"),
+            "ImplicitEmpty" | "ExplicitEmpty" | "Present"
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "state".to_owned(),
         });
     }
     if matches!(
@@ -1286,6 +1395,24 @@ fn is_ini_syntax_kind(kind: &str) -> bool {
             | "Delimiter"
             | "Quote"
             | "EntryValue"
+            | "ContinuationMarker"
+            | "ErrorRegion"
+    )
+}
+
+fn is_properties_syntax_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Bom"
+            | "Whitespace"
+            | "LineBreak"
+            | "CommentMarker"
+            | "CommentText"
+            | "Key"
+            | "Separator"
+            | "Value"
+            | "EscapeMarker"
+            | "EscapeBody"
             | "ContinuationMarker"
             | "ErrorRegion"
     )

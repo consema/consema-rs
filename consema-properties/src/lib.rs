@@ -9,6 +9,13 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 mod parser;
+mod query;
+
+pub use query::{
+    PropertiesMatch, PropertiesSyntaxMatch, execute_properties_query,
+    execute_properties_query_cursor, execute_properties_syntax_query,
+    execute_properties_syntax_query_cursor,
+};
 
 /// Frozen Java Properties formation profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -232,6 +239,24 @@ impl PropertiesSyntaxKind {
             Self::EscapeBody => "EscapeBody",
             Self::ContinuationMarker => "ContinuationMarker",
             Self::ErrorRegion => "ErrorRegion",
+        }
+    }
+
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "Bom" => Some(Self::Bom),
+            "Whitespace" => Some(Self::Whitespace),
+            "LineBreak" => Some(Self::LineBreak),
+            "CommentMarker" => Some(Self::CommentMarker),
+            "CommentText" => Some(Self::CommentText),
+            "Key" => Some(Self::Key),
+            "Separator" => Some(Self::Separator),
+            "Value" => Some(Self::Value),
+            "EscapeMarker" => Some(Self::EscapeMarker),
+            "EscapeBody" => Some(Self::EscapeBody),
+            "ContinuationMarker" => Some(Self::ContinuationMarker),
+            "ErrorRegion" => Some(Self::ErrorRegion),
+            _ => None,
         }
     }
 }
@@ -674,6 +699,51 @@ impl Document {
         self.properties
             .iter()
             .find(|property| property.node == node)
+            .ok_or(consema_document::LocationError::OutOfBounds)
+    }
+
+    /// Resolves one natural-line handle only within this snapshot.
+    pub fn natural_line(
+        &self,
+        node: NodeRef,
+    ) -> Result<&PropertiesNaturalLine, consema_document::LocationError> {
+        self.authority.verify(node)?;
+        if node.role() != consema_document::NodeRole::PropertiesNaturalLine {
+            return Err(consema_document::LocationError::WrongRole);
+        }
+        self.natural_lines
+            .iter()
+            .find(|line| line.node == node)
+            .ok_or(consema_document::LocationError::OutOfBounds)
+    }
+
+    /// Resolves one logical-line handle only within this snapshot.
+    pub fn logical_line(
+        &self,
+        node: NodeRef,
+    ) -> Result<&PropertiesLogicalLine, consema_document::LocationError> {
+        self.authority.verify(node)?;
+        if node.role() != consema_document::NodeRole::PropertiesLogicalLine {
+            return Err(consema_document::LocationError::WrongRole);
+        }
+        self.logical_lines
+            .iter()
+            .find(|line| line.node == node)
+            .ok_or(consema_document::LocationError::OutOfBounds)
+    }
+
+    /// Resolves one escape handle only within this snapshot.
+    pub fn escape(
+        &self,
+        node: NodeRef,
+    ) -> Result<&PropertiesEscape, consema_document::LocationError> {
+        self.authority.verify(node)?;
+        if node.role() != consema_document::NodeRole::PropertiesEscape {
+            return Err(consema_document::LocationError::WrongRole);
+        }
+        self.escapes
+            .iter()
+            .find(|escape| escape.node == node)
             .ok_or(consema_document::LocationError::OutOfBounds)
     }
 }
