@@ -7,7 +7,7 @@ use consema_core::{
     QueryDefinition, QueryDomain, QueryExpression, QueryFailure, QueryLimits,
 };
 use consema_document::{
-    AssociationPlacement, EditPlanSourceId, FormationStatus, MaterializationFailure,
+    AssociationPlacement, ContentDigest, EditPlanSourceId, FormationStatus, MaterializationFailure,
     MaterializationRequest, MaterializationResult, MaterializationStyleId, NewlinePolicy,
     ParseLimits, ProfileId,
 };
@@ -22,6 +22,13 @@ use std::collections::HashSet;
 /// Embedded language-neutral Consema 0.6 JSON-family suite.
 pub const JSON_FAMILY_V2_VECTORS_JSON: &str =
     include_str!("../../../conformance/vectors/json-family-v2.json");
+
+/// JSON5 v2.2.3 reference parser corpus with pinned provenance and license.
+pub const JSON5_REFERENCE_CORPUS_JSON: &str =
+    include_str!("../../../conformance/corpora/json5-v2.2.3.json");
+
+const JSON5_PACKAGE_FIXTURE: &[u8] =
+    include_bytes!("../../../conformance/fixtures/json5/package-json5-v2.2.3.json5");
 
 /// Runs the embedded JSON-family production suite.
 #[must_use]
@@ -94,6 +101,207 @@ pub fn run_json_family_v2_json(json: &str) -> ConformanceReport {
         }
     }
     report
+}
+
+/// Runs the pinned upstream JSON5 reference corpus and exact package fixture.
+#[must_use]
+pub fn run_json5_reference_corpus() -> ConformanceReport {
+    run_json5_reference_corpus_json(JSON5_REFERENCE_CORPUS_JSON)
+}
+
+/// Runs caller-supplied JSON5 reference-corpus metadata plus the pinned fixture.
+#[must_use]
+pub fn run_json5_reference_corpus_json(json: &str) -> ConformanceReport {
+    let value = match strict_core_value(json) {
+        Ok(value) => value,
+        Err(error) => return failed_reference_suite("suite.parse", error),
+    };
+    let Some(root) = value.as_object() else {
+        return failed_reference_suite("suite.schema", "corpus root is not Object".to_owned());
+    };
+    if object_field(root, "suite").and_then(PortableValue::as_string)
+        != Some("consema.json5.reference-corpus@1")
+    {
+        return failed_reference_suite("suite.schema", "corpus suite is invalid".to_owned());
+    }
+    let Some(upstream) = object_field(root, "upstream").and_then(PortableValue::as_object) else {
+        return failed_reference_suite("suite.schema", "upstream metadata is missing".to_owned());
+    };
+    if object_field(upstream, "repository").and_then(PortableValue::as_string)
+        != Some("https://github.com/json5/json5")
+        || object_field(upstream, "tag").and_then(PortableValue::as_string) != Some("v2.2.3")
+        || object_field(upstream, "commit").and_then(PortableValue::as_string)
+            != Some("c3a75242772a5026a49c4017a16d9b3543b62776")
+        || object_field(upstream, "upstream_fixture_blob_sha1").and_then(PortableValue::as_string)
+            != Some("322bed5576031badba3383fe7343d39d21292942")
+        || object_field(upstream, "stored_fixture_blob_sha1").and_then(PortableValue::as_string)
+            != Some("d22ccc6cfbe4fec92c31d0512e311a7638a4ac4c")
+        || object_field(upstream, "stored_fixture_sha256").and_then(PortableValue::as_string)
+            != Some("ef3136abec4e0a19f610e39c7654dda5a06fee242ab8012df87d7ad9911411ad")
+        || object_field(upstream, "license").and_then(PortableValue::as_string) != Some("MIT")
+        || ContentDigest::of(JSON5_PACKAGE_FIXTURE).to_hex()
+            != "ef3136abec4e0a19f610e39c7654dda5a06fee242ab8012df87d7ad9911411ad"
+    {
+        return failed_reference_suite(
+            "suite.schema",
+            "upstream provenance is not the frozen JSON5 reference".to_owned(),
+        );
+    }
+
+    let mut report = ConformanceReport {
+        suite: "consema.json5.reference-corpus@1".to_owned(),
+        passed: Vec::new(),
+        failed: Vec::new(),
+    };
+    let mut seen = HashSet::new();
+    run_reference_cases(root, "valid", true, &mut seen, &mut report);
+    run_reference_cases(root, "invalid", false, &mut seen, &mut report);
+
+    let fixture_id = "fixture.package-json5-v2.2.3";
+    match parse(
+        JSON5_PACKAGE_FIXTURE,
+        JsonProfile::Json5StandardV1,
+        ParseLimits::default(),
+    ) {
+        Ok(document)
+            if document.formation_status() == FormationStatus::Complete
+                && document.render() == JSON5_PACKAGE_FIXTURE
+                && matches!(
+                    document.project(
+                        &ProjectionRequestBuilder::new(ProjectionTarget::Json5BestExactCoreV1)
+                            .build()
+                            .expect("fixed fixture projection")
+                    ),
+                    ProjectionResult::Complete(_)
+                ) =>
+        {
+            report.passed.push(fixture_id.to_owned());
+        }
+        Ok(document) => report.failed.push((
+            fixture_id.to_owned(),
+            format!(
+                "fixture did not close exactly: status={:?}, diagnostics={:?}",
+                document.formation_status(),
+                document.diagnostics()
+            ),
+        )),
+        Err(error) => report
+            .failed
+            .push((fixture_id.to_owned(), format!("{error:?}"))),
+    }
+    report
+}
+
+fn strict_core_value(json: &str) -> Result<PortableValue, String> {
+    let document = parse(
+        json.as_bytes(),
+        JsonProfile::StrictV1,
+        ParseLimits::default(),
+    )
+    .map_err(debug)?;
+    let projection = ProjectionRequestBuilder::new(ProjectionTarget::BestExactCoreV1)
+        .build()
+        .expect("fixed corpus projection");
+    match document.project(&projection) {
+        ProjectionResult::Complete(result) => Ok(result.value),
+        ProjectionResult::Failed(error) => Err(format!("{error:?}")),
+    }
+}
+
+fn failed_reference_suite(id: &str, error: String) -> ConformanceReport {
+    ConformanceReport {
+        suite: "consema.json5.reference-corpus@1".to_owned(),
+        passed: Vec::new(),
+        failed: vec![(id.to_owned(), error)],
+    }
+}
+
+fn run_reference_cases(
+    root: &[consema_core::ObjectEntry],
+    field: &str,
+    valid: bool,
+    seen: &mut HashSet<String>,
+    report: &mut ConformanceReport,
+) {
+    let Some(cases) = object_field(root, field).and_then(PortableValue::as_sequence) else {
+        report.failed.push((
+            "suite.schema".to_owned(),
+            format!("{field} cases are missing"),
+        ));
+        return;
+    };
+    for case in cases {
+        let Some(fields) = case.as_object() else {
+            report.failed.push((
+                "suite.schema".to_owned(),
+                format!("{field} case is not Object"),
+            ));
+            continue;
+        };
+        let Some(id) = object_field(fields, "id").and_then(PortableValue::as_string) else {
+            report
+                .failed
+                .push(("suite.schema".to_owned(), format!("{field} case lacks id")));
+            continue;
+        };
+        let case_id = format!("{field}.{id}");
+        if !seen.insert(case_id.clone()) {
+            report
+                .failed
+                .push((case_id, "duplicate reference case id".to_owned()));
+            continue;
+        }
+        let Some(source) = object_field(fields, "source").and_then(PortableValue::as_string) else {
+            report
+                .failed
+                .push((case_id, "reference case lacks source".to_owned()));
+            continue;
+        };
+        let result = if valid {
+            validate_reference_acceptance(fields, source)
+        } else {
+            validate_reference_rejection(source)
+        };
+        match result {
+            Ok(()) => report.passed.push(case_id),
+            Err(error) => report.failed.push((case_id, error)),
+        }
+    }
+}
+
+fn validate_reference_acceptance(
+    fields: &[consema_core::ObjectEntry],
+    source: &str,
+) -> Result<(), String> {
+    let document = json5(source)?;
+    ensure(document.render() == source.as_bytes())?;
+    ensure(document.formation_status() == FormationStatus::Complete)?;
+    if let Some(codes) =
+        object_field(fields, "diagnostic_contains").and_then(PortableValue::as_sequence)
+    {
+        for code in codes {
+            let code = code
+                .as_string()
+                .ok_or_else(|| "diagnostic_contains must contain strings".to_owned())?;
+            ensure(document.diagnostics().iter().any(|item| item.code == code))?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_reference_rejection(source: &str) -> Result<(), String> {
+    match parse(
+        source.as_bytes(),
+        JsonProfile::Json5StandardV1,
+        ParseLimits::default(),
+    ) {
+        Err(_) => Ok(()),
+        Ok(document) => ensure(
+            document.render() == source.as_bytes()
+                && document.formation_status() == FormationStatus::Recovered
+                && !document.diagnostics().is_empty(),
+        ),
+    }
 }
 
 fn failed_suite(id: &str, error: String) -> ConformanceReport {
@@ -846,6 +1054,27 @@ mod tests {
         assert_eq!(
             report.failed.first().map(|item| item.0.as_str()),
             Some("protocol.registry.semantic-model-v4")
+        );
+    }
+
+    #[test]
+    fn pinned_json5_reference_corpus_is_conformant() {
+        let report = run_json5_reference_corpus();
+        assert!(report.is_conformant(), "{:#?}", report.failed);
+        assert_eq!(report.passed.len(), 83);
+    }
+
+    #[test]
+    fn reference_corpus_classification_drives_results() {
+        let mutated = JSON5_REFERENCE_CORPUS_JSON.replacen(
+            "\"id\": \"object.empty\", \"source\": \"{}\"",
+            "\"id\": \"object.empty\", \"source\": \"{\"",
+            1,
+        );
+        let report = run_json5_reference_corpus_json(&mutated);
+        assert_eq!(
+            report.failed.first().map(|item| item.0.as_str()),
+            Some("valid.object.empty")
         );
     }
 }

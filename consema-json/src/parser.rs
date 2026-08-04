@@ -522,7 +522,7 @@ fn lex_json5(
                         LexemeClass::Error
                     }
                 }
-                '\\' | '$' | '_' if character == '\\' || is_json5_identifier_start(character) => {
+                _ if character == '\\' || is_json5_identifier_start(character) => {
                     let (end, valid) = scan_json5_identifier(source, start);
                     offset = end;
                     if valid {
@@ -538,12 +538,6 @@ fn lex_json5(
                         ));
                         LexemeClass::Error
                     }
-                }
-                _ if is_json5_identifier_start(character) => {
-                    let (end, valid) = scan_json5_identifier(source, start);
-                    offset = end;
-                    debug_assert!(valid);
-                    LexemeClass::Token(TokenKind::Identifier)
                 }
                 _ => {
                     offset += character.len_utf8();
@@ -1576,6 +1570,26 @@ mod tests {
         }
         for invalid in ["01", ".", "0x", "1e", "0b1", "1_0", "+true"] {
             assert!(!valid_json5_number(invalid), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn json5_invalid_escape_after_identifier_start_recovers_without_panicking() {
+        for source in [r"{a\u0021:1}", r"{π\u0021:1}"] {
+            let document = parse(
+                source.as_bytes().into(),
+                JsonProfile::Json5StandardV1,
+                ParseLimits::default(),
+            )
+            .unwrap();
+            assert_eq!(document.render(), source.as_bytes());
+            assert_eq!(document.formation_status(), FormationStatus::Recovered);
+            assert!(
+                document
+                    .diagnostics()
+                    .iter()
+                    .any(|item| item.code == "json5.syntax.invalid-identifier@1")
+            );
         }
     }
 

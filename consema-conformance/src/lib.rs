@@ -26,7 +26,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 pub use json_family_v2::{
-    JSON_FAMILY_V2_VECTORS_JSON, run_json_family_v2, run_json_family_v2_json,
+    JSON_FAMILY_V2_VECTORS_JSON, JSON5_REFERENCE_CORPUS_JSON, run_json_family_v2,
+    run_json_family_v2_json, run_json5_reference_corpus, run_json5_reference_corpus_json,
 };
 pub use operations_v1::{OPERATIONS_V1_VECTORS_JSON, run_operations_v1, run_operations_v1_json};
 pub use protocol_v1::{PROTOCOL_V1_VECTORS_JSON, run_protocol_v1};
