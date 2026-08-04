@@ -136,6 +136,8 @@ pub enum YamlScalarKind {
     Binary,
     /// Scalar carrying an uninterpreted custom tag.
     Custom,
+    /// Scalar carrying a retained standard tag without a core tree lowering.
+    Tagged,
 }
 
 impl YamlSyntaxKind {
@@ -636,6 +638,15 @@ impl<'a> YamlSequenceItem<'a> {
             index: self.item.node,
         }
     }
+
+    /// Alias occurrence that supplied this element edge, when present.
+    #[must_use]
+    pub fn alias(self) -> Option<YamlAlias<'a>> {
+        self.item.alias.map(|ordinal| YamlAlias {
+            owner: self.owner,
+            alias: &self.owner.native.aliases[ordinal],
+        })
+    }
 }
 
 /// One ordered YAML mapping association with an arbitrary key node.
@@ -677,6 +688,24 @@ impl<'a> YamlMappingEntry<'a> {
             owner: self.owner,
             index: self.entry.value,
         }
+    }
+
+    /// Alias occurrence that supplied the key edge, when present.
+    #[must_use]
+    pub fn key_alias(self) -> Option<YamlAlias<'a>> {
+        self.entry.key_alias.map(|ordinal| YamlAlias {
+            owner: self.owner,
+            alias: &self.owner.native.aliases[ordinal],
+        })
+    }
+
+    /// Alias occurrence that supplied the value edge, when present.
+    #[must_use]
+    pub fn value_alias(self) -> Option<YamlAlias<'a>> {
+        self.entry.value_alias.map(|ordinal| YamlAlias {
+            owner: self.owner,
+            alias: &self.owner.native.aliases[ordinal],
+        })
     }
 }
 
@@ -943,6 +972,7 @@ mod tests {
         assert_eq!(alias.target().node_ref(), sequence.node_ref());
         let element = sequence.sequence_item(1).unwrap();
         assert_eq!(element.span(), alias.span());
+        assert_eq!(element.alias().unwrap().node_ref(), alias.node_ref());
         assert_eq!(
             element.node_ref().role(),
             consema_document::NodeRole::YamlSequenceElement
@@ -1064,6 +1094,51 @@ mod tests {
         assert_eq!(
             invalid_kind.diagnostics()[0].code,
             "yaml.tag.kind-mismatch@1"
+        );
+    }
+
+    #[test]
+    fn standard_repository_tags_survive_graph_projection_without_constructors() {
+        let document = parse(
+            b"set: !!set {a: null}\nbinary: !!binary SGVsbG8=\ntime: !!timestamp 2001-12-15\n"
+                .as_slice(),
+            YamlProfile::Yaml11CompatV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let root = document.document(0).unwrap().root();
+        assert_eq!(
+            root.mapping_entry(0).unwrap().value().tag(),
+            "tag:yaml.org,2002:set"
+        );
+        assert_eq!(
+            root.mapping_entry(1)
+                .unwrap()
+                .value()
+                .scalar()
+                .unwrap()
+                .canonical(),
+            "SGVsbG8="
+        );
+        let graph = document.project_graph().unwrap();
+        assert!(
+            graph
+                .nodes()
+                .any(|(_, node)| node.tag() == "tag:yaml.org,2002:set")
+        );
+        assert!(
+            graph
+                .nodes()
+                .any(|(_, node)| node.tag() == "tag:yaml.org,2002:binary")
+        );
+
+        assert!(
+            parse(
+                b"!!set [a]".as_slice(),
+                YamlProfile::Yaml11CompatV1,
+                ParseLimits::default(),
+            )
+            .is_err()
         );
     }
 }

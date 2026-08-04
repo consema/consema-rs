@@ -21,6 +21,12 @@ const TAG_SEQ: &str = "tag:yaml.org,2002:seq";
 const TAG_MAP: &str = "tag:yaml.org,2002:map";
 const TAG_TIMESTAMP: &str = "tag:yaml.org,2002:timestamp";
 const TAG_BINARY: &str = "tag:yaml.org,2002:binary";
+const TAG_MERGE: &str = "tag:yaml.org,2002:merge";
+const TAG_OMAP: &str = "tag:yaml.org,2002:omap";
+const TAG_PAIRS: &str = "tag:yaml.org,2002:pairs";
+const TAG_SET: &str = "tag:yaml.org,2002:set";
+const TAG_VALUE: &str = "tag:yaml.org,2002:value";
+const TAG_YAML: &str = "tag:yaml.org,2002:yaml";
 
 #[derive(Clone, Debug)]
 pub(crate) struct NativeStream {
@@ -64,6 +70,7 @@ pub(crate) struct NativeSequenceItem {
     pub(crate) identity: u64,
     pub(crate) node: usize,
     pub(crate) span: Span,
+    pub(crate) alias: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -72,6 +79,8 @@ pub(crate) struct NativeMappingEntry {
     pub(crate) key: usize,
     pub(crate) value: usize,
     pub(crate) span: Span,
+    pub(crate) key_alias: Option<usize>,
+    pub(crate) value_alias: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -135,10 +144,7 @@ impl NativeStream {
             .map(|_| builder.reserve_node())
             .collect::<Result<Vec<_>, _>>()?;
         for (index, node) in self.nodes.iter().enumerate() {
-            if !matches!(
-                node.tag.as_ref(),
-                TAG_NULL | TAG_BOOL | TAG_INT | TAG_FLOAT | TAG_STR | TAG_SEQ | TAG_MAP
-            ) {
+            if !is_standard_graph_tag(&node.tag) {
                 return Err(GraphProjectionError::UnsupportedTag(node.tag.to_string()));
             }
             match &node.content {
@@ -196,6 +202,7 @@ struct Composer<'a> {
 struct ComposedOccurrence {
     node: usize,
     span: Span,
+    alias: Option<usize>,
 }
 
 impl Composer<'_> {
@@ -257,6 +264,7 @@ impl Composer<'_> {
                     return Err(native_failure("yaml.alias.name-mismatch@1"));
                 }
                 let identity = self.association_identity()?;
+                let alias = self.composed_aliases.len();
                 self.composed_aliases.push(NativeAlias {
                     identity,
                     name,
@@ -266,6 +274,7 @@ impl Composer<'_> {
                 Ok(ComposedOccurrence {
                     node: target,
                     span: occurrence.span,
+                    alias: Some(alias),
                 })
             }
             BackendEventKind::Scalar {
@@ -292,7 +301,11 @@ impl Composer<'_> {
                     span,
                     content: NativeContent::Scalar(scalar),
                 });
-                Ok(ComposedOccurrence { node: index, span })
+                Ok(ComposedOccurrence {
+                    node: index,
+                    span,
+                    alias: None,
+                })
             }
             BackendEventKind::SequenceStart { anchor_id, tag } => {
                 let index = self.reserve_node()?;
@@ -305,6 +318,7 @@ impl Composer<'_> {
                         identity: self.association_identity()?,
                         node: occurrence.node,
                         span: occurrence.span,
+                        alias: occurrence.alias,
                     });
                 }
                 let end = self.take_simple(|kind| matches!(kind, BackendEventKind::SequenceEnd))?;
@@ -316,7 +330,11 @@ impl Composer<'_> {
                     span,
                     content: NativeContent::Sequence(Arc::from(items)),
                 });
-                Ok(ComposedOccurrence { node: index, span })
+                Ok(ComposedOccurrence {
+                    node: index,
+                    span,
+                    alias: None,
+                })
             }
             BackendEventKind::MappingStart { anchor_id, tag } => {
                 let index = self.reserve_node()?;
@@ -334,6 +352,8 @@ impl Composer<'_> {
                         key: key.node,
                         value: value.node,
                         span: self.covering_raw_spans(key.span, value.span)?,
+                        key_alias: key.alias,
+                        value_alias: value.alias,
                     });
                 }
                 let end = self.take_simple(|kind| matches!(kind, BackendEventKind::MappingEnd))?;
@@ -345,7 +365,11 @@ impl Composer<'_> {
                     span,
                     content: NativeContent::Mapping(Arc::from(entries)),
                 });
-                Ok(ComposedOccurrence { node: index, span })
+                Ok(ComposedOccurrence {
+                    node: index,
+                    span,
+                    alias: None,
+                })
             }
             _ => Err(native_failure("yaml.native.unexpected-event@1")),
         }
@@ -476,10 +500,14 @@ fn resolve_collection_tag(
     if resolved == "!" {
         return Ok(expected.to_owned());
     }
-    if is_standard_collection_tag(&resolved) && resolved != expected {
-        return Err(native_failure("yaml.tag.kind-mismatch@1"));
-    }
-    if is_standard_scalar_tag(&resolved) {
+    let valid_collection = match expected {
+        TAG_SEQ => matches!(resolved.as_str(), TAG_SEQ | TAG_OMAP | TAG_PAIRS),
+        TAG_MAP => matches!(resolved.as_str(), TAG_MAP | TAG_SET),
+        _ => false,
+    };
+    if (is_standard_collection_tag(&resolved) && !valid_collection)
+        || is_standard_scalar_tag(&resolved)
+    {
         return Err(native_failure("yaml.tag.kind-mismatch@1"));
     }
     Ok(resolved)
@@ -553,6 +581,12 @@ fn resolve_scalar(
             return Ok((
                 tag,
                 scalar(decoded, &canonical, YamlScalarKind::Binary, public_style),
+            ));
+        }
+        if matches!(tag.as_str(), TAG_MERGE | TAG_VALUE | TAG_YAML) {
+            return Ok((
+                tag,
+                scalar(decoded, decoded, YamlScalarKind::Tagged, public_style),
             ));
         }
         return Ok((
@@ -1037,14 +1071,27 @@ fn base64_value(value: u8) -> Option<u8> {
 }
 
 fn is_standard_collection_tag(tag: &str) -> bool {
-    matches!(tag, TAG_SEQ | TAG_MAP)
+    matches!(tag, TAG_SEQ | TAG_MAP | TAG_OMAP | TAG_PAIRS | TAG_SET)
 }
 
 fn is_standard_scalar_tag(tag: &str) -> bool {
     matches!(
         tag,
-        TAG_NULL | TAG_BOOL | TAG_INT | TAG_FLOAT | TAG_STR | TAG_TIMESTAMP | TAG_BINARY
+        TAG_NULL
+            | TAG_BOOL
+            | TAG_INT
+            | TAG_FLOAT
+            | TAG_STR
+            | TAG_TIMESTAMP
+            | TAG_BINARY
+            | TAG_MERGE
+            | TAG_VALUE
+            | TAG_YAML
     )
+}
+
+fn is_standard_graph_tag(tag: &str) -> bool {
+    is_standard_collection_tag(tag) || is_standard_scalar_tag(tag)
 }
 
 fn native_failure(code: &'static str) -> FatalFormationFailure {
