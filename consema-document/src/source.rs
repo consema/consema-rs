@@ -21,13 +21,19 @@ impl ContentDigest {
     /// Digest algorithm identifier frozen by the v1 source contract.
     #[must_use]
     pub const fn algorithm(self) -> &'static str {
-        "sha-256"
+        "sha256"
     }
 
     /// Exact 32 digest bytes.
     #[must_use]
     pub const fn bytes(self) -> [u8; 32] {
         self.0
+    }
+
+    /// Constructs a digest value from an already decoded 32-byte record.
+    #[must_use]
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
     }
 
     /// Lowercase hexadecimal representation.
@@ -167,6 +173,33 @@ pub struct EncodingFacts {
 }
 
 impl EncodingFacts {
+    /// Validates a structurally complete encoding-facts claim.
+    ///
+    /// This proves resolution consistency only. A source decoder must still
+    /// verify that the claimed BOM is present in the supplied raw bytes.
+    pub fn from_claim(
+        profile_default: SourceEncoding,
+        bom: Option<BomKind>,
+        declaration: Option<SourceEncoding>,
+        caller_override: Option<SourceEncoding>,
+        selected: SourceEncoding,
+    ) -> Result<Self, SourceError> {
+        let request = EncodingRequest {
+            profile_default,
+            declaration,
+            caller_override,
+        };
+        let resolved = resolve_assertions(request, bom)?;
+        if resolved.selected != selected {
+            return Err(SourceError::EncodingConflict {
+                bom: bom.map(BomKind::encoding),
+                declaration,
+                caller_override,
+            });
+        }
+        Ok(resolved)
+    }
+
     /// Profile fallback that participated in resolution.
     #[must_use]
     pub const fn profile_default(self) -> SourceEncoding {
@@ -503,6 +536,23 @@ fn resolve_encoding(bytes: &[u8], request: EncodingRequest) -> Result<EncodingFa
     } else {
         None
     };
+    resolve_assertions(request, bom)
+}
+
+fn resolve_assertions(
+    request: EncodingRequest,
+    bom: Option<BomKind>,
+) -> Result<EncodingFacts, SourceError> {
+    if request.profile_default == SourceEncoding::Binary
+        && (request.declaration.is_some_and(SourceEncoding::is_text)
+            || request.caller_override.is_some_and(SourceEncoding::is_text))
+    {
+        return Err(SourceError::EncodingConflict {
+            bom: bom.map(BomKind::encoding),
+            declaration: request.declaration,
+            caller_override: request.caller_override,
+        });
+    }
     let bom_encoding = bom.map(BomKind::encoding);
     let assertions = [bom_encoding, request.declaration, request.caller_override];
     let expected = assertions.into_iter().flatten().next();
@@ -830,6 +880,7 @@ mod tests {
             ContentDigest::of(b"abc").to_hex(),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+        assert_eq!(ContentDigest::of(b"abc").algorithm(), "sha256");
         assert_eq!(
             source(b"same", SourceEncoding::Utf8).digest(),
             source(b"same", SourceEncoding::Utf8).digest()
@@ -973,6 +1024,14 @@ mod tests {
             snapshot.decoded_position(0),
             Err(LocationError::NoDecodedText)
         );
+        assert!(matches!(
+            SourceSnapshot::from_raw(
+                Arc::<[u8]>::from(b"text".as_slice()),
+                EncodingRequest::binary().with_caller_override(SourceEncoding::Utf8),
+                SourceLimits::default(),
+            ),
+            Err(SourceError::EncodingConflict { .. })
+        ));
     }
 
     #[test]
