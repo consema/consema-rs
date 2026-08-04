@@ -12,6 +12,7 @@ mod error;
 mod error_registry;
 mod execution;
 mod limits;
+mod payload;
 mod projection;
 mod query;
 mod registry;
@@ -28,6 +29,7 @@ pub use diagnostic::{
 pub use error::{ProtocolError, ProtocolErrorKind};
 pub use error_registry::{
     ErrorCodeDescriptor, ErrorCodeRegistry, error_code_manifest_value, query_failure_code,
+    validate_error_code_manifest_value,
 };
 pub use execution::{CancellationRequest, Completion, CompletionStatus, ExecutionPolicy};
 pub use limits::ProtocolLimits;

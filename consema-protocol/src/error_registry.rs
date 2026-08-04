@@ -1,7 +1,7 @@
 //! Stable public diagnostic and failure code registry.
 
-use crate::schema::{object, string};
-use crate::{ProtocolError, ProtocolErrorKind};
+use crate::schema::{exact_fields, object, schema_fields, sequence, string};
+use crate::{ContractId, ProtocolError, ProtocolErrorKind};
 use consema_core::{DiagnosticCategory, PortableValue, QueryFailure, SequenceBuilder};
 
 /// One stable public code registry record.
@@ -443,6 +443,67 @@ pub fn error_code_manifest_value() -> PortableValue {
     ])
 }
 
+/// Strictly validates one transferable `core.error-code-registry@1` value.
+///
+/// Registry descriptions are presentation metadata, so a conforming peer may
+/// publish different non-empty wording. Identity, ordering, category and
+/// stability remain normative.
+pub fn validate_error_code_manifest_value(value: &PortableValue) -> Result<(), ProtocolError> {
+    let fields = schema_fields(
+        value,
+        "core.error-code-registry@1",
+        &["schema", "error_codes"],
+        "$",
+    )?;
+    let mut previous = None::<String>;
+    for (index, item) in sequence(fields[1], "$.error_codes")?.iter().enumerate() {
+        let path = format!("$.error_codes[{index}]");
+        let fields = exact_fields(
+            item,
+            &["code", "category", "introduced", "stability", "description"],
+            &path,
+        )?;
+        let code = string(fields[0], &format!("{path}.code"))?;
+        validate_versioned_code(code, &format!("{path}.code"))?;
+        parse_category(fields[1], &format!("{path}.category"))?;
+        if string(fields[2], &format!("{path}.introduced"))?.is_empty()
+            || string(fields[4], &format!("{path}.description"))?.is_empty()
+        {
+            return Err(crate::schema::invalid(
+                &path,
+                "introduced and description must be non-empty",
+            ));
+        }
+        if string(fields[3], &format!("{path}.stability"))? != "Stable" {
+            return Err(crate::schema::invalid(
+                &format!("{path}.stability"),
+                "unknown error-code stability",
+            ));
+        }
+        if previous
+            .as_deref()
+            .is_some_and(|candidate| candidate >= code)
+        {
+            return Err(crate::schema::invalid(
+                "$.error_codes",
+                "error codes must be sorted and unique",
+            ));
+        }
+        previous = Some(code.to_owned());
+    }
+    Ok(())
+}
+
+fn validate_versioned_code(code: &str, path: &str) -> Result<(), ProtocolError> {
+    let (id, version) = code
+        .rsplit_once('@')
+        .ok_or_else(|| crate::schema::invalid(path, "code lacks @version suffix"))?;
+    let version = version
+        .parse::<u32>()
+        .map_err(|_| crate::schema::invalid(path, "code version is invalid"))?;
+    ContractId::new(id, version).map(|_| ())
+}
+
 pub(crate) const fn category_name(category: DiagnosticCategory) -> &'static str {
     match category {
         DiagnosticCategory::Lexical => "Lexical",
@@ -522,5 +583,10 @@ mod tests {
                 .iter()
                 .all(|failure| { ErrorCodeRegistry::v1().contains(query_failure_code(failure)) })
         );
+    }
+
+    #[test]
+    fn published_error_code_manifest_is_strictly_valid() {
+        validate_error_code_manifest_value(&error_code_manifest_value()).unwrap();
     }
 }

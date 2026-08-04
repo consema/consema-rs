@@ -20,7 +20,8 @@ use consema_protocol::{
     ProtocolErrorKind, ProtocolLimits, ProtocolMessage, ProvenanceEntryMessage,
     ProvenanceMapMessage, ProvenanceRelation, QueryResultMessage, RegistryManifest,
     SourceOriginMessage, decode_json, decode_pvce, encode_json, encode_pvce,
-    query_definition_from_message, query_definition_message, query_failure_code,
+    error_code_manifest_value, query_definition_from_message, query_definition_message,
+    query_failure_code, validate_error_code_manifest_value,
 };
 use std::collections::BTreeMap;
 
@@ -88,6 +89,9 @@ fn run_case(id: &str) -> Result<(), String> {
         "protocol.envelope.dual-transport" => envelope_dual_transport(),
         "protocol.envelope.reject-unknown-contract" => reject_unknown_contract(),
         "protocol.envelope.reject-schema-mismatch" => reject_schema_mismatch(),
+        "protocol.envelope.reject-schema-only-payload" => reject_schema_only_payload(),
+        "protocol.envelope.reject-nested-envelope" => reject_nested_envelope(),
+        "protocol.envelope.reject-semantic-model-identity" => reject_semantic_model_identity(),
         "protocol.profile.roundtrip" => profile_roundtrip(),
         "protocol.capability.conditional-roundtrip" => capability_roundtrip(),
         "protocol.capability.reject-contradiction" => capability_contradiction(),
@@ -101,6 +105,7 @@ fn run_case(id: &str) -> Result<(), String> {
         "protocol.provenance.externalized-roundtrip" => provenance_roundtrip(),
         "protocol.change-set.actual-edit-roundtrip" => change_set_roundtrip(),
         "protocol.registry.current-roundtrip" => registry_roundtrip(),
+        "protocol.registry.error-code-schema" => error_code_schema(),
         "protocol.errors.query-codes-registered" => query_codes_registered(),
         _ => Err("runner does not recognize published protocol case".to_owned()),
     }
@@ -253,6 +258,54 @@ fn reject_schema_mismatch() -> Result<(), String> {
             ContractRegistry::v1(),
         )
         .is_err_and(|error| error.kind() == ProtocolErrorKind::SchemaMismatch),
+    )
+}
+
+fn reject_schema_only_payload() -> Result<(), String> {
+    let mut payload = consema_core::ObjectBuilder::new();
+    payload
+        .insert("schema", PortableValue::string("core.diagnostic@1"))
+        .unwrap();
+    payload
+        .insert("placeholder", PortableValue::null())
+        .unwrap();
+    ensure(
+        ProtocolMessage::new(
+            ContractId::new("core.diagnostic", 1).unwrap(),
+            payload.build(),
+            ContractRegistry::v1(),
+        )
+        .is_err_and(|error| error.kind() == ProtocolErrorKind::UnknownField),
+    )
+}
+
+fn reject_nested_envelope() -> Result<(), String> {
+    let mut payload = consema_core::ObjectBuilder::new();
+    payload
+        .insert("schema", PortableValue::string("core.protocol-message@1"))
+        .unwrap();
+    ensure(
+        ProtocolMessage::new(
+            ContractId::new("core.protocol-message", 1).unwrap(),
+            payload.build(),
+            ContractRegistry::v1(),
+        )
+        .is_err_and(|error| error.kind() == ProtocolErrorKind::InvalidValue),
+    )
+}
+
+fn reject_semantic_model_identity() -> Result<(), String> {
+    let mut payload = consema_core::ObjectBuilder::new();
+    payload
+        .insert("schema", PortableValue::string("core.semantic-model@1"))
+        .unwrap();
+    ensure(
+        ProtocolMessage::new(
+            ContractId::new("core.semantic-model", 1).unwrap(),
+            payload.build(),
+            ContractRegistry::v1(),
+        )
+        .is_err_and(|error| error.kind() == ProtocolErrorKind::UnknownContract),
     )
 }
 
@@ -474,6 +527,11 @@ fn registry_roundtrip() -> Result<(), String> {
     )
 }
 
+fn error_code_schema() -> Result<(), String> {
+    validate_error_code_manifest_value(&error_code_manifest_value())
+        .map_err(|error| error.to_string())
+}
+
 fn query_codes_registered() -> Result<(), String> {
     let failures = vec![
         QueryFailure::DomainMismatch(QueryDomain::new("example.domain", 1)),
@@ -523,6 +581,6 @@ mod tests {
     fn published_protocol_v1_suite_is_conformant() {
         let report = run_protocol_v1();
         assert!(report.is_conformant(), "{report:#?}");
-        assert_eq!(report.passed.len(), 24);
+        assert_eq!(report.passed.len(), 28);
     }
 }

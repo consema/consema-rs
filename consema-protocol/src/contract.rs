@@ -1,5 +1,6 @@
 //! Contract identifiers, registry, and the common protocol envelope.
 
+use crate::payload::validate_registered_payload;
 use crate::schema::{object, schema_fields, string, unsigned_u32};
 use crate::{
     ProtocolError, ProtocolErrorKind, ProtocolLimits, decode_json, decode_pvce, encode_json,
@@ -84,7 +85,6 @@ const CONTRACTS: &[ContractDescriptor] = &[
     descriptor("core.query-definition", ContractStability::Stable),
     descriptor("core.query-result", ContractStability::Stable),
     descriptor("core.registry-manifest", ContractStability::Stable),
-    descriptor("core.semantic-model", ContractStability::Stable),
 ];
 
 const fn descriptor(id: &'static str, stability: ContractStability) -> ContractDescriptor {
@@ -115,11 +115,17 @@ impl ContractRegistry {
     /// Whether an exact ID/version pair is registered.
     #[must_use]
     pub fn recognizes(self, contract: &ContractId) -> bool {
-        CONTRACTS
+        self.descriptor(contract).is_some()
+    }
+
+    fn descriptor(self, contract: &ContractId) -> Option<&'static ContractDescriptor> {
+        let contracts = self.contracts();
+        contracts
             .binary_search_by(|candidate| {
                 (candidate.id, candidate.version).cmp(&(contract.id(), contract.version()))
             })
-            .is_ok()
+            .ok()
+            .map(|index| &contracts[index])
     }
 }
 
@@ -137,14 +143,22 @@ impl ProtocolMessage {
         payload: PortableValue,
         registry: ContractRegistry,
     ) -> Result<Self, ProtocolError> {
-        if !registry.recognizes(&contract) {
-            return Err(ProtocolError::new(
+        let descriptor = registry.descriptor(&contract).ok_or_else(|| {
+            ProtocolError::new(
                 ProtocolErrorKind::UnknownContract,
                 "$.contract",
                 contract.schema(),
+            )
+        })?;
+        if descriptor.stability == ContractStability::Transport {
+            return Err(ProtocolError::new(
+                ProtocolErrorKind::InvalidValue,
+                "$.contract",
+                "transport envelopes cannot be nested as payload contracts",
             ));
         }
         validate_payload_schema(&payload, &contract)?;
+        validate_registered_payload(&contract, &payload)?;
         Ok(Self { contract, payload })
     }
 
@@ -282,19 +296,18 @@ fn validate_identifier(identifier: &str, path: &str) -> Result<(), ProtocolError
 mod tests {
     use super::*;
 
-    fn diagnostic_payload() -> PortableValue {
-        object(vec![
-            ("schema", PortableValue::string("core.diagnostic@1")),
-            ("placeholder", PortableValue::null()),
-        ])
+    fn completion_payload() -> PortableValue {
+        crate::Completion::new(crate::CompletionStatus::Success, 1, 1, None, None)
+            .unwrap()
+            .to_value()
     }
 
     #[test]
     fn envelope_round_trips_over_both_transports() {
         let registry = ContractRegistry::v1();
         let message = ProtocolMessage::new(
-            ContractId::new("core.diagnostic", 1).unwrap(),
-            diagnostic_payload(),
+            ContractId::new("core.completion", 1).unwrap(),
+            completion_payload(),
             registry,
         )
         .unwrap();
@@ -338,6 +351,34 @@ mod tests {
             .kind(),
             ProtocolErrorKind::SchemaMismatch
         );
+    }
+
+    #[test]
+    fn matching_schema_does_not_bypass_full_payload_validation() {
+        let error = ProtocolMessage::new(
+            ContractId::new("core.diagnostic", 1).unwrap(),
+            object(vec![
+                ("schema", PortableValue::string("core.diagnostic@1")),
+                ("placeholder", PortableValue::null()),
+            ]),
+            ContractRegistry::v1(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::UnknownField);
+    }
+
+    #[test]
+    fn transport_envelope_is_not_a_nested_payload_contract() {
+        let error = ProtocolMessage::new(
+            ContractId::new("core.protocol-message", 1).unwrap(),
+            object(vec![(
+                "schema",
+                PortableValue::string("core.protocol-message@1"),
+            )]),
+            ContractRegistry::v1(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue);
     }
 
     #[test]
