@@ -10,6 +10,13 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod pgce;
+
+pub use pgce::{
+    PGCE_MAGIC, PGCE_VERSION, PgceDecodeError, PgceEncodeError, PgceLimits, decode_pgce,
+    encode_pgce, encode_pgce_bounded,
+};
+
 static NEXT_GRAPH: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
