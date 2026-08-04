@@ -16,6 +16,7 @@ mod limits;
 mod materialization;
 mod operation;
 mod payload;
+mod portable_graph;
 mod projection;
 mod query;
 mod registry;
@@ -47,6 +48,7 @@ pub use materialization::{
     MaterializedOriginMessage,
 };
 pub use operation::{EditOperationSummaryMessage, EditPlanMessage, FormatOperationRegistryMessage};
+pub use portable_graph::PortableGraphMessage;
 pub use projection::{
     LossClassification, ProjectedLocationMessage, ProjectionEventMessage, ProjectionFidelity,
     ProjectionPolicy, ProjectionReportMessage, ProjectionRequestMessage, ProjectionResultMessage,
