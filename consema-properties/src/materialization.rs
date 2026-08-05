@@ -371,6 +371,23 @@ fn verify_closure(
     };
     match projection {
         ProjectionResult::Complete(complete) if complete.value == *input => Ok(()),
+        ProjectionResult::Failed(failed)
+            if failed.diagnostics.first().is_some_and(|diagnostic| {
+                diagnostic.code == "core.projection.resource-limit@1"
+            }) =>
+        {
+            let limit = failed
+                .diagnostics
+                .first()
+                .and_then(|diagnostic| diagnostic.arguments.get("limit"))
+                .map(String::as_str);
+            Err(MaterializationFailure::ResourceLimit(match limit {
+                Some("max_source_associations" | "max_value_nodes") => "input-nodes",
+                Some("max_report_entries") => "report-entries",
+                Some("max_provenance_units") => "provenance-entries",
+                _ => "projection",
+            }))
+        }
         ProjectionResult::Complete(_) | ProjectionResult::Failed(_) => {
             Err(MaterializationFailure::FormationFailed)
         }
@@ -830,7 +847,10 @@ mod tests {
                     &value,
                     &request(PropertiesProfile::ReaderV1).with_limits(limits)
                 ),
-                MaterializationResult::Failed(_)
+                MaterializationResult::Failed(FailedMaterializationAttempt {
+                    failure: MaterializationFailure::ResourceLimit(_),
+                    ..
+                })
             ));
         }
     }
