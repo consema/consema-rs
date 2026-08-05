@@ -4,6 +4,7 @@ mod ini_v1;
 mod json_family_v2;
 mod operations_v1;
 mod portable_graph_v1;
+mod properties_v1;
 mod protocol_v1;
 mod protocol_v2;
 mod semantic_model_v5;
@@ -39,6 +40,7 @@ pub use operations_v1::{OPERATIONS_V1_VECTORS_JSON, run_operations_v1, run_opera
 pub use portable_graph_v1::{
     PORTABLE_GRAPH_V1_VECTORS_JSON, run_portable_graph_v1, run_portable_graph_v1_json,
 };
+pub use properties_v1::{PROPERTIES_V1_VECTORS_JSON, run_properties_v1, run_properties_v1_json};
 pub use protocol_v1::{PROTOCOL_V1_VECTORS_JSON, run_protocol_v1};
 pub use protocol_v2::{PROTOCOL_V2_VECTORS_JSON, run_protocol_v2, run_protocol_v2_json};
 pub use semantic_model_v5::{
