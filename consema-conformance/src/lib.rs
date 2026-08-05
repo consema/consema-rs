@@ -1,6 +1,7 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
 mod ini_python_oracle;
+mod ini_qt_oracle;
 mod ini_v1;
 mod ini_windows_oracle;
 mod json_family_v2;
@@ -37,6 +38,7 @@ use std::hash::{Hash, Hasher};
 pub use ini_python_oracle::{
     INI_PYTHON_ORACLE_JSON, run_ini_python_oracle, run_ini_python_oracle_json,
 };
+pub use ini_qt_oracle::{INI_QT_ORACLE_JSON, run_ini_qt_oracle, run_ini_qt_oracle_json};
 pub use ini_v1::{INI_V1_VECTORS_JSON, run_ini_v1, run_ini_v1_json};
 pub use ini_windows_oracle::{
     INI_WINDOWS_ORACLE_JSON, run_ini_windows_oracle, run_ini_windows_oracle_json,
