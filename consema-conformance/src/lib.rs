@@ -1,5 +1,6 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
+mod ini_dotnet_oracle;
 mod ini_python_oracle;
 mod ini_qt_oracle;
 mod ini_v1;
@@ -35,6 +36,9 @@ use consema_pvce::{
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+pub use ini_dotnet_oracle::{
+    INI_DOTNET_ORACLE_JSON, run_ini_dotnet_oracle, run_ini_dotnet_oracle_json,
+};
 pub use ini_python_oracle::{
     INI_PYTHON_ORACLE_JSON, run_ini_python_oracle, run_ini_python_oracle_json,
 };
