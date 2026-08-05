@@ -332,7 +332,7 @@ impl Parser {
             PropertiesSyntaxKind::Whitespace,
         );
         self.mark_atoms(
-            marker_index..marker_index + 1,
+            marker_index..marker_index.saturating_add(1),
             PropertiesSyntaxKind::CommentMarker,
         );
         self.mark_atoms(

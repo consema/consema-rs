@@ -380,7 +380,7 @@ impl Parser {
             self.push_entry_syntax(
                 &line,
                 0..delimiter,
-                delimiter..delimiter + 1,
+                delimiter..delimiter.saturating_add(1),
                 delimiter + 1..content.len(),
                 None,
             )?;
@@ -447,7 +447,7 @@ impl Parser {
             self.push_optional_whitespace(&line, key_end..delimiter)?;
             self.push_piece_local(
                 &line,
-                delimiter..delimiter + 1,
+                delimiter..delimiter.saturating_add(1),
                 StructuralPieceKind::Token,
                 IniSyntaxKind::Delimiter,
             )?;
@@ -534,7 +534,7 @@ impl Parser {
         self.push_optional_whitespace(&line, key_end..delimiter)?;
         self.push_piece_local(
             &line,
-            delimiter..delimiter + 1,
+            delimiter..delimiter.saturating_add(1),
             StructuralPieceKind::Token,
             IniSyntaxKind::Delimiter,
         )?;
@@ -926,7 +926,7 @@ impl Parser {
         self.push_optional_whitespace(line, 0..leading)?;
         self.push_piece_local(
             line,
-            leading..leading + 1,
+            leading..leading.saturating_add(1),
             StructuralPieceKind::Trivia,
             IniSyntaxKind::CommentMarker,
         )?;
