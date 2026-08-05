@@ -1,5 +1,6 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
+mod ini_v1;
 mod json_family_v2;
 mod operations_v1;
 mod portable_graph_v1;
@@ -29,6 +30,7 @@ use consema_pvce::{
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+pub use ini_v1::{INI_V1_VECTORS_JSON, run_ini_v1, run_ini_v1_json};
 pub use json_family_v2::{
     JSON_FAMILY_V2_VECTORS_JSON, JSON5_REFERENCE_CORPUS_JSON, run_json_family_v2,
     run_json_family_v2_json, run_json5_reference_corpus, run_json5_reference_corpus_json,
