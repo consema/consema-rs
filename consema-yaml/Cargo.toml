@@ -7,9 +7,9 @@ license.workspace = true
 description = "Lossless YAML 1.2 Core and YAML 1.1 compatibility documents"
 
 [dependencies]
-consema-core = { path = "../consema-core", version = "0.7.0" }
-consema-document = { path = "../consema-document", version = "0.7.0" }
-consema-graph = { path = "../consema-graph", version = "0.7.0" }
+consema-core = { path = "../consema-core", version = "0.8.0" }
+consema-document = { path = "../consema-document", version = "0.8.0" }
+consema-graph = { path = "../consema-graph", version = "0.8.0" }
 saphyr-parser.workspace = true
 
 [lints]
