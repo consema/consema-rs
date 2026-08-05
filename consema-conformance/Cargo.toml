@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Consema language-neutral conformance vectors"
+publish = false
 
 [dependencies]
 consema = { path = "../consema", version = "0.8.0" }
