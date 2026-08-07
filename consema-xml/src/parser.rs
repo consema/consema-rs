@@ -1767,14 +1767,8 @@ impl Parser {
             return Ok(());
         }
         self.error_regions += 1;
-        let raw_start = self
-            .source
-            .raw_byte_at(DecodedOffset::Utf8Byte(start))
-            .map_err(|_| profile_failure("xml.source.span@1"))?;
-        let raw_end = self
-            .source
-            .raw_byte_at(DecodedOffset::Utf8Byte(end))
-            .map_err(|_| profile_failure("xml.source.span@1"))?;
+        let raw_start = self.raw_offset(start)?;
+        let raw_end = self.raw_offset(end)?;
         let span = self.span(raw_start, raw_end)?;
         self.push_piece(
             span,
@@ -2030,19 +2024,40 @@ impl Parser {
             .ok_or_else(|| profile_failure("xml.source.span@1"))
     }
 
+    /// Converts one decoded UTF-8 byte offset to a raw source byte offset.
+    ///
+    /// A UTF-8 source is stored by `SourceSnapshot` byte-identical to its
+    /// decoded text (`DecodedStorage::RawUtf8` keeps the raw bytes as the
+    /// decoded text, BOM included), so decoded offsets are raw offsets and
+    /// the conversion is the identity. Other encodings transcode at
+    /// construction and must resolve through the source's checkpoint index.
+    ///
+    /// The fast path matters for formation cost: `raw_byte_at` re-validates
+    /// the entire source on every call (an O(source-length) `from_utf8`
+    /// pass), and the parser performs one span conversion per structural
+    /// piece — Θ(pieces) lookups × O(source) validation is the O(n²)
+    /// formation shape measured in task #53 (per-lookup cost grew exactly
+    /// with source size and consumed ~99% of parse time at 20,000 elements).
+    /// Every offset this parser resolves is a tokenizer span or a boundary
+    /// derived from ASCII structural markup (`<`, `>`, `=`, quotes, `&`, `;`,
+    /// `:`), so the boundary validation in `raw_byte_at` can never fire for
+    /// UTF-8 sources and the identity shortcut is behavior-preserving.
+    fn raw_offset(&self, decoded: usize) -> Result<usize, FatalFormationFailure> {
+        if self.source.encoding_facts().selected() == SourceEncoding::Utf8 {
+            return Ok(decoded);
+        }
+        self.source
+            .raw_byte_at(DecodedOffset::Utf8Byte(decoded))
+            .map_err(|_| profile_failure("xml.source.span@1"))
+    }
+
     fn raw_span_offset(
         &self,
         start: usize,
         end: usize,
     ) -> Result<Option<Span>, FatalFormationFailure> {
-        let start_raw = self
-            .source
-            .raw_byte_at(DecodedOffset::Utf8Byte(start))
-            .map_err(|_| profile_failure("xml.source.span@1"))?;
-        let end_raw = self
-            .source
-            .raw_byte_at(DecodedOffset::Utf8Byte(end))
-            .map_err(|_| profile_failure("xml.source.span@1"))?;
+        let start_raw = self.raw_offset(start)?;
+        let end_raw = self.raw_offset(end)?;
         Ok(Some(self.span(start_raw, end_raw)?))
     }
 
@@ -2822,5 +2837,43 @@ mod tests {
                 .any(|pair| pair == ["line-break", "whitespace"]),
             "line break and space runs get distinct kinds: {kinds:?}"
         );
+    }
+
+    #[test]
+    fn many_small_elements_formation_scales_linearly() {
+        // Regression net for task #53: formation was quadratic because every
+        // span conversion re-validated the whole UTF-8 source (one full
+        // `from_utf8` pass per lookup, ~42 lookups per element, ~99% of
+        // parse time at 20k elements). Measured pre-fix on this machine:
+        // 5k elements ≈ 2.4 s, 10k ≈ 20-28 s, 20k ≈ 47-97 s. The parser
+        // performs the same work post-fix in ~0.5-1.5 s at 20k (release).
+        // The bound below is deliberately generous (10k elements, 20 s) so
+        // debug-mode CI noise cannot flip it, while the pre-fix cost in
+        // debug (several minutes) would fail it by a wide margin.
+        let mut xml = Vec::with_capacity(10_000 * 48 + 16);
+        xml.extend_from_slice(b"<root>\r\n");
+        for i in 0..10_000 {
+            xml.extend_from_slice(b"<item><name>n");
+            xml.extend_from_slice(i.to_string().as_bytes());
+            xml.extend_from_slice(b"</name><value>v");
+            xml.extend_from_slice(i.to_string().as_bytes());
+            xml.extend_from_slice(b"</value></item>\r\n");
+        }
+        xml.extend_from_slice(b"</root>\r\n");
+        let start = std::time::Instant::now();
+        let document = parse_utf8(&xml).expect("the many-small-elements corpus forms");
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed.as_secs() < 20,
+            "10k-element formation must stay linear: took {elapsed:?}"
+        );
+        assert_eq!(document.status(), FormationStatus::Complete);
+        assert_eq!(
+            document.nodes().len(),
+            60_002,
+            "1 root + 3 elements and 2 text nodes per item + one whitespace \
+             node per item and one after <root> (6 * 10_000 + 2)"
+        );
+        assert_eq!(document.render(), xml, "lossless render stays byte-exact");
     }
 }

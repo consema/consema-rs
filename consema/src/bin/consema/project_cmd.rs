@@ -62,7 +62,16 @@ pub(crate) fn wire_projection_request(
             ));
         }
     };
-    if !target.id().starts_with(&format!("{family}.projection.")) {
+    // The java-properties family's published projection targets are
+    // namespaced `java-properties.projection.*` (RFC 0010) while its wire
+    // family name is "properties" (the facade conversion boundary,
+    // `query_cmd::format_family`); the family-prefix check needs the special
+    // case or every java-properties target is rejected (B-6).
+    let mut prefix = format!("{family}.projection.");
+    if family == "properties" {
+        "java-properties.projection.".clone_into(&mut prefix);
+    }
+    if !target.id().starts_with(&prefix) {
         return Err(FlowError::new(
             "cli.data.invalid-request@1",
             format!(
@@ -916,6 +925,77 @@ mod tests {
         );
         assert_eq!(code, 2);
         assert!(stderr_text(&stderr).contains("not published by this build"));
+    }
+
+    #[test]
+    fn wire_projection_request_accepts_published_java_properties_targets() {
+        // B-6: the properties family's published targets are namespaced
+        // `java-properties.projection.*` (RFC 0010); the family-prefix check
+        // must accept them for the wire family "properties".
+        let parsed = parse(&["project", "--profile", "java-properties.reader"]);
+        let decode = |target_id: &str| {
+            let request =
+                project_request("6e616d653d6170690a", "java-properties.reader", target_id);
+            match crate::query_cmd::decode_request(&request, &parsed, "core.projection-request@1") {
+                Ok(input) => ProjectionRequestMessage::from_value(&input.payload)
+                    .expect("projection request"),
+                Err(error) => panic!("strict request decodes: {}", error.message),
+            }
+        };
+        let mapped = wire_projection_request(
+            "properties",
+            &decode("java-properties.projection.best-exact-entry-mapping"),
+        );
+        assert!(
+            matches!(mapped, Ok(WireProjectionRequest::Properties(_))),
+            "the published java-properties target maps for the properties family"
+        );
+
+        let mapped = wire_projection_request(
+            "properties",
+            &decode("java-properties.projection.require-object"),
+        );
+        assert!(
+            matches!(mapped, Ok(WireProjectionRequest::Properties(_))),
+            "require-object maps for the properties family"
+        );
+
+        // A target of another family stays rejected.
+        match wire_projection_request("properties", &decode("toml.projection.best-exact-core")) {
+            Ok(_) => panic!("a toml target does not belong to the properties family"),
+            Err(error) => assert_eq!(error.code, "cli.data.invalid-request@1"),
+        }
+    }
+
+    #[test]
+    fn project_java_properties_source_is_refused_at_the_family_gate() {
+        // The wire mapping now accepts java-properties targets (B-6), so the
+        // only remaining blocker for `consema project` is the documented
+        // milestone-M5 family gate (B-3): non-json/toml families are refused
+        // with an explicit data error, never the target-prefix rejection.
+        let request = project_request(
+            "6e616d653d6170690a",
+            "java-properties.reader",
+            "java-properties.projection.best-exact-entry-mapping",
+        );
+        let (code, stdout, stderr) = run_request(
+            &["project", "--profile", "java-properties.reader", "--json"],
+            &request,
+        );
+        assert_eq!(code, 2, "{}", stderr_text(&stderr));
+        assert!(
+            stderr_text(&stderr).contains("not wired for the 'properties' family"),
+            "the family gate is the documented boundary (B-3): {}",
+            stderr_text(&stderr)
+        );
+        assert!(
+            !stderr_text(&stderr).contains("does not belong"),
+            "the prefix check must not be the rejection reason"
+        );
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], ProtocolLimits::default())
+                .expect("data-error envelope");
+        assert_eq!(envelope.exit_class(), ExitClass::Data);
     }
 
     #[test]

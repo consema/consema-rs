@@ -464,7 +464,11 @@ struct DecodedIndex {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum DecodedStorage {
-    RawUtf8,
+    /// UTF-8 bytes validated at construction; the validated text is retained
+    /// so `decoded_text` returns the stored view in O(1) instead of running a
+    /// full-buffer `from_utf8` pass on every call (the O(n²) formation root
+    /// cause measured in task #53).
+    RawUtf8(Arc<str>),
     Owned(Arc<str>),
     None,
 }
@@ -494,11 +498,15 @@ impl SourceSnapshot {
         let (decoded, variable_steps) = match encoding.selected {
             SourceEncoding::Binary => (DecodedStorage::None, None),
             SourceEncoding::Utf8 => {
-                std::str::from_utf8(&bytes).map_err(|error| SourceError::InvalidSequence {
-                    encoding: SourceEncoding::Utf8,
-                    byte_offset: error.valid_up_to(),
-                })?;
-                (DecodedStorage::RawUtf8, None)
+                let text =
+                    std::str::from_utf8(&bytes).map_err(|error| SourceError::InvalidSequence {
+                        encoding: SourceEncoding::Utf8,
+                        byte_offset: error.valid_up_to(),
+                    })?;
+                // One O(n) copy: the validated text is retained so that every
+                // later `decoded_text`/`raw_byte_at` call is O(1) rather than
+                // re-validating the whole buffer (task #53 root cause).
+                (DecodedStorage::RawUtf8(Arc::from(text)), None)
             }
             SourceEncoding::Utf16Le => (
                 DecodedStorage::Owned(decode_utf16(&bytes, true, limits)?),
@@ -516,8 +524,8 @@ impl SourceSnapshot {
         };
         let decoded_index = match &decoded {
             DecodedStorage::None => None,
-            DecodedStorage::RawUtf8 => Some(build_index(
-                std::str::from_utf8(&bytes).expect("UTF-8 was validated"),
+            DecodedStorage::RawUtf8(text) => Some(build_index(
+                text,
                 encoding.selected,
                 bytes.len(),
                 limits,
@@ -586,13 +594,15 @@ impl SourceSnapshot {
     }
 
     /// Decoded text, or `None` for an opaque binary source.
+    ///
+    /// The text is fully validated exactly once at construction; each call
+    /// returns the stored view in O(1) without re-validating the raw bytes
+    /// (task #53 root cause: a full-buffer `from_utf8` pass per call made
+    /// per-piece span conversion O(source length), i.e. O(n²) formation).
     #[must_use]
     pub fn decoded_text(&self) -> Option<&str> {
         match &self.decoded {
-            DecodedStorage::RawUtf8 => {
-                Some(std::str::from_utf8(&self.bytes).expect("UTF-8 was validated"))
-            }
-            DecodedStorage::Owned(text) => Some(text),
+            DecodedStorage::RawUtf8(text) | DecodedStorage::Owned(text) => Some(text),
             DecodedStorage::None => None,
         }
     }
@@ -1523,5 +1533,58 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn per_call_coordinate_conversion_does_not_rescan_large_utf8_sources() {
+        // Regression net for task #53: every `decoded_text` call on a
+        // `RawUtf8` source re-validated the whole buffer with a full
+        // `from_utf8` pass, so per-piece span conversion cost O(source
+        // length) — the O(n²) formation shape measured in task #53
+        // (10k-duplicate properties inspect p50 ≈ 5.0 s; 20k-element XML
+        // ≈ 96.6 s → 0.105 s, ~920×, after the xml-local shortcut). The same
+        // per-call rescan hit consema-properties (two `raw_byte_at` calls per
+        // character), consema-ini, and consema-plist; the fix here removes the
+        // rescan at the source level.
+        //
+        // Measured on this machine: the loop below (262,144 iterations, one
+        // `decoded_text` + one `raw_byte_at` per iteration over a 1 MiB UTF-8
+        // source) cost ≈ 14.8 s pre-fix by simulation (262,144 × 1 MiB
+        // `from_utf8` passes measure 7.38 s, two accessor passes per
+        // iteration); post-fix it is ≈ 58 ms (release) / ≈ 0.74 s (debug). The
+        // bound below (5 s) is deliberately generous so debug-mode CI noise
+        // cannot flip it, while the pre-fix cost fails it by a wide margin.
+        let text = "a".repeat(1024 * 1024);
+        let snapshot = source(text.as_bytes(), SourceEncoding::Utf8);
+        // Value-level equivalence for the retained-text storage: the accessor
+        // still returns exactly the bytes validated at construction.
+        assert_eq!(snapshot.decoded_text(), Some(text.as_str()));
+        let iterations = 262_144usize;
+        let start = std::time::Instant::now();
+        let mut checksum = 0usize;
+        for offset in 0..iterations {
+            checksum = checksum.wrapping_add(
+                snapshot
+                    .decoded_text()
+                    .expect("text source always decodes")
+                    .len(),
+            );
+            checksum = checksum.wrapping_add(
+                snapshot
+                    .raw_byte_at(DecodedOffset::Utf8Byte(offset))
+                    .expect("every single-char UTF-8 offset is a scalar boundary"),
+            );
+        }
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed.as_secs() < 5,
+            "coordinate conversion must not rescan the source per call: {elapsed:?}"
+        );
+        // On an ASCII source every resolved raw offset equals its decoded
+        // offset, so the checksum is n × len + n × (n − 1) / 2.
+        let expected = iterations
+            .wrapping_mul(text.len())
+            .wrapping_add(iterations.wrapping_mul(iterations - 1) / 2);
+        assert_eq!(checksum, expected);
     }
 }

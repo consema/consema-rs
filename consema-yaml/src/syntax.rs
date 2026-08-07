@@ -1,9 +1,10 @@
 use consema_document::{
-    DecodedOffset, DocumentAuthority, FatalFormationFailure, LosslessStructuralIndex,
-    SourceSnapshot, Span, StructuralPiece, StructuralPieceKind,
+    DocumentAuthority, FatalFormationFailure, LosslessStructuralIndex, SourceSnapshot, Span,
+    StructuralPiece, StructuralPieceKind,
 };
 
 use crate::YamlSyntaxKind;
+use crate::offsets::RawByteResolver;
 
 #[derive(Clone, Copy, Debug)]
 struct Lexeme {
@@ -26,13 +27,14 @@ pub(crate) fn tokenize(
     let mut kinds = Vec::with_capacity(lexemes.len());
     let mut anchors = Vec::new();
     let mut aliases = Vec::new();
+    // `SourceSnapshot::raw_byte_at` re-validates the whole decoded text on
+    // every call (O(source) each), which makes a per-lexeme lookup loop
+    // O(source x lexemes). Lexeme boundaries arrive in order, so one forward
+    // walk resolves all of them in O(source + lexemes) total.
+    let mut raw = RawByteResolver::new(source);
     for lexeme in lexemes {
-        let start = source
-            .raw_byte_at(DecodedOffset::UnicodeScalar(lexeme.start))
-            .expect("scanner offsets are decoded scalar boundaries");
-        let end = source
-            .raw_byte_at(DecodedOffset::UnicodeScalar(lexeme.end))
-            .expect("scanner offsets are decoded scalar boundaries");
+        let start = raw.resolve(lexeme.start);
+        let end = raw.resolve(lexeme.end);
         let span = authority
             .span(start, end)
             .expect("scanner emits ordered raw ranges");

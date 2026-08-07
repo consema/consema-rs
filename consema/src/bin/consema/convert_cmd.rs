@@ -597,6 +597,53 @@ mod tests {
     }
 
     #[test]
+    fn convert_java_properties_source_to_toml_end_to_end() {
+        // B-6: java-properties sources were unreachable through convert
+        // because the family-prefix check rejected `java-properties.projection.*`
+        // targets under the wire family "properties"; the full convert path
+        // (source parse -> projection -> materialization) must succeed.
+        let (_path, source_path) = write_source("jp", b"name=api\nport=8080\n");
+        let request = convert_request(
+            "java-properties.projection.best-exact-entry-mapping",
+            "toml.1.0",
+            "toml.canonical-document",
+        );
+        let parsed = parse(&[
+            "convert",
+            &source_path,
+            "--profile",
+            "java-properties.reader",
+            "--json",
+        ]);
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let code = run_with_request(&parsed, &request, &mut stdout, &mut stderr);
+        assert_eq!(code, 0, "{}", stderr_text(&stderr));
+        assert!(stderr.is_empty());
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], ProtocolLimits::default())
+                .expect("success envelope");
+        assert_eq!(envelope.command(), CliCommand::Convert);
+        assert_eq!(envelope.exit_class(), ExitClass::Success);
+        let fields = envelope.payload().as_object().expect("payload object");
+        assert_eq!(fields[0].value().as_string(), Some(CONVERT_PAYLOAD_SCHEMA));
+        let report = consema::protocol::ConversionReportMessage::from_value(fields[1].value())
+            .expect("conversion report record");
+        assert_eq!(report.source_profile().id(), "java-properties.reader");
+        assert_eq!(report.target_profile().id(), "toml.1.0");
+        let target = SourceSnapshotMessageV2::from_value(
+            fields[2].value(),
+            consema::document::SourceLimits::default(),
+        )
+        .expect("source snapshot v2");
+        let bytes = std::str::from_utf8(target.snapshot().bytes()).expect("utf8");
+        assert!(
+            bytes.contains("\"name\" = \"api\"") && bytes.contains("\"port\" = \"8080\""),
+            "the target snapshot carries the materialized TOML: {bytes}"
+        );
+    }
+
+    #[test]
     fn convert_human_mode_writes_the_target_bytes() {
         let (_path, source_path) = write_source("self", br#"{"a":1}"#);
         let request = convert_request(

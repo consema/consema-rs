@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use consema_core::{BigInteger, Decimal};
 use consema_document::{
-    DecodedOffset, DocumentAuthority, FatalFormationFailure, NodeRef, NodeRole, ParseLimits,
-    SourceSnapshot, Span,
+    DocumentAuthority, FatalFormationFailure, NodeRef, NodeRole, ParseLimits, SourceSnapshot, Span,
 };
 use consema_graph::{
     GraphBuildError, GraphBuilder, GraphLimits, GraphMappingEntry, GraphNodeId, PortableGraph,
 };
 
 use crate::backend::{BackendEvent, BackendEventKind, BackendScalarStyle, BackendSpan, BackendTag};
+use crate::offsets::RawByteResolver;
 use crate::syntax::NamedOccurrence;
 use crate::{YamlProfile, YamlScalarKind, YamlScalarStyle};
 
@@ -132,6 +132,10 @@ pub(crate) fn compose(
         alias_occurrences: aliases.into_iter(),
         composed_aliases: Vec::new(),
         next_association: 0,
+        // `SourceSnapshot::raw_byte_at` re-validates the whole decoded text
+        // per call; event spans arrive in order, so one forward resolver
+        // keeps span construction O(source + events) instead of quadratic.
+        raw: RawByteResolver::new(source),
     }
     .compose()
 }
@@ -206,6 +210,7 @@ struct Composer<'a> {
     alias_occurrences: std::vec::IntoIter<NamedOccurrence>,
     composed_aliases: Vec<NativeAlias>,
     next_association: u64,
+    raw: RawByteResolver<'a>,
 }
 
 #[derive(Clone, Copy)]
@@ -226,9 +231,10 @@ impl Composer<'_> {
             let root = self.node()?;
             let document_end =
                 self.take_simple(|kind| matches!(kind, BackendEventKind::DocumentEnd))?;
+            let span = self.covering_span(document_start, document_end)?;
             self.documents.push(NativeDocument {
                 root: root.node,
-                span: self.covering_span(document_start, document_end)?,
+                span,
             });
         }
         self.expect_simple(|kind| matches!(kind, BackendEventKind::StreamEnd))?;
@@ -298,6 +304,8 @@ impl Composer<'_> {
                 let decoded = exact_empty_scalar(
                     decoded,
                     event.span,
+                    style,
+                    &mut self.raw,
                     self.source
                         .decoded_text()
                         .expect("YAML source is always decoded text"),
@@ -454,22 +462,16 @@ impl Composer<'_> {
         Ok(span)
     }
 
-    fn raw_span(&self, span: BackendSpan) -> Result<Span, FatalFormationFailure> {
-        let start = self
-            .source
-            .raw_byte_at(DecodedOffset::UnicodeScalar(span.start_scalar))
-            .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))?;
-        let end = self
-            .source
-            .raw_byte_at(DecodedOffset::UnicodeScalar(span.end_scalar))
-            .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))?;
+    fn raw_span(&mut self, span: BackendSpan) -> Result<Span, FatalFormationFailure> {
+        let start = self.raw.resolve(span.start_scalar);
+        let end = self.raw.resolve(span.end_scalar);
         self.authority
             .span(start, end)
             .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))
     }
 
     fn covering_span(
-        &self,
+        &mut self,
         start: BackendSpan,
         end: BackendSpan,
     ) -> Result<Span, FatalFormationFailure> {
@@ -486,17 +488,35 @@ impl Composer<'_> {
     }
 }
 
-fn exact_empty_scalar(decoded: String, span: BackendSpan, text: &str) -> String {
-    let presentation = text
-        .chars()
-        .skip(span.start_scalar)
-        .take(span.end_scalar.saturating_sub(span.start_scalar))
-        .collect::<String>();
-    if decoded == "~" && presentation != "~" {
-        String::new()
-    } else {
-        decoded
+/// Rewrites the backend's empty-plain-scalar placeholder back to the empty
+/// string. `saphyr_parser` emits the decoded value `"~"` (plain style) for
+/// any empty plain scalar, e.g. `a:` with no value. Only that placeholder
+/// is rewritten: a quoted `"~"` or `'~'` is a real string scalar per YAML
+/// 1.2, so it must keep its exact decoded content (`~` is null only in
+/// plain form).
+fn exact_empty_scalar(
+    decoded: String,
+    span: BackendSpan,
+    style: BackendScalarStyle,
+    raw: &mut RawByteResolver<'_>,
+    text: &str,
+) -> String {
+    // The placeholder rewrite only needs the span's source presentation when
+    // the decoded value is exactly the empty-plain placeholder "~". Computing
+    // it unconditionally made every scalar O(span start) via `chars().skip`,
+    // which is quadratic over the whole document; a decoded-byte range from
+    // the shared resolver is O(1).
+    if style == BackendScalarStyle::Plain && decoded == "~" {
+        let start = raw.decoded_byte_at(span.start_scalar);
+        let end = raw.decoded_byte_at(span.end_scalar);
+        let presentation = text
+            .get(start..end)
+            .expect("event spans are decoded scalar boundaries");
+        if presentation != "~" {
+            return String::new();
+        }
     }
+    decoded
 }
 
 fn resolve_collection_tag(
@@ -1124,6 +1144,7 @@ pub(crate) fn node_ref(authority: &DocumentAuthority, index: usize) -> NodeRef {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use consema_document::{EncodingRequest, SourceEncoding, SourceLimits};
 
     #[test]
     fn scalar_profiles_are_intentionally_different() {
@@ -1162,5 +1183,60 @@ mod tests {
         assert_eq!(canonical_base64("SGVs\n bG8="), Some("SGVsbG8=".to_owned()));
         assert_eq!(canonical_base64("SGVsbG9="), None);
         assert_eq!(canonical_base64("=bad"), None);
+    }
+
+    #[test]
+    fn exact_empty_scalar_only_rewrites_the_plain_placeholder() {
+        // (decoded, style, source, presentation start, presentation end,
+        // expected rewritten decoded output): the placeholder rewrite must
+        // apply only to the empty PLAIN scalar; every quoted spelling keeps
+        // its exact decoded content.
+        let cases = [
+            ("~", BackendScalarStyle::Plain, "a: \n", 3, 3, ""),
+            ("~", BackendScalarStyle::Plain, "a: ~\n", 3, 4, "~"),
+            ("~", BackendScalarStyle::Plain, "a: ~ # c\n", 3, 4, "~"),
+            (
+                "~",
+                BackendScalarStyle::DoubleQuoted,
+                "a: \"~\"\n",
+                3,
+                6,
+                "~",
+            ),
+            ("~", BackendScalarStyle::SingleQuoted, "a: '~'\n", 3, 6, "~"),
+            ("", BackendScalarStyle::DoubleQuoted, "a: \"\"\n", 3, 5, ""),
+            ("", BackendScalarStyle::SingleQuoted, "a: ''\n", 3, 5, ""),
+            (
+                "null",
+                BackendScalarStyle::DoubleQuoted,
+                "a: \"null\"\n",
+                3,
+                9,
+                "null",
+            ),
+        ];
+        for (decoded, style, text, start, end, expected) in cases {
+            let source = SourceSnapshot::from_raw(
+                std::sync::Arc::<[u8]>::from(text.as_bytes()),
+                EncodingRequest::new(SourceEncoding::Utf8),
+                SourceLimits::default(),
+            )
+            .unwrap();
+            let mut raw = RawByteResolver::new(&source);
+            assert_eq!(
+                exact_empty_scalar(
+                    decoded.to_owned(),
+                    BackendSpan {
+                        start_scalar: start,
+                        end_scalar: end,
+                    },
+                    style,
+                    &mut raw,
+                    text,
+                ),
+                expected,
+                "decoded {decoded:?} in style {style:?} within {text:?}"
+            );
+        }
     }
 }

@@ -17,6 +17,7 @@ mod backend;
 mod edit;
 mod materialization;
 mod native;
+mod offsets;
 mod operation_registry;
 mod projection;
 mod query;
@@ -1039,6 +1040,243 @@ mod tests {
             element.node_ref().role(),
             consema_document::NodeRole::YamlSequenceElement
         );
+    }
+
+    /// Every YAML 1.2 core schema keyword (and the empty scalar) must keep
+    /// its exact content when quoted: quoted scalars are always strings,
+    /// never null/bool/int/float. Regression for finding M2-F2 where the
+    /// quoted `"~"` decoded as empty content.
+    #[test]
+    fn quoted_core_keywords_are_exact_strings() {
+        let keywords = [
+            "", "~", "null", "Null", "NULL", "true", "True", "TRUE", "false", "False", "FALSE",
+            ".inf", ".Inf", ".INF", "+.inf", "-.inf", "-.Inf", "-.INF", ".nan", ".NaN", ".NAN",
+            "0", "0x1F", "0o17", "1e3", "1.5",
+        ];
+        for keyword in keywords {
+            for quote in ['"', '\''] {
+                let source = format!("{quote}{keyword}{quote}\n");
+                let document = parse(
+                    source.as_bytes(),
+                    YamlProfile::Yaml12CoreV1,
+                    ParseLimits::default(),
+                )
+                .expect("quoted scalar documents are valid YAML");
+                let scalar = document.document(0).unwrap().root().scalar().unwrap();
+                assert_eq!(
+                    scalar.kind(),
+                    YamlScalarKind::String,
+                    "quoted {keyword:?} resolves as a string"
+                );
+                assert_eq!(
+                    scalar.decoded(),
+                    keyword,
+                    "quoted {keyword:?} keeps its exact content"
+                );
+                assert_eq!(
+                    scalar.canonical(),
+                    keyword,
+                    "quoted {keyword:?} keeps its exact canonical"
+                );
+            }
+        }
+    }
+
+    /// Plain spellings resolve per the frozen YAML 1.2 core schema: `~`,
+    /// the case variants of `null` and the booleans, and the non-finite
+    /// floats; `yes`/`on` and other YAML 1.1 forms stay plain strings.
+    #[test]
+    fn plain_core_keywords_resolve_per_core_schema() {
+        let cases = [
+            ("~", YamlScalarKind::Null, ""),
+            ("null", YamlScalarKind::Null, ""),
+            ("Null", YamlScalarKind::Null, ""),
+            ("NULL", YamlScalarKind::Null, ""),
+            ("true", YamlScalarKind::Boolean, "true"),
+            ("True", YamlScalarKind::Boolean, "true"),
+            ("TRUE", YamlScalarKind::Boolean, "true"),
+            ("false", YamlScalarKind::Boolean, "false"),
+            ("False", YamlScalarKind::Boolean, "false"),
+            ("FALSE", YamlScalarKind::Boolean, "false"),
+            ("yes", YamlScalarKind::String, "yes"),
+            ("on", YamlScalarKind::String, "on"),
+            (".inf", YamlScalarKind::Float, ".inf"),
+            ("-.inf", YamlScalarKind::Float, "-.inf"),
+            (".nan", YamlScalarKind::Float, ".nan"),
+            ("0x1F", YamlScalarKind::Integer, "31"),
+        ];
+        for (keyword, kind, canonical) in cases {
+            let source = format!("{keyword}\n");
+            let document = parse(
+                source.as_bytes(),
+                YamlProfile::Yaml12CoreV1,
+                ParseLimits::default(),
+            )
+            .expect("plain scalar documents are valid YAML");
+            let scalar = document.document(0).unwrap().root().scalar().unwrap();
+            assert_eq!(
+                scalar.kind(),
+                kind,
+                "plain {keyword:?} resolves as {kind:?}"
+            );
+            assert_eq!(
+                scalar.decoded(),
+                keyword,
+                "plain {keyword:?} keeps its source spelling"
+            );
+            assert_eq!(
+                scalar.canonical(),
+                canonical,
+                "plain {keyword:?} canonicalizes as {canonical:?}"
+            );
+        }
+        // The empty plain scalar (`a:` with no value) is null per the core
+        // schema; the saphyr `~` placeholder must rewrite to empty.
+        let document = parse(
+            b"a: \n".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let scalar = document
+            .document(0)
+            .unwrap()
+            .root()
+            .mapping_entry(0)
+            .unwrap()
+            .value()
+            .scalar()
+            .unwrap();
+        assert_eq!(scalar.kind(), YamlScalarKind::Null);
+        assert_eq!(scalar.decoded(), "");
+        assert_eq!(scalar.canonical(), "");
+    }
+
+    /// Quoted YAML 1.1-only keywords are strings under both profiles:
+    /// quoting always wins over any schema resolution, including the
+    /// 1.1-compat bool/int/timestamp forms.
+    #[test]
+    fn quoted_yaml11_keywords_are_strings_in_both_profiles() {
+        let keywords = [
+            "yes",
+            "Yes",
+            "YES",
+            "y",
+            "Y",
+            "on",
+            "On",
+            "ON",
+            "no",
+            "No",
+            "NO",
+            "n",
+            "N",
+            "off",
+            "Off",
+            "OFF",
+            "017",
+            "1:02:03",
+            "1_000",
+            "2001-12-15",
+        ];
+        for profile in [YamlProfile::Yaml12CoreV1, YamlProfile::Yaml11CompatV1] {
+            for keyword in keywords {
+                for quote in ['"', '\''] {
+                    let source = format!("{quote}{keyword}{quote}\n");
+                    let document = parse(source.as_bytes(), profile, ParseLimits::default())
+                        .expect("quoted scalar documents are valid YAML");
+                    let scalar = document.document(0).unwrap().root().scalar().unwrap();
+                    assert_eq!(
+                        scalar.kind(),
+                        YamlScalarKind::String,
+                        "{profile:?} quoted {keyword:?} resolves as a string"
+                    );
+                    assert_eq!(
+                        scalar.decoded(),
+                        keyword,
+                        "{profile:?} quoted {keyword:?} keeps its exact content"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The plain YAML 1.1-compat keyword forms resolve only under the
+    /// 1.1 profile, and never when quoted.
+    #[test]
+    fn plain_yaml11_keywords_resolve_only_under_compat_profile() {
+        let cases = [
+            ("yes", YamlScalarKind::Boolean, "true"),
+            ("on", YamlScalarKind::Boolean, "true"),
+            ("no", YamlScalarKind::Boolean, "false"),
+            ("017", YamlScalarKind::Integer, "15"),
+            ("1:02:03", YamlScalarKind::Integer, "3723"),
+        ];
+        for (keyword, kind, canonical) in cases {
+            let source = format!("{keyword}\n");
+            let document = parse(
+                source.as_bytes(),
+                YamlProfile::Yaml11CompatV1,
+                ParseLimits::default(),
+            )
+            .expect("plain scalar documents are valid YAML");
+            let scalar = document.document(0).unwrap().root().scalar().unwrap();
+            assert_eq!(
+                scalar.kind(),
+                kind,
+                "plain {keyword:?} under the 1.1 profile"
+            );
+            assert_eq!(scalar.canonical(), canonical, "plain {keyword:?} canonical");
+        }
+    }
+
+    /// Block-style scalars carrying keyword text are strings, never null.
+    #[test]
+    fn block_scalar_keywords_are_strings() {
+        let document = parse(
+            b"a: |\n  ~\nb: >\n  null\n".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut scalars = (0..2).map(|index| {
+            document
+                .document(0)
+                .unwrap()
+                .root()
+                .mapping_entry(index)
+                .unwrap()
+                .value()
+                .scalar()
+                .unwrap()
+        });
+        let tilde = scalars.next().unwrap();
+        assert_eq!(tilde.kind(), YamlScalarKind::String);
+        assert_eq!(tilde.decoded(), "~\n");
+        assert_eq!(tilde.canonical(), "~\n");
+        let null_text = scalars.next().unwrap();
+        assert_eq!(null_text.kind(), YamlScalarKind::String);
+        assert_eq!(null_text.decoded(), "null\n");
+        assert_eq!(null_text.canonical(), "null\n");
+    }
+
+    /// Finding M2-F2 regression: the quoted `"~"` anchored value keeps its
+    /// exact string content through the alias path.
+    #[test]
+    fn quoted_tilde_keeps_exact_content_through_the_alias_path() {
+        let source = b"a: &k \"~\"\nb: *k\n";
+        let document = parse(
+            source.as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(document.alias_count(), 1);
+        let scalar = document.alias(0).unwrap().target().scalar().unwrap();
+        assert_eq!(scalar.kind(), YamlScalarKind::String);
+        assert_eq!(scalar.decoded(), "~");
+        assert_eq!(scalar.canonical(), "~");
+        assert_eq!(scalar.style(), YamlScalarStyle::DoubleQuoted);
     }
 
     #[test]

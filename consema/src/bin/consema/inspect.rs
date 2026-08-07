@@ -105,9 +105,6 @@ pub fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) 
             ParseOutcome::Usage => {
                 return classify_error_code("cli.usage.invalid-format@1").exit_code();
             }
-            ParseOutcome::Internal(message) => {
-                return internal_error(&message, stderr);
-            }
         },
     };
 
@@ -324,8 +321,41 @@ enum ParseOutcome {
     Fatal(Vec<DiagnosticMessage>),
     /// The `--profile` value is not a facade profile: a usage failure.
     Usage,
-    /// An internal defect; the message goes to stderr.
-    Internal(String),
+}
+
+/// Binds one core parse diagnostic to the semantic-model v7 registry.
+///
+/// Diagnostics carrying format-local codes (the XML/plist/HCL parse
+/// families are not registry members) or a category that contradicts the
+/// registry descriptor cannot enter the envelope as-is (RFC 0015 §4.3: the
+/// envelope can only carry registry-bound codes). They bind under the
+/// registered fallback code with the registry's own category; the true
+/// format code is preserved on stderr through the bound `message` argument.
+/// The Recovered/fatal parse fact is still reported (exit 0/2), never an
+/// internal error (B-9).
+fn bind_parse_diagnostic(diagnostic: &Diagnostic, path: &str) -> DiagnosticMessage {
+    if let Ok(message) =
+        DiagnosticMessage::from_core_with_registry(diagnostic, Some(path), ErrorCodeRegistry::v7())
+    {
+        return message;
+    }
+    let code = crate::query_cmd::registered_code(&diagnostic.code);
+    let category = ErrorCodeRegistry::v7()
+        .descriptor(code)
+        .map_or(DiagnosticCategory::Semantic, |descriptor| {
+            descriptor.category
+        });
+    let mut rebound = diagnostic.clone();
+    code.clone_into(&mut rebound.code);
+    rebound.category = category;
+    if rebound.code != diagnostic.code {
+        rebound.arguments.insert(
+            "message".to_owned(),
+            format!("format-local code {}", diagnostic.code),
+        );
+    }
+    DiagnosticMessage::from_core_with_registry(&rebound, Some(path), ErrorCodeRegistry::v7())
+        .expect("the fallback code binds to its own descriptor category")
 }
 
 /// Parses the file under the explicit `--profile` and assembles the
@@ -356,21 +386,11 @@ fn parse_facts_value(
     ) {
         Ok(document) => document,
         Err(failure) => {
-            let mut diagnostics = Vec::new();
-            for diagnostic in failure.diagnostics() {
-                match DiagnosticMessage::from_core_with_registry(
-                    diagnostic,
-                    Some(path),
-                    ErrorCodeRegistry::v7(),
-                ) {
-                    Ok(message) => diagnostics.push(message),
-                    Err(error) => {
-                        return ParseOutcome::Internal(format!(
-                            "parse diagnostic conversion failed: {error}"
-                        ));
-                    }
-                }
-            }
+            let diagnostics = failure
+                .diagnostics()
+                .iter()
+                .map(|diagnostic| bind_parse_diagnostic(diagnostic, path))
+                .collect();
             return ParseOutcome::Fatal(diagnostics);
         }
     };
@@ -381,20 +401,7 @@ fn parse_facts_value(
     };
     let mut diagnostics = SequenceBuilder::new();
     for diagnostic in document.diagnostics() {
-        match DiagnosticMessage::from_core_with_registry(
-            diagnostic,
-            Some(path),
-            ErrorCodeRegistry::v7(),
-        ) {
-            Ok(message) => {
-                diagnostics.push(message.to_value());
-            }
-            Err(error) => {
-                return ParseOutcome::Internal(format!(
-                    "parse diagnostic conversion failed: {error}"
-                ));
-            }
-        }
+        diagnostics.push(bind_parse_diagnostic(diagnostic, path).to_value());
     }
     let counts = structure_counts(&document);
     let mut structure = ObjectBuilder::new();
@@ -610,10 +617,38 @@ fn write_human_parse(report: &mut String, parse: &PortableValue) {
             "diagnostics" => {
                 for item in entry.value().as_sequence().expect("diagnostics sequence") {
                     let object = item.as_object().expect("diagnostic object");
+                    let mut code = None;
+                    let mut message = None;
                     for field in object {
-                        if field.key() == "code" {
-                            diagnostics
-                                .push(field.value().as_string().expect("code string").to_owned());
+                        match field.key() {
+                            "code" => {
+                                code = field.value().as_string().map(ToString::to_string);
+                            }
+                            "arguments" => {
+                                message = field
+                                    .value()
+                                    .as_object()
+                                    .expect("arguments object")
+                                    .iter()
+                                    .find(|argument| argument.key() == "message")
+                                    .map(|argument| {
+                                        argument
+                                            .value()
+                                            .as_string()
+                                            .expect("message string")
+                                            .to_owned()
+                                    });
+                            }
+                            _ => {}
+                        }
+                    }
+                    if let Some(code) = code {
+                        // Format-local codes bind under the registered
+                        // fallback (B-9); the true code travels in the
+                        // `message` argument and is rendered here.
+                        match message {
+                            Some(message) => diagnostics.push(format!("{code} ({message})")),
+                            None => diagnostics.push(code),
                         }
                     }
                 }
@@ -772,6 +807,221 @@ mod tests {
         let text = String::from_utf8_lossy(&stdout);
         assert!(text.contains("parse (ini.portable@1): Recovered"));
         assert!(text.contains("ini.sections: 1"));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn inspect_xml_fatal_is_a_data_error_with_the_registered_fallback() {
+        // A nesting-depth limit failure is a fatal parse with a format-local
+        // code (`xml.limit.depth@1`, not registry-bound). B-9: inspect must
+        // report the fatal fact (exit 2) with the registered fallback code in
+        // the envelope and the true code on stderr — never an internal error.
+        let path = temp_file(b"<a>".repeat(300).as_slice());
+        let (code, stdout, stderr) = run(&[
+            "inspect",
+            path.to_str().unwrap(),
+            "--profile",
+            "xml.1.0-safe",
+            "--json",
+        ]);
+        assert_eq!(code, 2, "{}", stderr_text(&stderr));
+        assert!(
+            stderr_text(&stderr).contains("xml.limit.depth@1"),
+            "stderr keeps the true format-local code"
+        );
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], ProtocolLimits::default())
+                .expect("byte-valid failure envelope");
+        assert_eq!(envelope.exit_class(), ExitClass::Data);
+        assert_eq!(
+            envelope.diagnostics()[0].code,
+            "core.source.invalid-sequence@1",
+            "the envelope carries only registry-bound codes (RFC 0015 §4.3)"
+        );
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn inspect_plist_fatal_is_a_data_error_with_the_registered_fallback() {
+        let mut content = b"<?xml version=\"1.0\"?><plist version=\"1.0\"><dict>".to_vec();
+        content.extend(b"<dict>".repeat(300));
+        content.extend(b"</dict>".repeat(300));
+        content.extend(b"</dict></plist>");
+        let path = temp_file(&content);
+        let (code, stdout, stderr) = run(&[
+            "inspect",
+            path.to_str().unwrap(),
+            "--profile",
+            "plist.xml",
+            "--json",
+        ]);
+        assert_eq!(code, 2, "{}", stderr_text(&stderr));
+        assert!(stderr_text(&stderr).contains("plist.limit.nesting-depth@1"));
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], ProtocolLimits::default())
+                .expect("byte-valid failure envelope");
+        assert_eq!(envelope.exit_class(), ExitClass::Data);
+        assert_eq!(
+            envelope.diagnostics()[0].code,
+            "core.source.invalid-sequence@1"
+        );
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn inspect_hcl_fatal_is_a_data_error_with_the_registered_fallback() {
+        let mut content = b"a = {".to_vec();
+        content.extend(b"a = {".repeat(300));
+        content.extend(b"}".repeat(301));
+        let path = temp_file(&content);
+        let (code, stdout, stderr) = run(&[
+            "inspect",
+            path.to_str().unwrap(),
+            "--profile",
+            "hcl.native",
+            "--json",
+        ]);
+        assert_eq!(code, 2, "{}", stderr_text(&stderr));
+        assert!(stderr_text(&stderr).contains("hcl.limit.expression-depth@1"));
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], ProtocolLimits::default())
+                .expect("byte-valid failure envelope");
+        assert_eq!(envelope.exit_class(), ExitClass::Data);
+        assert_eq!(
+            envelope.diagnostics()[0].code,
+            "core.source.invalid-sequence@1"
+        );
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn inspect_recovered_format_local_diagnostics_report_with_fallback_binding() {
+        // Recovered documents with format-local codes are complete reports
+        // (exit 0); the parse-facts diagnostics carry the registered fallback
+        // binding and the human view keeps the true code (B-9).
+        let cases: &[(&[u8], &str, &str, &str)] = &[
+            (
+                b"<root>\n<item>x</item>\n</roott>\n",
+                "xml.1.0-safe",
+                "xml.tree.mismatched-end-tag@1",
+                "xml.tree.mismatched-end-tag@1",
+            ),
+            (
+                b"<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>a</key><integer>x</integer></dict></plist>",
+                "plist.xml",
+                "plist.parse.dict-missing-value@1",
+                "plist.parse.dict-missing-value@1",
+            ),
+            (
+                b"a = 1\nb {\n  c = 2\n",
+                "hcl.native",
+                "hcl.parse.block@1",
+                "hcl.parse.block@1",
+            ),
+        ];
+        for (bytes, profile, true_code, _) in cases {
+            let path = temp_file(bytes);
+            let (code, stdout, stderr) = run(&[
+                "inspect",
+                path.to_str().unwrap(),
+                "--profile",
+                *profile,
+                "--json",
+            ]);
+            assert_eq!(code, 0, "{}", stderr_text(&stderr));
+            assert!(stderr.is_empty(), "recovered reports write no stderr");
+            let envelope =
+                CliOutputMessage::from_json(&stdout[..stdout.len() - 1], ProtocolLimits::default())
+                    .expect("byte-valid envelope");
+            assert_eq!(envelope.exit_class(), ExitClass::Success);
+            let payload = envelope.payload();
+            let parse = payload
+                .as_object()
+                .expect("payload object")
+                .iter()
+                .find(|entry| entry.key() == "parse")
+                .expect("parse facts")
+                .value()
+                .as_object()
+                .expect("parse facts object");
+            let diagnostics = parse
+                .iter()
+                .find(|entry| entry.key() == "diagnostics")
+                .expect("diagnostics")
+                .value()
+                .as_sequence()
+                .expect("diagnostics sequence");
+            assert!(!diagnostics.is_empty(), "recovery diagnostics are reported");
+            // The human view renders the true code inside the fallback
+            // binding (write_human_parse is the same record, no loss).
+            let human = run(&["inspect", path.to_str().unwrap(), "--profile", *profile]);
+            assert_eq!(human.0, 0, "{}", stderr_text(&human.2));
+            let text = String::from_utf8_lossy(&human.1);
+            assert!(
+                text.contains(*true_code),
+                "human view keeps the true format-local code {true_code}: {text}"
+            );
+            let _ = fs::remove_file(&path);
+        }
+    }
+
+    #[test]
+    fn inspect_ini_category_contradiction_recovery_binds_the_registry_category() {
+        // The python-configparser profile recovers an entry before any
+        // section with `ini.parse.missing-section@1` under the crate's Syntax
+        // category, while the registry pins Conformance; the binding must
+        // take the registry's category (B-9), keeping the true code.
+        let path = temp_file(b"key=value\n");
+        let (code, stdout, stderr) = run(&[
+            "inspect",
+            path.to_str().unwrap(),
+            "--profile",
+            "ini.python-configparser",
+            "--json",
+        ]);
+        assert_eq!(code, 0, "{}", stderr_text(&stderr));
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], ProtocolLimits::default())
+                .expect("byte-valid envelope");
+        assert_eq!(envelope.exit_class(), ExitClass::Success);
+        let payload = envelope.payload();
+        let parse = payload
+            .as_object()
+            .expect("payload object")
+            .iter()
+            .find(|entry| entry.key() == "parse")
+            .expect("parse facts")
+            .value()
+            .as_object()
+            .expect("parse facts object");
+        let diagnostics = parse
+            .iter()
+            .find(|entry| entry.key() == "diagnostics")
+            .expect("diagnostics")
+            .value()
+            .as_sequence()
+            .expect("diagnostics sequence");
+        assert_eq!(diagnostics.len(), 1);
+        let diagnostic = diagnostics[0].as_object().expect("diagnostic object");
+        let fields: Vec<_> = diagnostic.iter().collect();
+        let code_field = fields
+            .iter()
+            .find(|entry| entry.key() == "code")
+            .expect("code field");
+        assert_eq!(
+            code_field.value().as_string(),
+            Some("ini.parse.missing-section@1"),
+            "registered codes keep the true code in the envelope"
+        );
+        let category_field = fields
+            .iter()
+            .find(|entry| entry.key() == "category")
+            .expect("category field");
+        assert_eq!(
+            category_field.value().as_string(),
+            Some("Conformance"),
+            "the registry descriptor's category wins over the crate's Syntax"
+        );
         let _ = fs::remove_file(&path);
     }
 

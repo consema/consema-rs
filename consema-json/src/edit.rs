@@ -7,8 +7,9 @@ use consema_core::{
 };
 use consema_document::{
     AssociationPlacement, ChangeSet, EditOperationSummary, EditPlan, EditPlanSourceId,
-    FormatOperationId, MaterializationLimits, NodeMapping, NodeMappingStatus, NodeRef, NodeRole,
-    SnapshotIdentity, SourceEdit, SourceLimits, SourcePatch, SourcePatchLimits, UntouchedByteProof,
+    FormatOperationId, FormationStatus, MaterializationLimits, NodeMapping, NodeMappingStatus,
+    NodeRef, NodeRole, SnapshotIdentity, SourceEdit, SourceLimits, SourcePatch, SourcePatchLimits,
+    UntouchedByteProof,
 };
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -257,6 +258,8 @@ pub struct EditCommit {
 /// Stable edit validation or commit failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EditFailure {
+    /// Edits are forbidden on a recovered document.
+    RecoveredDocument,
     /// Transaction or target belongs to another snapshot.
     WrongSnapshot,
     /// Target role is not a scalar value or object key.
@@ -298,6 +301,9 @@ pub enum EditFailure {
 impl Document {
     /// Atomically commits scalar and structural operations. On failure `self` remains unchanged.
     pub fn commit(&self, transaction: &EditTransaction) -> Result<EditCommit, EditFailure> {
+        if self.formation_status() != FormationStatus::Complete {
+            return Err(EditFailure::RecoveredDocument);
+        }
         if transaction.base != self.snapshot_identity() {
             return Err(EditFailure::WrongSnapshot);
         }
@@ -1279,7 +1285,7 @@ impl consema_core::StableFailure for EditFailure {
             | Self::AncestorDescendantConflict
             | Self::PlacementAnchorRemoved
             | Self::PlacementAnchorModified => consema_core::FailureKind::InvalidInput,
-            Self::TargetNotFound | Self::RepresentationIncompatible => {
+            Self::RecoveredDocument | Self::TargetNotFound | Self::RepresentationIncompatible => {
                 consema_core::FailureKind::NotApplicable
             }
             Self::UnsupportedSemanticValue(_) | Self::UnrepresentableValue(_) => {
@@ -1292,9 +1298,9 @@ impl consema_core::StableFailure for EditFailure {
 
     fn diagnostic_code(&self) -> &str {
         match self {
+            Self::RecoveredDocument | Self::IncompleteTarget => "core.edit.incomplete-target@1",
             Self::WrongSnapshot => "core.edit.wrong-snapshot@1",
             Self::WrongRole => "core.edit.wrong-role@1",
-            Self::IncompleteTarget => "core.edit.incomplete-target@1",
             Self::SemanticUnavailable => "core.edit.semantic-unavailable@1",
             Self::UnsupportedSemanticValue(_) | Self::UnrepresentableValue(_) => {
                 "core.edit.unsupported-value@1"
@@ -1879,7 +1885,7 @@ fn find_value_by_literal_span(document: &Document, start: usize, end: usize) -> 
 mod tests {
     use super::*;
     use crate::{JsonProfile, parse};
-    use consema_core::{BigInteger, BinaryFloat64, Decimal, PortableValue};
+    use consema_core::{BigInteger, BinaryFloat64, Decimal, PortableValue, StableFailure};
     use consema_document::ParseLimits;
 
     fn object_members(document: &Document) -> Vec<crate::JsonObjectMember<'_>> {
@@ -2640,5 +2646,59 @@ mod tests {
                 PortableValueKind::BinaryFloat64
             ))
         ));
+    }
+
+    #[test]
+    fn recovered_documents_are_rejected_at_commit() {
+        // Finding M2-F1 regression: `{"a` forms a Recovered document whose
+        // object root is complete at the node level; commit must reject it
+        // atomically instead of inserting into the truncated object.
+        for profile in [
+            JsonProfile::StrictV1,
+            JsonProfile::JsoncBoundedV1,
+            JsonProfile::Json5StandardV1,
+        ] {
+            let document = parse(b"{\"a".as_slice(), profile, ParseLimits::default()).unwrap();
+            assert_eq!(
+                document.formation_status(),
+                FormationStatus::Recovered,
+                "{profile:?} truncation must form a recovered document"
+            );
+            let mut builder = EditTransactionBuilder::new(&document);
+            builder.insert_member(
+                document.root().node_ref(),
+                "fuzz",
+                PortableValue::boolean(true),
+                AssociationPlacement::End,
+            );
+            assert!(matches!(
+                document.commit(&builder.build()),
+                Err(EditFailure::RecoveredDocument)
+            ));
+            let empty = EditTransactionBuilder::new(&document).build();
+            assert!(matches!(
+                document.commit(&empty),
+                Err(EditFailure::RecoveredDocument)
+            ));
+            assert_eq!(
+                EditFailure::RecoveredDocument.diagnostic_code(),
+                "core.edit.incomplete-target@1"
+            );
+        }
+        // The same insert on a Complete document still commits.
+        let complete = parse(
+            b"{\"a\":1}".as_slice(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let mut builder = EditTransactionBuilder::new(&complete);
+        builder.insert_member(
+            complete.root().node_ref(),
+            "fuzz",
+            PortableValue::boolean(true),
+            AssociationPlacement::End,
+        );
+        assert!(complete.commit(&builder.build()).is_ok());
     }
 }

@@ -899,6 +899,7 @@ fn materialization_failure_name(failure: &MaterializationFailure) -> &'static st
 
 fn edit_failure_name(failure: &EditFailure) -> &'static str {
     match failure {
+        EditFailure::RecoveredDocument => "RecoveredDocument",
         EditFailure::WrongSnapshot => "WrongSnapshot",
         EditFailure::WrongRole => "WrongRole",
         EditFailure::IncompleteTarget => "IncompleteTarget",

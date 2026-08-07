@@ -1854,6 +1854,42 @@ mod tests {
         }
     }
 
+    // Task #54 regression: JSON→YAML materialization was input-triggered
+    // quadratic because the tokenizer and composer resolved every lexeme and
+    // node boundary through `SourceSnapshot::raw_byte_at`, which re-validates
+    // the whole decoded text on every call. A 5000-entry object took ~3.6 s
+    // (release) and ~30-60 s (debug; pilot F-2) before the fix; the fixed
+    // pipeline takes ~0.2 s (release) / ~0.9 s (debug) on the reference
+    // machine. The generous 8 s ceiling keeps the gate green on machines
+    // several times slower while still failing the pre-fix quadratic by a
+    // wide margin (the full pipeline, not just the render, is covered).
+    #[test]
+    fn large_flat_materialization_stays_within_linear_budget() {
+        use std::time::Instant;
+        let mut builder = ObjectBuilder::new();
+        for index in 0..5000 {
+            builder
+                .insert(
+                    format!("key{index:04}"),
+                    PortableValue::string(format!("value-{index:04}-{}", "x".repeat(58))),
+                )
+                .expect("unique");
+        }
+        let value = builder.build();
+        let req = request("yaml.canonical-block")
+            .with_newline(NewlinePolicy::Lf)
+            .with_mapping_policy(MappingPolicy::UniqueStringEntriesToObject);
+        let started = Instant::now();
+        let result = materialize_value(&value, &req);
+        let elapsed = started.elapsed();
+        assert!(matches!(result, MaterializationResult::Complete(_)));
+        assert!(
+            elapsed.as_secs_f64() < 8.0,
+            "materializing a 5000-entry object took {elapsed:?}; expected linear time under \
+             8 s, pre-fix code took ~30-60 s (debug) / ~3.6 s (release)"
+        );
+    }
+
     #[test]
     fn flow_materialization_anchors_a_cycle_and_round_trips() {
         let mut builder = GraphBuilder::new(GraphLimits::default());

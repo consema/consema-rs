@@ -1,6 +1,7 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
 mod cli_v1;
+pub mod fuzz;
 mod hcl_v1;
 mod ini_dotnet_oracle;
 mod ini_python_oracle;

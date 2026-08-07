@@ -1,0 +1,28 @@
+# cargo-fuzz manifest for consema-protocol (0.13.0 gate plan M2).
+# See crates/consema-json/fuzz/Cargo.toml for the layout rationale.
+
+[package]
+name = "consema-protocol-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.85"
+description = "libFuzzer targets for consema-protocol decoders (0.13.0 M2)"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+consema-protocol = { path = ".." }
+consema-core = { path = "../../consema-core" }
+consema-pvce = { path = "../../consema-pvce" }
+consema-graph = { path = "../../consema-graph" }
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+test = false
+doc = false

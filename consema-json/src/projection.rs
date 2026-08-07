@@ -7,7 +7,7 @@ use consema_core::{
     EntryMappingBuilder, ObjectBuilder, PortableValue, SequenceBuilder, ValuePath,
     ValuePathSegment,
 };
-use consema_document::{NodeRef, SnapshotIdentity, Span};
+use consema_document::{FormationStatus, NodeRef, SnapshotIdentity, Span};
 use std::collections::{HashMap, HashSet};
 
 /// Versioned projection target contract.
@@ -326,6 +326,8 @@ pub enum ProjectionResult {
 /// Stable projection failure category.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProjectionFailure {
+    /// Recovered documents cannot publish partial semantic values.
+    RecoveredDocument,
     /// Equal-precedence rules conflict.
     ConflictingPolicyRules,
     /// Exact NodeRef scope belongs to another snapshot or role.
@@ -356,6 +358,12 @@ impl Document {
     /// Applies an immutable request. A failure never contains a partial value.
     #[must_use]
     pub fn project(&self, request: &ProjectionRequest) -> ProjectionResult {
+        if self.formation_status() != FormationStatus::Complete {
+            return failed(
+                ProjectionFailure::RecoveredDocument,
+                ProjectionReport::default(),
+            );
+        }
         if (request.target == ProjectionTarget::Json5BestExactCoreV1
             && self.profile != JsonProfile::Json5StandardV1)
             || (request.target == ProjectionTarget::BestExactCoreV1
@@ -745,6 +753,7 @@ fn failed_with_analysis(
 
 const fn projection_code(error: &ProjectionFailure) -> &'static str {
     match error {
+        ProjectionFailure::RecoveredDocument => "json.projection.incomplete-document@1",
         ProjectionFailure::ConflictingPolicyRules => "core.projection.conflicting-policy@1",
         ProjectionFailure::WrongSnapshotPolicy => "core.projection.wrong-snapshot-policy@1",
         ProjectionFailure::InvalidPolicyTarget => "core.projection.invalid-policy-target@1",
@@ -763,7 +772,8 @@ impl consema_core::StableFailure for ProjectionFailure {
     fn failure_kind(&self) -> consema_core::FailureKind {
         match self {
             Self::WrongSnapshotPolicy => consema_core::FailureKind::TargetMismatch,
-            Self::ConflictingPolicyRules
+            Self::RecoveredDocument
+            | Self::ConflictingPolicyRules
             | Self::InvalidPolicyTarget
             | Self::TargetNotApplicable
             | Self::DuplicateKeys { .. }
@@ -1031,5 +1041,50 @@ mod tests {
             strict.project(&request),
             ProjectionResult::Failed(_)
         ));
+    }
+
+    #[test]
+    fn recovered_documents_are_rejected_at_projection() {
+        // Finding M2-F1 regression: token-level recovery can leave the
+        // targeted structure complete at the node level, but a Recovered
+        // document must never reach projection.
+        let targets = [
+            (JsonProfile::StrictV1, ProjectionTarget::BestExactCoreV1),
+            (
+                JsonProfile::JsoncBoundedV1,
+                ProjectionTarget::BestExactCoreV1,
+            ),
+            (
+                JsonProfile::Json5StandardV1,
+                ProjectionTarget::Json5BestExactCoreV1,
+            ),
+        ];
+        for (profile, target) in targets {
+            for source in [b"{\"a\"1,...}".as_slice(), b"y\"a\":1,...".as_slice()] {
+                let document = parse(source, profile, ParseLimits::default()).unwrap();
+                assert_eq!(
+                    document.formation_status(),
+                    FormationStatus::Recovered,
+                    "{source:?} must form a recovered {profile:?} document"
+                );
+                let request = ProjectionRequestBuilder::new(target).build().unwrap();
+                let ProjectionResult::Failed(attempt) = document.project(&request) else {
+                    panic!("recovered {profile:?} document was accepted by projection");
+                };
+                assert_eq!(
+                    attempt.diagnostics[0].code, "json.projection.incomplete-document@1",
+                    "{profile:?} recovered projection diagnostic"
+                );
+            }
+            // The same member content without recovery trauma stays fully
+            // operational under the identical request.
+            let complete = parse(b"{\"a\":1}".as_slice(), profile, ParseLimits::default()).unwrap();
+            assert_eq!(complete.formation_status(), FormationStatus::Complete);
+            let request = ProjectionRequestBuilder::new(target).build().unwrap();
+            assert!(matches!(
+                complete.project(&request),
+                ProjectionResult::Complete(_)
+            ));
+        }
     }
 }

@@ -1,0 +1,34 @@
+# cargo-fuzz manifest for consema-plist (0.13.0 gate plan M2).
+# See crates/consema-json/fuzz/Cargo.toml for the layout rationale.
+
+[package]
+name = "consema-plist-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.85"
+description = "libFuzzer targets for consema-plist (0.13.0 M2)"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+consema-plist = { path = ".." }
+consema-core = { path = "../../consema-core" }
+consema-document = { path = "../../consema-document" }
+consema-json = { path = "../../consema-json" }
+
+[[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "operations"
+path = "fuzz_targets/operations.rs"
+test = false
+doc = false

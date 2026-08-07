@@ -412,6 +412,40 @@ fn inspect_fatal_parse_failure_is_a_data_error() {
 }
 
 #[test]
+fn inspect_format_local_fatal_is_a_data_error_not_an_internal_error() {
+    // B-9 regression: a fatal parse carrying a format-local code
+    // (`xml.limit.depth@1`, not registry-bound) must report the data fact
+    // (exit 2) with the registered fallback code in the envelope and the
+    // true code on stderr — never exit 5 `cli.internal.unclassified@1`.
+    let path = temp_file("deep.xml", "<a>".repeat(300).as_bytes());
+    let output = run(&[
+        "inspect",
+        path.to_str().unwrap(),
+        "--profile",
+        "xml.1.0-safe",
+        "--json",
+    ]);
+    assert_eq!(status(&output), 2, "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).contains("xml.limit.depth@1"),
+        "stderr keeps the true format-local code"
+    );
+    assert!(
+        !stderr_text(&output).contains("cli.internal.unclassified@1"),
+        "the failure is a data fact, never an internal error"
+    );
+    let envelope = decode_envelope(&output);
+    assert_eq!(envelope.exit_class(), ExitClass::Data);
+    assert!(!envelope.diagnostics().is_empty());
+    assert_eq!(
+        envelope.diagnostics()[0].code,
+        "core.source.invalid-sequence@1",
+        "the envelope carries only registry-bound codes (RFC 0015 §4.3)"
+    );
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
 fn inspect_recovered_json_reports_successfully() {
     // Malformed JSON is recovered, not fatal: the Recovered-state report is
     // the complete result (exit 0; RFC 0015 §5.1).
