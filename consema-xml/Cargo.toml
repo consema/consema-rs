@@ -1,0 +1,15 @@
+[package]
+name = "consema-xml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Lossless xml.1.0-safe@1 implementation for Consema"
+
+[dependencies]
+consema-core = { path = "../consema-core", version = "0.8.0" }
+consema-document = { path = "../consema-document", version = "0.8.0" }
+xmlparser.workspace = true
+
+[lints]
+workspace = true
