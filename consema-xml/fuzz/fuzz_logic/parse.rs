@@ -19,22 +19,23 @@ pub fn fuzz_parse(data: &[u8]) {
 /// exhaustively, keep kinds parallel to pieces, stay inside the diagnostic
 /// budget, and publish diagnostics when recovered.
 pub fn assert_parse_closure(data: &[u8], profile: XmlProfile, limits: XmlParseLimits) {
-    let Ok(document) = parse(
-        data,
-        profile,
-        XmlEncodingSelection::ProfileDefault,
-        limits,
-    ) else {
+    let Ok(document) = parse(data, profile, XmlEncodingSelection::ProfileDefault, limits) else {
         return; // fatal formation (including resource-limit truncation): pass
     };
-    assert_eq!(document.render(), data, "formed documents render byte-exactly");
-    let index = document.lossless_structural_index().expect("structural index");
-    let covered: usize = index
-        .pieces()
-        .iter()
-        .map(|piece| piece.span().len())
-        .sum();
-    assert_eq!(covered, data.len(), "formation covers the source exhaustively");
+    assert_eq!(
+        document.render(),
+        data,
+        "formed documents render byte-exactly"
+    );
+    let index = document
+        .lossless_structural_index()
+        .expect("structural index");
+    let covered: usize = index.pieces().iter().map(|piece| piece.span().len()).sum();
+    assert_eq!(
+        covered,
+        data.len(),
+        "formation covers the source exhaustively"
+    );
     assert_eq!(
         document.lossless_syntax_kinds().len(),
         index.pieces().len(),

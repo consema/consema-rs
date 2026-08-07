@@ -3,16 +3,16 @@
 // operations.rs for the full gate description.
 
 use consema_core::{
-    CapabilityId, CapabilitySet, CancellationToken, ExecutableQuery, QueryDefinition,
-    QueryDomain, QueryLimits,
+    CancellationToken, CapabilityId, CapabilitySet, ExecutableQuery, QueryDefinition, QueryDomain,
+    QueryLimits,
 };
 use consema_document::{
     FormationStatus, MaterializationRequest, MaterializationResult, MaterializationStyleId,
     NewlinePolicy, SourceEncoding,
 };
 use consema_properties::{
-    EditTransactionBuilder, PropertiesEncodingSelection, PropertiesParseLimits,
-    PropertiesProfile, ProjectionRequest, ProjectionResult, execute_properties_query,
+    EditTransactionBuilder, ProjectionRequest, ProjectionResult, PropertiesEncodingSelection,
+    PropertiesParseLimits, PropertiesProfile, execute_properties_query,
     execute_properties_syntax_query, materialize, parse,
 };
 
@@ -37,20 +37,26 @@ pub fn fuzz_operations(data: &[u8]) {
             PropertiesProfile::ReaderV1,
             PropertiesEncodingSelection::Reader(SourceEncoding::Utf8),
         ),
-        (PropertiesProfile::Latin1V1, PropertiesEncodingSelection::Latin1),
+        (
+            PropertiesProfile::Latin1V1,
+            PropertiesEncodingSelection::Latin1,
+        ),
     ] {
-        let Ok(document) = parse(data, profile, selection, PropertiesParseLimits::default())
-        else {
+        let Ok(document) = parse(data, profile, selection, PropertiesParseLimits::default()) else {
             continue; // fatal formation (including resource limits): pass
         };
-        assert_eq!(document.render(), data, "formed documents render byte-exactly");
+        assert_eq!(
+            document.render(),
+            data,
+            "formed documents render byte-exactly"
+        );
         let index = document.lossless_structural_index();
-        let covered: usize = index
-            .pieces()
-            .iter()
-            .map(|piece| piece.span().len())
-            .sum();
-        assert_eq!(covered, data.len(), "formation covers the source exhaustively");
+        let covered: usize = index.pieces().iter().map(|piece| piece.span().len()).sum();
+        assert_eq!(
+            covered,
+            data.len(),
+            "formation covers the source exhaustively"
+        );
 
         let native = executable(QueryDomain::java_properties_native_v1());
         let syntax = executable(QueryDomain::java_properties_lossless_syntax_v1());

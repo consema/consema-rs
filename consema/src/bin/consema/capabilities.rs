@@ -205,7 +205,7 @@ mod tests {
         assert!(text.contains("ini.portable@1 (family ini)"));
         assert!(text.contains("plist.binary@1 (family plist)"));
         assert!(text.contains("query domains (21):"));
-        assert!(text.contains("error codes (186):"));
+        assert!(text.contains("error codes (187):"));
     }
 
     #[test]
@@ -246,7 +246,7 @@ mod tests {
                 .as_sequence()
                 .expect("error codes")
                 .len(),
-            186
+            187
         );
     }
 

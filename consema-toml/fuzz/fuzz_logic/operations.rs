@@ -5,16 +5,16 @@
 // here identically.
 
 use consema_core::{
-    CapabilityId, CapabilitySet, CancellationToken, ExecutableQuery, QueryDefinition,
-    QueryDomain, QueryLimits,
+    CancellationToken, CapabilityId, CapabilitySet, ExecutableQuery, QueryDefinition, QueryDomain,
+    QueryLimits,
 };
 use consema_document::{
     FormationStatus, MaterializationRequest, MaterializationResult, MaterializationStyleId,
     NewlinePolicy, ParseLimits,
 };
 use consema_toml::{
-    EditTransactionBuilder, ProjectionRequest, ProjectionResult, ProjectionTarget,
-    TomlProfile, execute_toml_query, execute_toml_syntax_query, materialize, parse,
+    EditTransactionBuilder, ProjectionRequest, ProjectionResult, ProjectionTarget, TomlProfile,
+    execute_toml_query, execute_toml_syntax_query, materialize, parse,
 };
 
 fn capabilities() -> CapabilitySet {
@@ -36,14 +36,18 @@ pub fn fuzz_operations(data: &[u8]) {
     let Ok(document) = parse(data, TomlProfile::Toml10V1, ParseLimits::default()) else {
         return; // fatal formation (including resource limits): pass
     };
-    assert_eq!(document.render(), data, "formed documents render byte-exactly");
+    assert_eq!(
+        document.render(),
+        data,
+        "formed documents render byte-exactly"
+    );
     let index = document.lossless_structural_index();
-    let covered: usize = index
-        .pieces()
-        .iter()
-        .map(|piece| piece.span().len())
-        .sum();
-    assert_eq!(covered, data.len(), "formation covers the source exhaustively");
+    let covered: usize = index.pieces().iter().map(|piece| piece.span().len()).sum();
+    assert_eq!(
+        covered,
+        data.len(),
+        "formation covers the source exhaustively"
+    );
 
     let native = executable(QueryDomain::toml_native_v1());
     let syntax = executable(QueryDomain::toml_lossless_syntax_v1());

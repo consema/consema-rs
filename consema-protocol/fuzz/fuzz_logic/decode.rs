@@ -55,4 +55,3 @@ pub fn fuzz_decode(data: &[u8]) {
         assert_eq!(round_tripped, graph, "PGCE round-trips the graph exactly");
     }
 }
-

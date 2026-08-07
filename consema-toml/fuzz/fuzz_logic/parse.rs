@@ -22,14 +22,18 @@ pub fn assert_parse_closure(data: &[u8], profile: TomlProfile, limits: ParseLimi
     let Ok(document) = parse(data, profile, limits) else {
         return; // fatal formation (including resource-limit truncation): pass
     };
-    assert_eq!(document.render(), data, "formed documents render byte-exactly");
+    assert_eq!(
+        document.render(),
+        data,
+        "formed documents render byte-exactly"
+    );
     let index = document.lossless_structural_index();
-    let covered: usize = index
-        .pieces()
-        .iter()
-        .map(|piece| piece.span().len())
-        .sum();
-    assert_eq!(covered, data.len(), "formation covers the source exhaustively");
+    let covered: usize = index.pieces().iter().map(|piece| piece.span().len()).sum();
+    assert_eq!(
+        covered,
+        data.len(),
+        "formation covers the source exhaustively"
+    );
     assert_eq!(
         document.lossless_syntax_kinds().len(),
         index.pieces().len(),

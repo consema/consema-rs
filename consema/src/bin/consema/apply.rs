@@ -532,21 +532,22 @@ fn read_plan_file(path: &str, cap: u64) -> Result<Vec<u8>, FlowError> {
 }
 
 /// Normalizes one fsio write failure into the per-file failure facts. A
-/// read-back digest mismatch (RFC 0015 §9.3 step 5) carries the frozen
+/// read-back digest mismatch (RFC 0015 §9.3 step 5; the typed
+/// [`crate::fsio::WriteError::ReadBackMismatch`] variant) carries the frozen
 /// `core.source.patch-target-mismatch@1` code with the `cli.write.io@1`
 /// environment diagnostic named on the stderr line; every other failure
-/// keeps its frozen `cli.write.*` code.
+/// keeps its frozen `cli.write.*` code. The typed variant is matched, never
+/// the diagnostic text — a wording change of the mismatch message must not
+/// change the mapping.
 fn write_failure_facts(error: &crate::fsio::WriteError) -> (String, String) {
-    if let crate::fsio::WriteError::Io { source, .. } = error {
-        if source.message.contains("read-back digest mismatch") {
-            return (
-                "core.source.patch-target-mismatch@1".to_owned(),
-                format!(
-                    "{} (environment diagnostic cli.write.io@1)",
-                    error.message()
-                ),
-            );
-        }
+    if let crate::fsio::WriteError::ReadBackMismatch { .. } = error {
+        return (
+            "core.source.patch-target-mismatch@1".to_owned(),
+            format!(
+                "{} (environment diagnostic cli.write.io@1)",
+                error.message()
+            ),
+        );
     }
     (error.code().to_owned(), error.message())
 }
@@ -888,6 +889,48 @@ mod tests {
         assert_eq!(std::fs::read(&b).expect("b written"), target_bytes());
         let text = String::from_utf8_lossy(&stderr);
         assert!(text.contains("cli.write.io@1"), "{text}");
+    }
+
+    #[test]
+    fn write_failure_facts_maps_read_back_mismatch_by_typed_variant_not_text() {
+        // RFC 0015 §9.3 step 5: a read-back digest mismatch maps to
+        // `core.source.patch-target-mismatch@1` with the `cli.write.io@1`
+        // environment diagnostic named on the stderr line. The mapping
+        // matches the typed `WriteError::ReadBackMismatch` variant, so a
+        // wording change of the diagnostic text must not revert the mapping
+        // to plain `cli.write.io@1` (round-2 audit finding F5).
+        let mismatch = crate::fsio::WriteError::ReadBackMismatch {
+            target: PathBuf::from("app.conf"),
+            source: crate::fsio::IoFailure {
+                kind: std::io::ErrorKind::InvalidData,
+                message: "read-back digest mismatch after atomic replace of 'app.conf' \
+                          (the file has been replaced and is not rolled back)"
+                    .to_owned(),
+            },
+        };
+        let (code, message) = write_failure_facts(&mismatch);
+        assert_eq!(code, "core.source.patch-target-mismatch@1");
+        assert!(message.contains("cli.write.io@1"), "{message}");
+        // A reworded diagnostic text keeps the mapping.
+        let reworded = crate::fsio::WriteError::ReadBackMismatch {
+            target: PathBuf::from("app.conf"),
+            source: crate::fsio::IoFailure {
+                kind: std::io::ErrorKind::InvalidData,
+                message: "the post-replace read-back verification failed".to_owned(),
+            },
+        };
+        let (code, _) = write_failure_facts(&reworded);
+        assert_eq!(code, "core.source.patch-target-mismatch@1");
+        // Every other failure keeps its frozen `cli.write.*` code.
+        let io = crate::fsio::WriteError::Io {
+            target: PathBuf::from("app.conf"),
+            source: crate::fsio::IoFailure {
+                kind: std::io::ErrorKind::StorageFull,
+                message: "disk full".to_owned(),
+            },
+        };
+        let (code, _) = write_failure_facts(&io);
+        assert_eq!(code, "cli.write.io@1");
     }
 
     #[test]

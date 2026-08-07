@@ -18,11 +18,14 @@
 //!
 //! The schedule is fully deterministic: every offset, length, byte, and
 //! count is drawn from the committed base seed plus the fixture index, so
-//! regenerating on any machine produces byte-identical output.
+//! regenerating on any machine produces byte-identical output. The
+//! committed `regressions` array (hand-added fuzz findings, see
+//! conformance/corpora/README.md) is round-tripped verbatim from the
+//! committed file, so regeneration never wipes regression entries.
 
 use consema_conformance::fuzz::{FLIP_MASKS, INSERT_BYTES, Rng};
 use std::fmt::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Committed base seed of the whole corpus (evidence: unseeded mutation
 /// runs do not count).
@@ -438,15 +441,26 @@ struct MutationCase {
 
 fn main() {
     let check = std::env::args().any(|argument| argument == "--check");
-    let generated = generate();
     let target = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../conformance/corpora/mutation-v1.json");
+    // Regression entries are committed by hand (conformance/corpora/README.md,
+    // "Adding a fuzz finding"). Read the committed array once at startup and
+    // round-trip it verbatim into the regenerated output: regeneration is
+    // idempotent with respect to regressions (a new entry survives, and an
+    // unchanged array leaves the output byte-identical). There is no merge —
+    // the committed file is the only source of entries.
+    let existing = std::fs::read_to_string(&target);
+    let regressions = match &existing {
+        Ok(content) => extract_regressions(content, &target),
+        Err(_) => String::new(), // first generation: no committed corpus yet
+    };
+    let generated = generate(&regressions);
     if check {
-        let existing = std::fs::read_to_string(&target).unwrap_or_else(|error| {
+        let content = existing.unwrap_or_else(|error| {
             panic!("cannot read committed corpus {}: {error}", target.display())
         });
         assert!(
-            existing == generated,
+            content == generated,
             "committed corpus {} is stale: re-run `cargo run -p consema-conformance --example gen_mutation_corpus`",
             target.display()
         );
@@ -551,7 +565,7 @@ fn ordinal(id: &str) -> usize {
         .expect("fixture id is in the table")
 }
 
-fn generate() -> String {
+fn generate(regressions: &str) -> String {
     let mut output = String::new();
     output.push_str("{\n");
     output.push_str("  \"suite\": \"consema.mutation-corpus@1\",\n");
@@ -619,10 +633,68 @@ fn generate() -> String {
     }
     output.push_str("  },\n");
     // Fuzz findings are committed here (exact minimal inputs) per
-    // conformance/corpora/README.md; the array starts empty.
-    output.push_str("  \"regressions\": []\n");
+    // conformance/corpora/README.md; the committed array is round-tripped
+    // verbatim by `extract_regressions`, so it is empty only when the
+    // committed file itself has an empty array.
+    output.push_str("  \"regressions\": [");
+    output.push_str(regressions);
+    output.push_str("]\n");
     output.push_str("}\n");
     output
+}
+
+/// Extracts the raw text of the committed `regressions` array (the bytes
+/// between its brackets) for verbatim round-tripping, so contributor entries
+/// survive regeneration byte-for-byte regardless of how they are formatted.
+/// The scan is string-aware: `[`/`]` inside quoted strings (e.g. a note
+/// mentioning brackets) do not affect bracket matching. The `regressions`
+/// field is always the last field of the corpus object, so the first
+/// `"regressions":` occurrence is the field itself, never content inside it.
+fn extract_regressions(content: &str, target: &Path) -> String {
+    let marker = "\"regressions\":";
+    let marker_pos = content.find(marker).unwrap_or_else(|| {
+        panic!(
+            "committed corpus {} lacks a regressions field",
+            target.display()
+        )
+    });
+    let after = &content[marker_pos + marker.len()..];
+    let open = after.find('[').unwrap_or_else(|| {
+        panic!(
+            "committed corpus {} regressions is not an array",
+            target.display()
+        )
+    });
+    let mut depth = 0u32;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (offset, byte) in after[open..].bytes().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+        } else {
+            match byte {
+                b'"' => in_string = true,
+                b'[' => depth += 1,
+                b']' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return after[open + 1..open + offset].to_string();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    panic!(
+        "committed corpus {} has an unterminated regressions array",
+        target.display()
+    )
 }
 
 fn decode_hex(source: &str) -> Vec<u8> {

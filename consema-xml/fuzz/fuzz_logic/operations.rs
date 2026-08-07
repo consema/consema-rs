@@ -3,8 +3,8 @@
 // operations.rs for the full gate description.
 
 use consema_core::{
-    CapabilityId, CapabilitySet, CancellationToken, ExecutableQuery, QueryDefinition,
-    QueryDomain, QueryLimits,
+    CancellationToken, CapabilityId, CapabilitySet, ExecutableQuery, QueryDefinition, QueryDomain,
+    QueryLimits,
 };
 use consema_document::{
     FormationStatus, MaterializationRequest, MaterializationResult, MaterializationStyleId,
@@ -12,8 +12,7 @@ use consema_document::{
 };
 use consema_xml::{
     EditTransactionBuilder, ProjectionRequest, ProjectionResult, XmlEncodingSelection,
-    XmlParseLimits, XmlProfile, execute_xml_query, execute_xml_syntax_query, materialize,
-    parse,
+    XmlParseLimits, XmlProfile, execute_xml_query, execute_xml_syntax_query, materialize, parse,
 };
 
 fn capabilities() -> CapabilitySet {
@@ -40,14 +39,20 @@ pub fn fuzz_operations(data: &[u8]) {
     ) else {
         return; // fatal formation (including resource limits): pass
     };
-    assert_eq!(document.render(), data, "formed documents render byte-exactly");
-    let index = document.lossless_structural_index().expect("structural index");
-    let covered: usize = index
-        .pieces()
-        .iter()
-        .map(|piece| piece.span().len())
-        .sum();
-    assert_eq!(covered, data.len(), "formation covers the source exhaustively");
+    assert_eq!(
+        document.render(),
+        data,
+        "formed documents render byte-exactly"
+    );
+    let index = document
+        .lossless_structural_index()
+        .expect("structural index");
+    let covered: usize = index.pieces().iter().map(|piece| piece.span().len()).sum();
+    assert_eq!(
+        covered,
+        data.len(),
+        "formation covers the source exhaustively"
+    );
 
     let native = executable(QueryDomain::xml_native_v1());
     let syntax = executable(QueryDomain::xml_lossless_syntax_v1());

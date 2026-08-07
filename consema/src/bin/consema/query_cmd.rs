@@ -136,6 +136,40 @@ impl FlowError {
         self
     }
 
+    /// Creates a read failure (`cli.data.io@1`): the human stderr line
+    /// carries the full OS error text, while the envelope diagnostic message
+    /// carries only the stable `io::ErrorKind` spelling (RFC 0015 §3.3 —
+    /// locale-dependent OS text never enters machine output).
+    pub(crate) fn io_read(code: impl Into<String>, phrase: String, error: &std::io::Error) -> Self {
+        let code = code.into();
+        let message = format!("{phrase}: {error}");
+        let mut diagnostic = Diagnostic::new(
+            registered_code(&code).to_owned(),
+            ErrorCodeRegistry::v7()
+                .descriptor(registered_code(&code))
+                .map_or(DiagnosticCategory::Semantic, |descriptor| {
+                    descriptor.category
+                }),
+            DiagnosticSeverity::Error,
+            None,
+            0,
+        );
+        diagnostic.arguments.insert(
+            "message".to_owned(),
+            format!("{phrase}: {:?}", error.kind()),
+        );
+        let diagnostics = vec![
+            DiagnosticMessage::from_core_with_registry(&diagnostic, None, ErrorCodeRegistry::v7())
+                .expect("cli.data.io@1 is a registered v7 code"),
+        ];
+        Self {
+            code,
+            message,
+            diagnostics,
+            payload: None,
+        }
+    }
+
     /// Frozen exit class of the failure (RFC 0015 §5.2 pure mapping).
     pub(crate) fn exit_class(&self) -> ExitClass {
         classify_error_code(&self.code)
@@ -201,9 +235,10 @@ pub(crate) fn read_request_bytes(parsed: &ParsedArgs) -> Result<Vec<u8>, FlowErr
                 "cli.limit.manifest-size@1",
                 format!("request file '{path}' exceeds the {cap}-byte input cap"),
             )),
-            Err(ReadFailure::Io(error)) => Err(FlowError::new(
+            Err(ReadFailure::Io(error)) => Err(FlowError::io_read(
                 "cli.data.io@1",
-                format!("cannot read request file '{path}': {error}"),
+                format!("cannot read request file '{path}'"),
+                &error,
             )),
         }
     } else {
@@ -213,9 +248,10 @@ pub(crate) fn read_request_bytes(parsed: &ParsedArgs) -> Result<Vec<u8>, FlowErr
             .take(cap.saturating_add(1))
             .read_to_end(&mut buffer)
             .map_err(|error| {
-                FlowError::new(
+                FlowError::io_read(
                     "cli.data.io@1",
-                    format!("cannot read request from stdin: {error}"),
+                    "cannot read request from stdin".to_owned(),
+                    &error,
                 )
             })?;
         if u64::try_from(buffer.len()).expect("usize fits u64") > cap {
@@ -355,9 +391,10 @@ pub(crate) fn read_source_capped(path: &str, cap: u64) -> Result<Arc<[u8]>, Flow
             "cli.limit.file-size@1",
             format!("source file '{path}' exceeds the {cap}-byte read cap"),
         )),
-        Err(ReadFailure::Io(error)) => Err(FlowError::new(
+        Err(ReadFailure::Io(error)) => Err(FlowError::io_read(
             "cli.data.io@1",
-            format!("cannot read source file '{path}': {error}"),
+            format!("cannot read source file '{path}'"),
+            &error,
         )),
     }
 }
@@ -920,6 +957,11 @@ pub(crate) fn published_record(value: &PortableValue) -> Option<&'static str> {
 }
 
 /// Emits one validated `core.cli-output@1` envelope line (RFC 0015 §4).
+///
+/// The envelope is the `--json` wire presentation (RFC 0015 §3.3): without
+/// `--json` this writes nothing and returns success, so envelope-class
+/// failure paths leave stdout at zero bytes while stderr keeps the human
+/// diagnostic and the caller keeps the classified exit code.
 pub(crate) fn emit_envelope(
     command: CliCommand,
     exit_class: ExitClass,
@@ -928,6 +970,12 @@ pub(crate) fn emit_envelope(
     parsed: &ParsedArgs,
     stdout: &mut dyn Write,
 ) -> Result<(), String> {
+    if !parsed.json {
+        // RFC 0015 §3.3: without --json, stdout carries only command-result
+        // data; the envelope (including the failure form of RFC 0015 §4.2)
+        // is never written in human mode.
+        return Ok(());
+    }
     let envelope = CliOutputMessage::new(
         command,
         exit_class,
@@ -963,7 +1011,9 @@ pub(crate) fn minimal_record(command: CliCommand) -> PortableValue {
 /// Emits the failure path of one request command: usage-class failures write
 /// only a stderr line (no envelope, RFC 0015 §4.2); envelope-class failures
 /// write the envelope with the failed record form plus diagnostics, then the
-/// stderr line, and exit with the classified code.
+/// stderr line, and exit with the classified code. The envelope is written
+/// only under `--json`; in human mode the failure writes zero stdout bytes
+/// (RFC 0015 §3.3 — the stderr line is the entire human failure surface).
 pub(crate) fn emit_failure(
     command: CliCommand,
     parsed: &ParsedArgs,
@@ -1592,6 +1642,52 @@ mod tests {
         assert_eq!(code, 1);
         assert!(stdout.is_empty(), "usage failures never emit an envelope");
         assert!(stderr_text(&stderr).contains("unknown profile 'json.bogus'"));
+    }
+
+    #[test]
+    fn query_unreadable_request_file_envelope_message_is_stable() {
+        // RFC 0015 §3.3: the envelope diagnostic message carries only the
+        // stable ErrorKind; the locale-dependent OS error text is the human
+        // stderr line (round-2 audit finding F6).
+        let missing = std::env::temp_dir().join(format!(
+            "consema-query-missing-request-file-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&missing);
+        let parsed = parse(&[
+            "query",
+            "--profile",
+            "json.strict",
+            "--json",
+            "--request-file",
+            missing.to_str().expect("utf8 temp path"),
+        ]);
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let code = run(&parsed, &mut stdout, &mut stderr);
+        assert_eq!(code, 2, "{}", stderr_text(&stderr));
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], ProtocolLimits::default())
+                .expect("byte-valid failure envelope");
+        assert_eq!(envelope.exit_class(), ExitClass::Data);
+        assert_eq!(envelope.diagnostics()[0].code, "cli.data.io@1");
+        let message = &envelope.diagnostics()[0].arguments["message"];
+        assert!(
+            message.contains("NotFound"),
+            "the envelope message carries the stable ErrorKind: {message}"
+        );
+        let raw = std::fs::File::open(&missing)
+            .expect_err("still missing")
+            .to_string();
+        assert!(
+            !message.contains(&raw),
+            "the envelope must not embed OS locale text: {message}"
+        );
+        assert!(
+            stderr_text(&stderr).contains(&raw),
+            "the full OS error text is the human stderr line"
+        );
+        assert!(stderr_text(&stderr).contains("(code cli.data.io@1)"));
     }
 
     #[test]

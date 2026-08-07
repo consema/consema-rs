@@ -7,10 +7,11 @@
 //! command has a success path, a usage rejection, and a data-error path;
 //! detection ambiguity is a first-class success result (RFC 0015 §7.2 rule
 //! 3); the registry inventory is complete (16 profiles across 8 families,
-//! 21 query domains, 186 error codes, one operation registry per profile);
-//! data-class failures carry an envelope while usage failures never do
-//! (RFC 0015 §4.2); and stdout carries only result data while diagnostics
-//! go to stderr (RFC 0015 §3.3).
+//! 21 query domains, 187 error codes, one operation registry per profile);
+//! under `--json`, data-class failures carry an envelope while usage
+//! failures never do (RFC 0015 §4.2), and in human mode envelope-class
+//! failures write zero stdout bytes (RFC 0015 §3.3); stdout carries only
+//! result data while diagnostics go to stderr (RFC 0015 §3.3).
 
 use consema::protocol::{CliCommand, CliOutputMessage, ExitClass, ProtocolLimits};
 use std::fs;
@@ -157,7 +158,7 @@ fn capabilities_reports_the_full_facade_inventory() {
     let codes = payload_field(&envelope, "error_codes")
         .as_sequence()
         .expect("error codes");
-    assert_eq!(codes.len(), 186, "v7 error-code count (RFC 0015 §13.2)");
+    assert_eq!(codes.len(), 187, "v7 error-code count");
     let code_strings: Vec<&str> = codes
         .iter()
         .map(|code| code.as_string().expect("code string"))
@@ -177,7 +178,7 @@ fn capabilities_human_output_is_deterministic_data() {
     assert!(text.contains("families (8):"));
     assert!(text.contains("profiles (16):"));
     assert!(text.contains("query domains (21):"));
-    assert!(text.contains("error codes (186):"));
+    assert!(text.contains("error codes (187):"));
 }
 
 #[test]
@@ -571,7 +572,18 @@ fn explain_contract_and_error_code_and_profile_succeed() {
 fn explain_unknown_id_is_a_data_error() {
     let output = run(&["explain", "example.unknown@1"]);
     assert_eq!(status(&output), 2, "failed lookups classify as data");
-    let envelope = decode_envelope(&output);
+    assert!(
+        output.stdout.is_empty(),
+        "human-mode failures write zero stdout bytes (RFC 0015 §3.3)"
+    );
+    assert!(
+        stderr_text(&output).contains("(code cli.data.invalid-request@1)"),
+        "human-mode failures diagnose on stderr"
+    );
+    // The --json sibling still carries the failure envelope (RFC 0015 §4.2).
+    let json = run(&["explain", "example.unknown@1", "--json"]);
+    assert_eq!(status(&json), 2);
+    let envelope = decode_envelope(&json);
     assert_eq!(envelope.exit_class(), ExitClass::Data);
     assert_eq!(envelope.diagnostics()[0].code, "cli.data.invalid-request@1");
 }
@@ -595,7 +607,25 @@ fn explain_capability_kind_is_a_data_error_until_a_declaration_source_exists() {
         2,
         "the 0.12.0 SDK publishes no capability-declaration registry"
     );
-    assert!(!output.stdout.is_empty());
+    assert!(
+        output.stdout.is_empty(),
+        "human-mode failures write zero stdout bytes (RFC 0015 §3.3)"
+    );
+    assert!(
+        stderr_text(&output).contains("(code cli.data.invalid-request@1)"),
+        "human-mode failures diagnose on stderr"
+    );
+    // The --json sibling still carries the failure envelope (RFC 0015 §4.2).
+    let json = run(&[
+        "explain",
+        "capability",
+        "core.query.ordered-results@1",
+        "--json",
+    ]);
+    assert_eq!(status(&json), 2);
+    let envelope = decode_envelope(&json);
+    assert_eq!(envelope.exit_class(), ExitClass::Data);
+    assert_eq!(envelope.diagnostics()[0].code, "cli.data.invalid-request@1");
 }
 
 // ---------------------------------------------------------------------------

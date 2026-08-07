@@ -377,7 +377,7 @@ mod tests {
                 ContractRegistry::v7(),
                 ErrorCodeRegistry::v7(),
                 41,
-                186,
+                187,
                 true,
             ),
         ];

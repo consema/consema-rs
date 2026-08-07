@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use consema_core::{
     AssociationLocation, AssociationRole, BigInteger, BinaryFloat64, Date, Decimal,
@@ -544,6 +544,7 @@ impl Document {
             max_entries: request.limits.max_provenance_entries,
             units: 0,
             map: GraphProvenanceMap::default(),
+            index: HashMap::new(),
         };
         builder.build()?;
         Ok(CompleteGraphProjection {
@@ -574,6 +575,7 @@ impl Document {
             provenance_units: 0,
             report: ProjectionReport::default(),
             provenance: ProvenanceMap::default(),
+            provenance_index: HashMap::new(),
             fidelity: Fidelity::Exact,
         };
         let root = self.native.documents[0].root;
@@ -606,6 +608,9 @@ struct GraphProvenanceBuilder<'a> {
     max_entries: usize,
     units: usize,
     map: GraphProvenanceMap,
+    // Location -> entry index; without it every origin lookup scans the
+    // whole map per node (O(nodes x entries), B-8).
+    index: HashMap<GraphProjectedLocation, usize>,
 }
 
 impl GraphProvenanceBuilder<'_> {
@@ -726,11 +731,7 @@ impl GraphProvenanceBuilder<'_> {
         projected: GraphProjectedLocation,
         origin: SourceOrigin,
     ) -> Result<(), GraphProjectionFailure> {
-        let existing = self
-            .map
-            .entries
-            .iter()
-            .position(|entry| entry.projected == projected);
+        let existing = self.index.get(&projected).copied();
         let observed = self
             .units
             .saturating_add(if existing.is_some() { 1 } else { 2 });
@@ -741,10 +742,12 @@ impl GraphProvenanceBuilder<'_> {
         if let Some(position) = existing {
             self.map.entries[position].origins.push(origin);
         } else {
+            let position = self.map.entries.len();
             self.map.entries.push(GraphProvenanceEntry {
                 projected,
                 origins: vec![origin],
             });
+            self.index.insert(projected, position);
         }
         Ok(())
     }
@@ -759,6 +762,9 @@ struct ValueContext<'a> {
     provenance_units: usize,
     report: ProjectionReport,
     provenance: ProvenanceMap,
+    // Location -> entry index; without it every origin lookup scans the
+    // whole map per node (O(nodes x entries), B-8).
+    provenance_index: HashMap<ProjectedLocation, usize>,
     fidelity: Fidelity,
 }
 
@@ -1103,11 +1109,7 @@ impl ValueContext<'_> {
         span: Span,
         relation: ProvenanceRelation,
     ) -> Result<(), ValueProjectionFailure> {
-        let existing = self
-            .provenance
-            .entries
-            .iter()
-            .position(|entry| entry.projected == projected);
+        let existing = self.provenance_index.get(&projected).copied();
         let observed = self
             .provenance_units
             .saturating_add(if existing.is_some() { 1 } else { 2 });
@@ -1126,10 +1128,12 @@ impl ValueContext<'_> {
         if let Some(position) = existing {
             self.provenance.entries[position].origins.push(origin);
         } else {
+            let position = self.provenance.entries.len();
             self.provenance.entries.push(ProvenanceEntry {
-                projected,
+                projected: projected.clone(),
                 origins: vec![origin],
             });
+            self.provenance_index.insert(projected, position);
         }
         Ok(())
     }

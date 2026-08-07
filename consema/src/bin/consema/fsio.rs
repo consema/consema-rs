@@ -34,9 +34,12 @@
 //!   written, verified by the read-back digest (UTF-16 and ISO-8859-1 files
 //!   pass through unchanged; R-11).
 //! - **Failure algebra**: permission denial → `cli.write.permission@1`;
-//!   every other I/O failure (disk full, missing directory, read-back
-//!   digest mismatch) → `cli.write.io@1`; symlink policy → §above; read-only
-//!   → §above. All are precondition-class failures (exit 4, RFC 0015 §5.1).
+//!   every other I/O failure (disk full, missing directory) →
+//!   `cli.write.io@1`; the read-back digest mismatch is the typed
+//!   `ReadBackMismatch` variant with the same `cli.write.io@1` code (RFC
+//!   0015 §9.3 step 5 — matched structurally, never by message text); symlink
+//!   policy → §above; read-only → §above. All are precondition-class
+//!   failures (exit 4, RFC 0015 §5.1).
 //! - **Create-if-missing**: when the target does not exist the replacement
 //!   still creates it (the atomic rename creates the final entry); a missing
 //!   *parent directory* is a `cli.write.io@1` failure, never a silent create
@@ -170,9 +173,19 @@ pub enum WriteError {
         /// The normalized underlying failure.
         source: IoFailure,
     },
-    /// Any other I/O failure (disk full, missing parent directory, read-back
-    /// digest mismatch); `cli.write.io@1`.
+    /// Any other I/O failure (disk full, missing parent directory);
+    /// `cli.write.io@1`.
     Io {
+        /// The write target path.
+        target: PathBuf,
+        /// The normalized underlying failure.
+        source: IoFailure,
+    },
+    /// The read-back digest verification failed after the atomic replace
+    /// (RFC 0015 §9.3 step 5): the file has been replaced and is not rolled
+    /// back; `cli.write.io@1`. The typed variant exists so the failure is
+    /// matched structurally, never by string-matching the diagnostic text.
+    ReadBackMismatch {
         /// The write target path.
         target: PathBuf,
         /// The normalized underlying failure.
@@ -190,7 +203,7 @@ impl WriteError {
             Self::ReadOnly { .. } => "cli.write.read-only@1",
             Self::TargetIsDirectory { .. } => "cli.write.target-is-directory@1",
             Self::Permission { .. } => "cli.write.permission@1",
-            Self::Io { .. } => "cli.write.io@1",
+            Self::Io { .. } | Self::ReadBackMismatch { .. } => "cli.write.io@1",
         }
     }
 
@@ -202,7 +215,8 @@ impl WriteError {
             | Self::ReadOnly { target }
             | Self::TargetIsDirectory { target }
             | Self::Permission { target, .. }
-            | Self::Io { target, .. } => target,
+            | Self::Io { target, .. }
+            | Self::ReadBackMismatch { target, .. } => target,
         }
     }
 
@@ -227,7 +241,7 @@ impl WriteError {
                 target.display(),
                 source.message
             ),
-            Self::Io { target, source } => format!(
+            Self::Io { target, source } | Self::ReadBackMismatch { target, source } => format!(
                 "I/O failure writing '{}': {}",
                 target.display(),
                 source.message
@@ -586,7 +600,7 @@ fn finish_write<B: FsBackend>(
         .map_err(|error| classify(resolved, error))?;
     let digest = ContentDigest::of(&read_back);
     if digest != ContentDigest::of(bytes) {
-        return Err(WriteError::Io {
+        return Err(WriteError::ReadBackMismatch {
             target: resolved.to_path_buf(),
             source: IoFailure::new(
                 io::ErrorKind::InvalidData,
@@ -1316,6 +1330,10 @@ mod tests {
         backend.tamper_read_back();
         let error = write_atomic_with(&backend, &target, b"new content", WriteOptions::default())
             .expect_err("tampered read-back");
+        assert!(
+            matches!(&error, WriteError::ReadBackMismatch { .. }),
+            "the mismatch is the typed ReadBackMismatch variant: {error:?}"
+        );
         assert_eq!(error.code(), "cli.write.io@1");
         assert!(
             error.message().contains("read-back digest mismatch"),

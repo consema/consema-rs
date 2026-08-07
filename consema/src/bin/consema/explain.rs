@@ -315,7 +315,9 @@ fn category_name(category: consema::core::DiagnosticCategory) -> &'static str {
 
 /// One data-class explain failure envelope: `cli.explain@1` with the given
 /// kind/id/version and an empty record, plus the failure diagnostic
-/// (RFC 0015 §4.2: data-class failures carry envelopes).
+/// (RFC 0015 §4.2: data-class failures carry envelopes). The envelope is
+/// written only under `--json`; in human mode the failure writes zero stdout
+/// bytes and the diagnostics below are the failure surface (RFC 0015 §3.3).
 fn emit_explain_failure(
     parsed: &ParsedArgs,
     kind: &str,
@@ -356,8 +358,15 @@ fn emit_explain_failure(
         Ok(envelope) => envelope,
         Err(error) => return internal_error(&format!("explain failure envelope: {error}"), stderr),
     };
-    let write_result = output::emit_envelope(&envelope, parsed.pretty, stdout)
-        .map_err(|error| error.message().to_owned());
+    let write_result = if parsed.json {
+        output::emit_envelope(&envelope, parsed.pretty, stdout)
+            .map_err(|error| error.message().to_owned())
+    } else {
+        // RFC 0015 §3.3: without --json the failure carries no envelope
+        // bytes on stdout; the diagnostics below are the entire human
+        // failure surface.
+        Ok(())
+    };
     match write_result {
         Ok(()) => {
             for diagnostic in diagnostics {
@@ -517,12 +526,20 @@ mod tests {
 
     #[test]
     fn explain_capability_kind_is_reserved_with_a_data_error() {
-        let (code, stdout, _) = run(&["explain", "capability", "core.query.ordered-results@1"]);
+        let (code, stdout, stderr) =
+            run(&["explain", "capability", "core.query.ordered-results@1"]);
         assert_eq!(
             code, 2,
             "no capability-declaration source in the 0.12.0 SDK"
         );
-        assert!(!stdout.is_empty());
+        assert!(
+            stdout.is_empty(),
+            "human-mode failures write zero stdout bytes (RFC 0015 §3.3)"
+        );
+        assert!(
+            stderr_text(&stderr).contains("(code cli.data.invalid-request@1)"),
+            "human-mode failures diagnose on stderr"
+        );
     }
 
     #[test]
@@ -538,9 +555,16 @@ mod tests {
 
     #[test]
     fn explain_id_without_version_is_a_data_error() {
-        let (code, stdout, _) = run(&["explain", "core.cli-output"]);
+        let (code, stdout, stderr) = run(&["explain", "core.cli-output"]);
         assert_eq!(code, 2, "ids must carry the @version suffix");
-        assert!(!stdout.is_empty());
+        assert!(
+            stdout.is_empty(),
+            "human-mode failures write zero stdout bytes (RFC 0015 §3.3)"
+        );
+        assert!(
+            stderr_text(&stderr).contains("(code cli.data.invalid-request@1)"),
+            "human-mode failures diagnose on stderr"
+        );
     }
 
     #[test]

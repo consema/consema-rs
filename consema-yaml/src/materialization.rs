@@ -832,6 +832,7 @@ fn collect_graph_provenance(
         units: 0,
         entries: Vec::new(),
         seen: HashSet::new(),
+        index: HashMap::new(),
     };
     for (index, input_root) in graph.roots().iter().copied().enumerate() {
         let output_document = document
@@ -862,6 +863,9 @@ struct GraphProvenanceBuilder<'a> {
     units: usize,
     entries: Vec<GraphMaterializationProvenanceEntry>,
     seen: HashSet<GraphNodeId>,
+    // Location -> entry index; without it every alias-origin lookup scans
+    // the whole map (O(entries) per lookup, B-8).
+    index: HashMap<GraphMaterializationInputLocation, usize>,
 }
 
 impl GraphProvenanceBuilder<'_> {
@@ -1020,10 +1024,12 @@ impl GraphProvenanceBuilder<'_> {
         self.entries
             .try_reserve(1)
             .map_err(|_| MaterializationFailure::ResourceLimit("provenance-allocation"))?;
+        let position = self.entries.len();
         self.entries.push(GraphMaterializationProvenanceEntry {
             input,
             outputs: vec![output],
         });
+        self.index.insert(input, position);
         Ok(())
     }
 
@@ -1039,12 +1045,12 @@ impl GraphProvenanceBuilder<'_> {
         if self.units > self.limits.max_provenance_entries {
             return Err(MaterializationFailure::ResourceLimit("provenance-entries").into());
         }
-        self.entries
-            .iter_mut()
-            .find(|entry| entry.input == input)
-            .ok_or(GraphMaterializationFailure::RoundTripMismatch)?
-            .outputs
-            .push(output);
+        let position = self
+            .index
+            .get(&input)
+            .copied()
+            .ok_or(GraphMaterializationFailure::RoundTripMismatch)?;
+        self.entries[position].outputs.push(output);
         Ok(())
     }
 }
@@ -1607,15 +1613,19 @@ struct ValueProvenanceBuilder<'a> {
     request: &'a MaterializationRequest,
     units: usize,
     entries: Vec<MaterializationProvenanceEntry>,
+    // Location -> entry index; without it every sequence-element lookup
+    // scans the whole map (O(entries) per lookup, B-8).
+    index: HashMap<MaterializationInputLocation, usize>,
 }
 
 impl<'a> ValueProvenanceBuilder<'a> {
-    const fn new(document: &'a Document, request: &'a MaterializationRequest) -> Self {
+    fn new(document: &'a Document, request: &'a MaterializationRequest) -> Self {
         Self {
             document,
             request,
             units: 0,
             entries: Vec::new(),
+            index: HashMap::new(),
         }
     }
 
@@ -1782,10 +1792,12 @@ impl<'a> ValueProvenanceBuilder<'a> {
         self.entries
             .try_reserve(1)
             .map_err(|_| MaterializationFailure::ResourceLimit("provenance-allocation"))?;
+        let position = self.entries.len();
         self.entries.push(MaterializationProvenanceEntry {
-            input,
+            input: input.clone(),
             outputs: vec![output],
         });
+        self.index.insert(input, position);
         Ok(())
     }
 
@@ -1801,12 +1813,12 @@ impl<'a> ValueProvenanceBuilder<'a> {
         if self.units > self.request.limits().max_provenance_entries {
             return Err(MaterializationFailure::ResourceLimit("provenance-entries"));
         }
-        self.entries
-            .iter_mut()
-            .find(|entry| entry.input == input)
-            .ok_or(MaterializationFailure::FormationFailed)?
-            .outputs
-            .push(output);
+        let position = self
+            .index
+            .get(&input)
+            .copied()
+            .ok_or(MaterializationFailure::FormationFailed)?;
+        self.entries[position].outputs.push(output);
         Ok(())
     }
 }
@@ -1887,6 +1899,48 @@ mod tests {
             elapsed.as_secs_f64() < 8.0,
             "materializing a 5000-entry object took {elapsed:?}; expected linear time under \
              8 s, pre-fix code took ~30-60 s (debug) / ~3.6 s (release)"
+        );
+    }
+
+    // B-8 regression: the materialization reparse was quadratic on nested
+    // block output — the composer resolved each collection's covering span
+    // only after its children, restarting the single-pass offset walk per
+    // nested collection (O(nodes x source)); the value provenance builders
+    // additionally scanned the whole provenance map per entry. A 4000-item
+    // nested object (each item a mapping containing a mapping and a
+    // sequence) took ~6.7 s (release) before the fixes and ~0.23 s after;
+    // a 6000-item input took ~15 s pre-fix (release), so the 8 s ceiling
+    // fails the pre-fix quadratic by a wide margin while the fixed pipeline
+    // keeps a ~20x headroom even in debug builds.
+    #[test]
+    fn large_nested_materialization_stays_within_linear_budget() {
+        use std::time::Instant;
+        let mut builder = ObjectBuilder::new();
+        for index in 0..6000 {
+            let mut sequence = SequenceBuilder::new();
+            sequence.push(PortableValue::string("one"));
+            sequence.push(PortableValue::string("two"));
+            sequence.push(PortableValue::string("three"));
+            let mut inner = ObjectBuilder::new();
+            inner.insert("list", sequence.build()).expect("unique");
+            let mut item = ObjectBuilder::new();
+            item.insert("a", inner.build()).expect("unique");
+            builder
+                .insert(format!("key{index:06}-{}", "x".repeat(35)), item.build())
+                .expect("unique");
+        }
+        let value = builder.build();
+        let req = request("yaml.canonical-block")
+            .with_newline(NewlinePolicy::Lf)
+            .with_mapping_policy(MappingPolicy::UniqueStringEntriesToObject);
+        let started = Instant::now();
+        let result = materialize_value(&value, &req);
+        let elapsed = started.elapsed();
+        assert!(matches!(result, MaterializationResult::Complete(_)));
+        assert!(
+            elapsed.as_secs_f64() < 8.0,
+            "materializing a 6000-item nested object took {elapsed:?}; expected linear time \
+             under 8 s, pre-fix code took ~15 s (release) on this shape"
         );
     }
 

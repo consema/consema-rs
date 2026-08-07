@@ -48,6 +48,10 @@ pub fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) 
             // The stat size is a fact when metadata succeeded; without it the
             // size fact is absent (0).
             let size = metadata.as_ref().map_or(0, std::fs::Metadata::len);
+            let kind = io_error.kind();
+            // RFC 0015 §3.3: the envelope diagnostic message carries only the
+            // stable `io::ErrorKind`; the locale-dependent OS error text is
+            // the human stderr line.
             return emit_inspect_failure(
                 parsed,
                 path,
@@ -57,7 +61,11 @@ pub fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) 
                 &[cli_diagnostic(
                     "cli.data.io@1",
                     DiagnosticCategory::Encoding,
+                    format!("cannot read '{path}': {kind:?}"),
+                )],
+                &[(
                     format!("cannot read '{path}': {io_error}"),
+                    "cli.data.io@1".to_owned(),
                 )],
                 stdout,
                 stderr,
@@ -66,6 +74,10 @@ pub fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) 
     };
 
     if !fully_read {
+        let message = format!(
+            "'{path}' exceeds the CLI read budget of {budget} bytes (RFC 0015 §12); \
+             raise it with --max-bytes"
+        );
         return emit_inspect_failure(
             parsed,
             path,
@@ -75,11 +87,9 @@ pub fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) 
             &[cli_diagnostic(
                 "cli.limit.file-size@1",
                 DiagnosticCategory::Resource,
-                format!(
-                    "'{path}' exceeds the CLI read budget of {budget} bytes (RFC 0015 §12); \
-                     raise it with --max-bytes"
-                ),
+                message.clone(),
             )],
+            &[(message, "cli.limit.file-size@1".to_owned())],
             stdout,
             stderr,
         );
@@ -91,6 +101,10 @@ pub fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) 
         Some(profile_id) => match parse_facts_value(profile_id, path, &bytes, stderr) {
             ParseOutcome::Facts(value) => Some(value),
             ParseOutcome::Fatal(diagnostics) => {
+                let stderr_lines = diagnostics
+                    .iter()
+                    .map(|diagnostic| (diagnostic_message(diagnostic), diagnostic.code.clone()))
+                    .collect::<Vec<_>>();
                 return emit_inspect_failure(
                     parsed,
                     path,
@@ -98,6 +112,7 @@ pub fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) 
                     facts.size,
                     facts.digest,
                     &diagnostics,
+                    &stderr_lines,
                     stdout,
                     stderr,
                 );
@@ -168,7 +183,15 @@ fn is_symlink_fact(metadata: &std::fs::Metadata) -> bool {
 }
 
 /// One data/limit failure envelope for inspect (RFC 0015 §4.2: data-class
-/// failures carry an envelope; the payload keeps the facts that exist).
+/// failures carry an envelope; the payload keeps the facts that exist). The
+/// envelope is written only under `--json`; in human mode the failure writes
+/// zero stdout bytes and the diagnostics below are the failure surface
+/// (RFC 0015 §3.3).
+///
+/// `diagnostics` are the envelope diagnostics (their messages are stable
+/// facts, never locale-dependent text); `stderr_lines` are the human
+/// `(message, code)` lines and may carry the full OS error text (RFC 0015
+/// §3.3: the envelope message and the stderr line may differ).
 #[allow(clippy::too_many_arguments)]
 fn emit_inspect_failure(
     parsed: &ParsedArgs,
@@ -177,6 +200,7 @@ fn emit_inspect_failure(
     size: u64,
     digest: Option<ContentDigest>,
     diagnostics: &[DiagnosticMessage],
+    stderr_lines: &[(String, String)],
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> u8 {
@@ -206,17 +230,19 @@ fn emit_inspect_failure(
             return internal_error(&format!("inspect failure envelope: {error}"), stderr);
         }
     };
-    let write_result = output::emit_envelope(&envelope, parsed.pretty, stdout)
-        .map_err(|error| error.message().to_owned());
+    let write_result = if parsed.json {
+        output::emit_envelope(&envelope, parsed.pretty, stdout)
+            .map_err(|error| error.message().to_owned())
+    } else {
+        // RFC 0015 §3.3: without --json the failure carries no envelope
+        // bytes on stdout; the diagnostics below are the entire human
+        // failure surface.
+        Ok(())
+    };
     match write_result {
         Ok(()) => {
-            for diagnostic in diagnostics {
-                let _ = writeln!(
-                    stderr,
-                    "consema: error: inspect: {} (code {})",
-                    diagnostic_message(diagnostic),
-                    diagnostic.code
-                );
+            for (message, code) in stderr_lines {
+                let _ = writeln!(stderr, "consema: error: inspect: {message} (code {code})");
             }
             exit_class.exit_code()
         }
@@ -770,6 +796,25 @@ mod tests {
                 .expect("byte-valid failure envelope");
         assert_eq!(envelope.exit_class(), ExitClass::Data);
         assert_eq!(envelope.diagnostics()[0].code, "cli.data.io@1");
+        // RFC 0015 §3.3: the envelope message carries only the stable
+        // `ErrorKind`; the locale-dependent OS error text is the human
+        // stderr line (round-2 audit finding F6).
+        let message = &envelope.diagnostics()[0].arguments["message"];
+        assert!(
+            message.contains("NotFound"),
+            "the envelope message carries the stable ErrorKind: {message}"
+        );
+        let raw = std::fs::File::open(&missing)
+            .expect_err("still missing")
+            .to_string();
+        assert!(
+            !message.contains(&raw),
+            "the envelope must not embed OS locale text: {message}"
+        );
+        assert!(
+            stderr_text(&stderr).contains(&raw),
+            "the full OS error text is the human stderr line"
+        );
         assert!(stderr_text(&stderr).contains("(code cli.data.io@1)"));
     }
 

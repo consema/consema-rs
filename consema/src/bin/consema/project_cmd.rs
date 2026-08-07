@@ -20,7 +20,7 @@
 //! record.
 
 use crate::args::ParsedArgs;
-use consema::core::Diagnostic;
+use consema::core::{Diagnostic, PortableValue};
 use consema::protocol::{
     CliCommand, Completion, CompletionStatus, ErrorCodeRegistry, ExitClass, LossClassification,
     ProjectedLocationMessage, ProjectionEventMessage, ProjectionFidelity, ProjectionPolicy,
@@ -400,7 +400,9 @@ fn execute_project(input: &RequestInput) -> Result<ProjectionResultMessage, Flow
 
 /// Builds the failed `core.projection-result@1` record: completion Failed
 /// with the format's stable code, the partial report, no value or
-/// provenance, and the attempt diagnostics.
+/// provenance, and the attempt diagnostics. Falls back to the minimal
+/// record when the code is not registered in v7 so no unregistered code can
+/// panic the CLI (audit finding F3).
 fn projection_attempt_failure(
     diagnostics: &[Diagnostic],
     fallback: &str,
@@ -411,6 +413,21 @@ fn projection_attempt_failure(
         .map_or("core.projection.target-not-applicable@1", |diagnostic| {
             diagnostic.code.as_str()
         });
+    let payload = failed_projection_record(code, report, diagnostics)
+        .unwrap_or_else(|| minimal_record(CliCommand::Project));
+    FlowError::new(code, fallback).with_payload(payload)
+}
+
+/// The failed `core.projection-result@1` record form (mirrors
+/// `query_cmd::failed_query_result`): completion Failed with the stable
+/// code, no value or provenance, and the attempt diagnostics. Returns
+/// `None` when the code is not registered in v7 or the record cannot
+/// encode, letting the caller fall back to the minimal record.
+fn failed_projection_record(
+    code: &str,
+    report: ProjectionReportMessage,
+    diagnostics: &[Diagnostic],
+) -> Option<PortableValue> {
     let completion = Completion::new_with_registry(
         CompletionStatus::Failed,
         0,
@@ -419,8 +436,8 @@ fn projection_attempt_failure(
         Some(code.to_owned()),
         ErrorCodeRegistry::v7(),
     )
-    .expect("format projection codes are registered in v7");
-    let payload = ProjectionResultMessage::new(
+    .ok()?;
+    ProjectionResultMessage::new(
         completion,
         None,
         None,
@@ -428,11 +445,8 @@ fn projection_attempt_failure(
         ProvenanceMapMessage::default(),
         bind_diagnostics(diagnostics, None),
     )
-    .map_or_else(
-        |_| minimal_record(CliCommand::Project),
-        |message| message.to_value(),
-    );
-    FlowError::new(code, fallback).with_payload(payload)
+    .ok()
+    .map(|message| message.to_value())
 }
 
 /// Externalizes one JSON projection report (mirrors the facade's own
@@ -873,6 +887,29 @@ mod tests {
         assert_eq!(result.completion().status(), CompletionStatus::Failed);
         assert_eq!(result.value(), None);
         assert!(!envelope.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn projection_attempt_failure_falls_back_for_unregistered_codes() {
+        // Audit finding F3: a projection failure whose diagnostic code is
+        // not registered in v7 must not panic the CLI — the failed-record
+        // construction falls back to the minimal record (the payload of the
+        // `core.projection-result@1` failure record is unencodable, but the
+        // FlowError itself still carries the stable code and fallback text).
+        let diagnostic = Diagnostic::new(
+            "example.not-registered@1",
+            consema::core::DiagnosticCategory::Projection,
+            consema::core::DiagnosticSeverity::Error,
+            None,
+            0,
+        );
+        let failure = projection_attempt_failure(
+            std::slice::from_ref(&diagnostic),
+            "projection failed",
+            ProjectionReportMessage::default(),
+        );
+        assert_eq!(failure.code, "example.not-registered@1");
+        assert!(failure.payload.is_some(), "minimal record payload");
     }
 
     #[test]

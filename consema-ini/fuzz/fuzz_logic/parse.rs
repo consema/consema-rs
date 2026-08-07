@@ -34,14 +34,18 @@ pub fn assert_parse_closure(data: &[u8], profile: IniProfile, limits: IniParseLi
 /// kinds parallel to pieces, diagnostics within budget, recovered documents
 /// publish diagnostics.
 pub fn assert_formed_closure(data: &[u8], limits: IniParseLimits, document: consema_ini::Document) {
-    assert_eq!(document.render(), data, "formed documents render byte-exactly");
+    assert_eq!(
+        document.render(),
+        data,
+        "formed documents render byte-exactly"
+    );
     let index = document.lossless_structural_index();
-    let covered: usize = index
-        .pieces()
-        .iter()
-        .map(|piece| piece.span().len())
-        .sum();
-    assert_eq!(covered, data.len(), "formation covers the source exhaustively");
+    let covered: usize = index.pieces().iter().map(|piece| piece.span().len()).sum();
+    assert_eq!(
+        covered,
+        data.len(),
+        "formation covers the source exhaustively"
+    );
     assert_eq!(
         document.lossless_syntax_kinds().len(),
         index.pieces().len(),

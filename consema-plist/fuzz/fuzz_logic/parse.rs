@@ -9,8 +9,8 @@
 // offset-table/object-ref decoders, the XML profile drives the XML decoder.
 
 use consema_document::FormationStatus;
-use std::sync::Arc;
 use consema_plist::{PlistEncodingSelection, PlistParseLimits, PlistProfile, parse};
+use std::sync::Arc;
 
 #[allow(dead_code)] // used by the parse_fuzz driver and the cargo-fuzz wrapper
 /// Drives the production plist profiles over one input.
@@ -32,19 +32,26 @@ pub fn assert_parse_closure(data: &[u8], profile: PlistProfile, limits: PlistPar
     ) else {
         return; // fatal formation (including resource-limit truncation): pass
     };
-    assert_eq!(document.render(), data, "formed documents render byte-exactly");
+    assert_eq!(
+        document.render(),
+        data,
+        "formed documents render byte-exactly"
+    );
     // The lossless structural index and syntax kinds are `plist.xml@1` only
     // (RFC 0013 §8.2, hard gate 1); the binary profile covers its bytes
     // through the offset/object facts instead.
     if let Some(index) = document.lossless_structural_index() {
-        let covered: usize = index
-            .pieces()
-            .iter()
-            .map(|piece| piece.span().len())
-            .sum();
-        assert_eq!(covered, data.len(), "formation covers the source exhaustively");
+        let covered: usize = index.pieces().iter().map(|piece| piece.span().len()).sum();
         assert_eq!(
-            document.lossless_syntax_kinds().expect("syntax kinds").len(),
+            covered,
+            data.len(),
+            "formation covers the source exhaustively"
+        );
+        assert_eq!(
+            document
+                .lossless_syntax_kinds()
+                .expect("syntax kinds")
+                .len(),
             index.pieces().len(),
             "syntax kinds stay parallel to structural pieces"
         );

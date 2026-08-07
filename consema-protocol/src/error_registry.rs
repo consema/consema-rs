@@ -1199,7 +1199,9 @@ const fn build_v6_codes() -> [ErrorCodeDescriptor; 166] {
     output
 }
 
-/// CLI error family frozen by RFC 0015 §13.1 (20 codes, strictly sorted).
+/// CLI error family frozen by RFC 0015 §13.1 (20 codes, strictly sorted)
+/// plus the 0.13.0 `json.projection.incomplete-document@1` registration
+/// (audit finding F3).
 const NEW_CODES_V7: &[ErrorCodeDescriptor] = &[
     code!(
         "cli.data.invalid-request@1",
@@ -1321,12 +1323,23 @@ const NEW_CODES_V7: &[ErrorCodeDescriptor] = &[
         "0.12.0",
         "Write target is a directory"
     ),
+    // Registered in 0.13.0 (audit finding F3): the 0.13.0 json
+    // Recovered-document gate emits this code (consema-json
+    // projection.rs:756) and the CLI's failed projection record requires it
+    // to be registry-validated; without the entry `Completion::new_with_registry`
+    // rejects it and the CLI panicked on `.expect`.
+    code!(
+        "json.projection.incomplete-document@1",
+        Projection,
+        "0.13.0",
+        "Recovered JSON syntax cannot enter a complete semantic projection"
+    ),
 ];
 
-const ERROR_CODES_V7: [ErrorCodeDescriptor; 186] = build_v7_codes();
+const ERROR_CODES_V7: [ErrorCodeDescriptor; 187] = build_v7_codes();
 
-const fn build_v7_codes() -> [ErrorCodeDescriptor; 186] {
-    let mut output = [ERROR_CODES_V6[0]; 186];
+const fn build_v7_codes() -> [ErrorCodeDescriptor; 187] {
+    let mut output = [ERROR_CODES_V6[0]; 187];
     let mut old = 0;
     let mut new = 0;
     let mut target = 0;
@@ -1680,7 +1693,7 @@ pub(crate) fn parse_category(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ProtocolErrorKind;
+    use crate::{Completion, CompletionStatus, ProtocolErrorKind};
     use consema_core::QueryDomain;
 
     #[test]
@@ -1707,9 +1720,9 @@ mod tests {
         assert_eq!(ErrorCodeRegistry::v4().codes().len(), 92);
         assert_eq!(ErrorCodeRegistry::v5().codes().len(), 132);
         assert_eq!(ErrorCodeRegistry::v6().codes().len(), 166);
-        assert_eq!(ErrorCodeRegistry::v7().codes().len(), 186);
+        assert_eq!(ErrorCodeRegistry::v7().codes().len(), 187);
         assert_eq!(NEW_CODES_V6.len(), 34);
-        assert_eq!(NEW_CODES_V7.len(), 20);
+        assert_eq!(NEW_CODES_V7.len(), 21);
         for descriptor in ErrorCodeRegistry::v5().codes() {
             assert_eq!(
                 ErrorCodeRegistry::v6().descriptor(descriptor.code),
@@ -1735,7 +1748,11 @@ mod tests {
                 ErrorCodeRegistry::v7().descriptor(descriptor.code),
                 Some(descriptor)
             );
-            assert_eq!(descriptor.introduced, "0.12.0");
+            assert!(
+                matches!(descriptor.introduced, "0.12.0" | "0.13.0"),
+                "unexpected introduced version for {}",
+                descriptor.code
+            );
         }
         assert!(!ErrorCodeRegistry::v1().contains("core.source.patch-base-mismatch@1"));
         assert!(ErrorCodeRegistry::v2().contains("core.source.patch-base-mismatch@1"));
@@ -1752,6 +1769,8 @@ mod tests {
         assert!(!ErrorCodeRegistry::v6().contains("cli.data.io@1"));
         assert!(ErrorCodeRegistry::v7().contains("cli.data.io@1"));
         assert!(ErrorCodeRegistry::v7().contains("cli.write.target-is-directory@1"));
+        assert!(!ErrorCodeRegistry::v6().contains("json.projection.incomplete-document@1"));
+        assert!(ErrorCodeRegistry::v7().contains("json.projection.incomplete-document@1"));
         assert!(ErrorCodeRegistry::v7().contains("core.source.patch-base-mismatch@1"));
         let protocol_kinds = [
             ProtocolErrorKind::InvalidJson,
@@ -1770,6 +1789,35 @@ mod tests {
             protocol_kinds
                 .iter()
                 .all(|kind| ErrorCodeRegistry::v1().contains(kind.code()))
+        );
+    }
+
+    #[test]
+    fn json_projection_incomplete_document_is_registered_in_v7() {
+        // The 0.13.0 json Recovered-document gate emits this code
+        // (crates/consema-json/src/projection.rs:756); the CLI's failed
+        // `core.projection-result@1` record registry-validates the code
+        // (execution.rs `Completion::new_with_registry`), so an unregistered
+        // code would panic `project_cmd::projection_attempt_failure`
+        // (audit finding F3). Pin the v7 registration here; the v6 suite is
+        // sha256-frozen and must not gain the code.
+        assert!(!ErrorCodeRegistry::v6().contains("json.projection.incomplete-document@1"));
+        let descriptor = ErrorCodeRegistry::v7()
+            .descriptor("json.projection.incomplete-document@1")
+            .expect("json projection code is registered in v7");
+        assert_eq!(descriptor.category, DiagnosticCategory::Projection);
+        assert_eq!(descriptor.introduced, "0.13.0");
+        assert!(
+            Completion::new_with_registry(
+                CompletionStatus::Failed,
+                0,
+                0,
+                None,
+                Some("json.projection.incomplete-document@1".to_owned()),
+                ErrorCodeRegistry::v7(),
+            )
+            .is_ok(),
+            "Completion::new_with_registry accepts the now-registered code"
         );
     }
 

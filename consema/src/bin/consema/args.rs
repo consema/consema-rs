@@ -193,7 +193,9 @@ Commands (RFC 0015 §6.1):
   convert        two-phase cross-format conversion
   edit           single-file structural edit (dry-run; --write commits)
   plan           batch plan manifest (read-only)
-  apply          batch apply from a prior plan manifest
+  apply          batch apply from a prior plan manifest; env injection seam
+                 CONSEMA_APPLY_INTERRUPT_AFTER / CONSEMA_APPLY_WRITE_FAILURE
+                 (documented in RFC 0015 §5.4; testing/CI only)
   conformance    embedded protocol self-check subset
   explain        authoritative contract/error-code/profile explanation
 

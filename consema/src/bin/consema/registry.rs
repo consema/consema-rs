@@ -198,7 +198,7 @@ mod tests {
         assert!(!contracts().is_empty());
         assert!(contracts().iter().any(|c| c.id == "core.cli-output"));
         let codes = error_codes();
-        assert_eq!(codes.len(), 186, "v7 error-code count (RFC 0015 §13.2)");
+        assert_eq!(codes.len(), 187, "v7 error-code count");
         for pair in codes.windows(2) {
             assert!(pair[0] < pair[1], "error codes strictly sorted");
         }

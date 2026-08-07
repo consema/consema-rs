@@ -329,6 +329,13 @@ impl Composer<'_> {
                 let index = self.reserve_node()?;
                 let (anchor, anchor_span) = self.register_anchor(anchor_id, index)?;
                 let tag = resolve_collection_tag(tag.as_ref(), TAG_SEQ)?;
+                // The collection start span must be resolved before the
+                // children: backend event spans arrive in non-decreasing
+                // order, but the covering span would otherwise be resolved
+                // only after the children, jumping the single-pass resolver
+                // cursor backwards and restarting its walk for every nested
+                // collection (O(nodes x source) total, B-8).
+                let start = self.raw_span(event.span)?;
                 let mut items = Vec::new();
                 while !self.peek_is(|kind| matches!(kind, BackendEventKind::SequenceEnd)) {
                     let occurrence = self.node()?;
@@ -340,7 +347,11 @@ impl Composer<'_> {
                     });
                 }
                 let end = self.take_simple(|kind| matches!(kind, BackendEventKind::SequenceEnd))?;
-                let span = self.covering_span(event.span, end)?;
+                let end = self.raw_span(end)?;
+                let span = self
+                    .authority
+                    .span(start.start_byte(), end.end_byte())
+                    .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))?;
                 self.nodes[index] = Some(NativeNode {
                     tag: Arc::from(tag),
                     anchor,
@@ -358,6 +369,10 @@ impl Composer<'_> {
                 let index = self.reserve_node()?;
                 let (anchor, anchor_span) = self.register_anchor(anchor_id, index)?;
                 let tag = resolve_collection_tag(tag.as_ref(), TAG_MAP)?;
+                // Same eager start-span resolution as the sequence branch:
+                // resolving the covering span after the children restarts the
+                // resolver walk per nested mapping (B-8).
+                let start = self.raw_span(event.span)?;
                 let mut entries = Vec::new();
                 while !self.peek_is(|kind| matches!(kind, BackendEventKind::MappingEnd)) {
                     let key = self.node()?;
@@ -375,7 +390,11 @@ impl Composer<'_> {
                     });
                 }
                 let end = self.take_simple(|kind| matches!(kind, BackendEventKind::MappingEnd))?;
-                let span = self.covering_span(event.span, end)?;
+                let end = self.raw_span(end)?;
+                let span = self
+                    .authority
+                    .span(start.start_byte(), end.end_byte())
+                    .map_err(|_| native_failure("yaml.native.invalid-source-span@1"))?;
                 self.nodes[index] = Some(NativeNode {
                     tag: Arc::from(tag),
                     anchor,
