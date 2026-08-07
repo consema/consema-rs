@@ -191,7 +191,7 @@ Commands (RFC 0015 §6.1):
   project        explicit projection request
   materialize    explicit materialization request
   convert        two-phase cross-format conversion
-  edit           single-file structural edit (dry-run; --write commits)
+  edit           single-file structural edit (dry-run only)
   plan           batch plan manifest (read-only)
   apply          batch apply from a prior plan manifest; env injection seam
                  CONSEMA_APPLY_INTERRUPT_AFTER / CONSEMA_APPLY_WRITE_FAILURE
@@ -211,7 +211,6 @@ Global options:
   --max-files <n>     CLI-layer batch file-count budget
   --redact-keys <glob>  extra redaction key-name patterns
   --show-secrets      reveal secret values (sole presentation opt-out)
-  --write             commit an edit (edit only)
   --help              print this help and exit 0
   --version           print the product version and exit 0
 
