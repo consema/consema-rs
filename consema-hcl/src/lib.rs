@@ -55,6 +55,7 @@ mod expression;
 mod lexer;
 mod materialization;
 mod native;
+mod operation_registry;
 mod parser;
 mod projection;
 mod query;
@@ -77,6 +78,7 @@ pub use native::{
     HclAttribute, HclBlock, HclBlockLabel, HclBody, HclBodyItem, HclDocument, HclErrorRegion,
     HclSyntaxKind,
 };
+pub use operation_registry::format_operation_registry;
 pub use parser::HclFormed;
 pub use projection::{
     CompleteProjection, ExpressionPayload, ExpressionPolicy, FailedProjectionAttempt, Fidelity,

@@ -6,12 +6,14 @@
 //! serialization.
 
 mod change;
+mod cli;
 mod contract;
 mod conversion;
 mod diagnostic;
 mod error;
 mod error_registry;
 mod execution;
+mod exit_class;
 mod graph_projection;
 mod graph_query;
 mod java_utf16;
@@ -30,6 +32,10 @@ mod source;
 mod value_transport;
 mod yaml_query;
 
+pub use cli::{
+    BatchPlanFileEntry, BatchPlanFileStatus, BatchPlanMessage, BatchResultFileEntry,
+    BatchResultFileStatus, BatchResultMessage, CliCommand, CliOutputMessage, Redaction,
+};
 pub use contract::{
     ContractDescriptor, ContractId, ContractRegistry, ContractStability, ProtocolMessage,
 };
@@ -41,10 +47,11 @@ pub use error::{ProtocolError, ProtocolErrorKind};
 pub use error_registry::{
     ErrorCodeDescriptor, ErrorCodeRegistry, error_code_manifest_value,
     error_code_manifest_value_v2, error_code_manifest_value_v3, error_code_manifest_value_v4,
-    error_code_manifest_value_v5, error_code_manifest_value_v6, query_failure_code,
-    validate_error_code_manifest_value,
+    error_code_manifest_value_v5, error_code_manifest_value_v6, error_code_manifest_value_v7,
+    query_failure_code, validate_error_code_manifest_value,
 };
 pub use execution::{CancellationRequest, Completion, CompletionStatus, ExecutionPolicy};
+pub use exit_class::{ExitClass, classify, classify_error_code};
 pub use graph_projection::{
     GraphProjectedLocationMessage, GraphProjectionResultMessage, GraphProvenanceEntryMessage,
     GraphProvenanceMapMessage, GraphProvenanceRelationMessage, GraphSourceOriginMessage,

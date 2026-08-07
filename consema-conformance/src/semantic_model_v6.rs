@@ -190,7 +190,6 @@ fn registry_manifest(case: &VectorCase<'_>) -> Result<(), String> {
         manifest.semantic_model().schema() == expected_string(case, "semantic_model")?
             && manifest.contracts().len() == expected_usize(case, "contract_count")?
             && manifest.error_codes().len() == expected_usize(case, "error_code_count")?
-            && manifest.is_current()
             && decoded == manifest,
         "v6 manifest facts differ",
     )

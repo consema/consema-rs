@@ -1,8 +1,9 @@
 //! Full validation dispatch for registered protocol payloads.
 
 use crate::{
-    CancellationRequest, CapabilityDeclaration, ChangeSetMessage, Completion, ContractId,
-    ContractRegistry, ConversionReportMessage, DiagnosticMessage, EditPlanMessage, ExecutionPolicy,
+    BatchPlanMessage, BatchResultMessage, CancellationRequest, CapabilityDeclaration,
+    ChangeSetMessage, CliOutputMessage, Completion, ContractId, ContractRegistry,
+    ConversionReportMessage, DiagnosticMessage, EditPlanMessage, ExecutionPolicy,
     FormatOperationRegistryMessage, GraphProjectionResultMessage, GraphProvenanceMapMessage,
     GraphQueryResultMessage, IniQueryResultMessage, JavaPropertiesQueryResultMessage,
     JavaUtf16String, MaterializationProvenanceMapMessage, MaterializationReportMessage,
@@ -23,10 +24,21 @@ pub(crate) fn validate_registered_payload(
     registry: ContractRegistry,
 ) -> Result<(), ProtocolError> {
     match (contract.id(), contract.version()) {
+        ("core.batch-plan", 1) => BatchPlanMessage::from_value_with_registry(
+            payload,
+            registry.error_code_registry(),
+            SourcePatchLimits::default(),
+        )
+        .map(drop),
+        ("core.batch-result", 1) => BatchResultMessage::from_value(payload).map(drop),
         ("core.cancellation-request", 1) => CancellationRequest::from_value(payload).map(drop),
         ("core.capability-declaration", 1) => CapabilityDeclaration::from_value(payload).map(drop),
         ("core.change-set", 1) => {
             ChangeSetMessage::from_value_with_registry(payload, registry.error_code_registry())
+                .map(drop)
+        }
+        ("core.cli-output", 1) => {
+            CliOutputMessage::from_value_with_registry(payload, registry.error_code_registry())
                 .map(drop)
         }
         ("core.completion", 1) => {

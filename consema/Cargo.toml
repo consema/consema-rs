@@ -21,5 +21,9 @@ consema-toml = { path = "../consema-toml", version = "0.8.0" }
 consema-xml = { path = "../consema-xml", version = "0.8.0" }
 consema-yaml = { path = "../consema-yaml", version = "0.8.0" }
 
+[[bin]]
+name = "consema"
+path = "src/bin/consema/main.rs"
+
 [lints]
 workspace = true

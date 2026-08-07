@@ -1,5 +1,6 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
+mod cli_v1;
 mod hcl_v1;
 mod ini_dotnet_oracle;
 mod ini_python_oracle;
@@ -39,6 +40,7 @@ use consema_pvce::{
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+pub use cli_v1::{CLI_V1_VECTORS_JSON, run_cli_v1, run_cli_v1_json};
 pub use hcl_v1::{HCL_V1_VECTORS_JSON, run_hcl_v1, run_hcl_v1_json};
 pub use ini_dotnet_oracle::{
     INI_DOTNET_ORACLE_JSON, run_ini_dotnet_oracle, run_ini_dotnet_oracle_json,

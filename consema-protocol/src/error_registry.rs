@@ -1199,6 +1199,160 @@ const fn build_v6_codes() -> [ErrorCodeDescriptor; 166] {
     output
 }
 
+/// CLI error family frozen by RFC 0015 §13.1 (20 codes, strictly sorted).
+const NEW_CODES_V7: &[ErrorCodeDescriptor] = &[
+    code!(
+        "cli.data.invalid-request@1",
+        Encoding,
+        "0.12.0",
+        "Request or plan file failed strict decoding"
+    ),
+    code!(
+        "cli.data.io@1",
+        Encoding,
+        "0.12.0",
+        "Input file could not be read"
+    ),
+    code!(
+        "cli.detection.ambiguous@1",
+        Semantic,
+        "0.12.0",
+        "Candidate profiles are ambiguous and no profile was selected"
+    ),
+    code!(
+        "cli.internal.unclassified@1",
+        Semantic,
+        "0.12.0",
+        "Unclassified internal CLI error"
+    ),
+    code!(
+        "cli.interrupted.signal@1",
+        Semantic,
+        "0.12.0",
+        "CLI execution was interrupted by a signal"
+    ),
+    code!(
+        "cli.limit.batch-count@1",
+        Resource,
+        "0.12.0",
+        "Batch file count exceeded the configured limit"
+    ),
+    code!(
+        "cli.limit.file-size@1",
+        Resource,
+        "0.12.0",
+        "Input file exceeded the CLI file-size limit"
+    ),
+    code!(
+        "cli.limit.manifest-size@1",
+        Resource,
+        "0.12.0",
+        "Manifest or request input exceeded the size limit"
+    ),
+    code!(
+        "cli.usage.invalid-argument@1",
+        Syntax,
+        "0.12.0",
+        "Known argument received an invalid value"
+    ),
+    code!(
+        "cli.usage.invalid-format@1",
+        Syntax,
+        "0.12.0",
+        "--format is missing or invalid"
+    ),
+    code!(
+        "cli.usage.missing-plan@1",
+        Syntax,
+        "0.12.0",
+        "--apply requires a prior plan"
+    ),
+    code!(
+        "cli.usage.missing-required@1",
+        Syntax,
+        "0.12.0",
+        "A required argument such as --profile is missing"
+    ),
+    code!(
+        "cli.usage.redaction-pattern@1",
+        Syntax,
+        "0.12.0",
+        "--redact-keys pattern is invalid"
+    ),
+    code!(
+        "cli.usage.unknown-argument@1",
+        Syntax,
+        "0.12.0",
+        "Unknown argument or rejected abbreviation"
+    ),
+    code!(
+        "cli.usage.unknown-command@1",
+        Syntax,
+        "0.12.0",
+        "Unknown command"
+    ),
+    code!(
+        "cli.write.io@1",
+        Edit,
+        "0.12.0",
+        "Write I/O failure such as a full disk"
+    ),
+    code!(
+        "cli.write.permission@1",
+        Edit,
+        "0.12.0",
+        "Permission denied while writing the target"
+    ),
+    code!(
+        "cli.write.read-only@1",
+        Edit,
+        "0.12.0",
+        "Target file is read-only"
+    ),
+    code!(
+        "cli.write.symlink-policy@1",
+        Edit,
+        "0.12.0",
+        "Write path rejected by the symlink policy"
+    ),
+    code!(
+        "cli.write.target-is-directory@1",
+        Edit,
+        "0.12.0",
+        "Write target is a directory"
+    ),
+];
+
+const ERROR_CODES_V7: [ErrorCodeDescriptor; 186] = build_v7_codes();
+
+const fn build_v7_codes() -> [ErrorCodeDescriptor; 186] {
+    let mut output = [ERROR_CODES_V6[0]; 186];
+    let mut old = 0;
+    let mut new = 0;
+    let mut target = 0;
+    while old < ERROR_CODES_V6.len() && new < NEW_CODES_V7.len() {
+        if const_str_less(ERROR_CODES_V6[old].code, NEW_CODES_V7[new].code) {
+            output[target] = ERROR_CODES_V6[old];
+            old += 1;
+        } else {
+            output[target] = NEW_CODES_V7[new];
+            new += 1;
+        }
+        target += 1;
+    }
+    while old < ERROR_CODES_V6.len() {
+        output[target] = ERROR_CODES_V6[old];
+        old += 1;
+        target += 1;
+    }
+    while new < NEW_CODES_V7.len() {
+        output[target] = NEW_CODES_V7[new];
+        new += 1;
+        target += 1;
+    }
+    output
+}
+
 const fn const_str_less(left: &str, right: &str) -> bool {
     let left = left.as_bytes();
     let right = right.as_bytes();
@@ -1229,6 +1383,7 @@ enum RegistryVersion {
     V4,
     V5,
     V6,
+    V7,
 }
 
 impl Default for ErrorCodeRegistry {
@@ -1286,6 +1441,14 @@ impl ErrorCodeRegistry {
         }
     }
 
+    /// Consema 0.12 semantic-model v7 error registry (CLI error family).
+    #[must_use]
+    pub const fn v7() -> Self {
+        Self {
+            version: RegistryVersion::V7,
+        }
+    }
+
     /// Sorted immutable descriptors.
     #[must_use]
     pub const fn codes(self) -> &'static [ErrorCodeDescriptor] {
@@ -1296,6 +1459,7 @@ impl ErrorCodeRegistry {
             RegistryVersion::V4 => &ERROR_CODES_V4,
             RegistryVersion::V5 => &ERROR_CODES_V5,
             RegistryVersion::V6 => &ERROR_CODES_V6,
+            RegistryVersion::V7 => &ERROR_CODES_V7,
         }
     }
 
@@ -1385,6 +1549,12 @@ pub fn error_code_manifest_value_v5() -> PortableValue {
 #[must_use]
 pub fn error_code_manifest_value_v6() -> PortableValue {
     error_code_manifest_value_for(ErrorCodeRegistry::v6())
+}
+
+/// Encodes the semantic-model v7 `core.error-code-registry@1` payload.
+#[must_use]
+pub fn error_code_manifest_value_v7() -> PortableValue {
+    error_code_manifest_value_for(ErrorCodeRegistry::v7())
 }
 
 fn error_code_manifest_value_for(registry: ErrorCodeRegistry) -> PortableValue {
@@ -1522,6 +1692,7 @@ mod tests {
             ErrorCodeRegistry::v4(),
             ErrorCodeRegistry::v5(),
             ErrorCodeRegistry::v6(),
+            ErrorCodeRegistry::v7(),
         ] {
             assert!(
                 registry
@@ -1536,7 +1707,9 @@ mod tests {
         assert_eq!(ErrorCodeRegistry::v4().codes().len(), 92);
         assert_eq!(ErrorCodeRegistry::v5().codes().len(), 132);
         assert_eq!(ErrorCodeRegistry::v6().codes().len(), 166);
+        assert_eq!(ErrorCodeRegistry::v7().codes().len(), 186);
         assert_eq!(NEW_CODES_V6.len(), 34);
+        assert_eq!(NEW_CODES_V7.len(), 20);
         for descriptor in ErrorCodeRegistry::v5().codes() {
             assert_eq!(
                 ErrorCodeRegistry::v6().descriptor(descriptor.code),
@@ -1550,6 +1723,20 @@ mod tests {
                 Some(descriptor)
             );
         }
+        for descriptor in ErrorCodeRegistry::v6().codes() {
+            assert_eq!(
+                ErrorCodeRegistry::v7().descriptor(descriptor.code),
+                Some(descriptor)
+            );
+        }
+        for descriptor in NEW_CODES_V7 {
+            assert!(!ErrorCodeRegistry::v6().contains(descriptor.code));
+            assert_eq!(
+                ErrorCodeRegistry::v7().descriptor(descriptor.code),
+                Some(descriptor)
+            );
+            assert_eq!(descriptor.introduced, "0.12.0");
+        }
         assert!(!ErrorCodeRegistry::v1().contains("core.source.patch-base-mismatch@1"));
         assert!(ErrorCodeRegistry::v2().contains("core.source.patch-base-mismatch@1"));
         assert!(!ErrorCodeRegistry::v2().contains("core.materialization.unrepresentable@1"));
@@ -1562,6 +1749,10 @@ mod tests {
         assert!(ErrorCodeRegistry::v5().contains("core.pgce.non-canonical@1"));
         assert!(!ErrorCodeRegistry::v5().contains("ini.profile.encoding@1"));
         assert!(ErrorCodeRegistry::v6().contains("ini.profile.encoding@1"));
+        assert!(!ErrorCodeRegistry::v6().contains("cli.data.io@1"));
+        assert!(ErrorCodeRegistry::v7().contains("cli.data.io@1"));
+        assert!(ErrorCodeRegistry::v7().contains("cli.write.target-is-directory@1"));
+        assert!(ErrorCodeRegistry::v7().contains("core.source.patch-base-mismatch@1"));
         let protocol_kinds = [
             ProtocolErrorKind::InvalidJson,
             ProtocolErrorKind::NonCanonicalJson,
@@ -1609,5 +1800,6 @@ mod tests {
         validate_error_code_manifest_value(&error_code_manifest_value_v4()).unwrap();
         validate_error_code_manifest_value(&error_code_manifest_value_v5()).unwrap();
         validate_error_code_manifest_value(&error_code_manifest_value_v6()).unwrap();
+        validate_error_code_manifest_value(&error_code_manifest_value_v7()).unwrap();
     }
 }

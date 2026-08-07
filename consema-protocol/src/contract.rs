@@ -222,6 +222,56 @@ const CONTRACTS_V6: &[ContractDescriptor] = &[
     descriptor("core.yaml-query-result", ContractStability::Stable),
 ];
 
+const CONTRACTS_V7: &[ContractDescriptor] = &[
+    descriptor("core.batch-plan", ContractStability::Stable),
+    descriptor("core.batch-result", ContractStability::Stable),
+    descriptor("core.cancellation-request", ContractStability::Stable),
+    descriptor("core.capability-declaration", ContractStability::Stable),
+    descriptor("core.change-set", ContractStability::Stable),
+    descriptor("core.cli-output", ContractStability::Stable),
+    descriptor("core.completion", ContractStability::Stable),
+    descriptor("core.conversion-report", ContractStability::Stable),
+    descriptor("core.diagnostic", ContractStability::Stable),
+    descriptor("core.edit-plan", ContractStability::Stable),
+    descriptor("core.error-code-registry", ContractStability::Stable),
+    descriptor("core.execution-policy", ContractStability::Stable),
+    descriptor("core.format-operation-registry", ContractStability::Stable),
+    descriptor("core.graph-projection-result", ContractStability::Stable),
+    descriptor("core.graph-provenance-map", ContractStability::Stable),
+    descriptor("core.graph-query-result", ContractStability::Stable),
+    descriptor("core.ini-query-result", ContractStability::Stable),
+    descriptor(
+        "core.java-properties-query-result",
+        ContractStability::Stable,
+    ),
+    descriptor("core.java-utf16-string", ContractStability::Stable),
+    descriptor(
+        "core.materialization-provenance-map",
+        ContractStability::Stable,
+    ),
+    descriptor("core.materialization-report", ContractStability::Stable),
+    descriptor("core.materialization-request", ContractStability::Stable),
+    descriptor_version("core.materialization-request", 2, ContractStability::Stable),
+    descriptor("core.materialization-result", ContractStability::Stable),
+    descriptor_version("core.materialization-result", 2, ContractStability::Stable),
+    descriptor("core.portable-graph", ContractStability::Stable),
+    descriptor("core.profile-descriptor", ContractStability::Stable),
+    descriptor("core.projection-report", ContractStability::Stable),
+    descriptor("core.projection-request", ContractStability::Stable),
+    descriptor("core.projection-result", ContractStability::Stable),
+    descriptor("core.protocol-message", ContractStability::Transport),
+    descriptor("core.provenance-map", ContractStability::Stable),
+    descriptor("core.query-definition", ContractStability::Stable),
+    descriptor("core.query-result", ContractStability::Stable),
+    descriptor("core.registry-manifest", ContractStability::Stable),
+    descriptor("core.source-encoding", ContractStability::Stable),
+    descriptor("core.source-patch", ContractStability::Stable),
+    descriptor_version("core.source-patch", 2, ContractStability::Stable),
+    descriptor("core.source-snapshot", ContractStability::Stable),
+    descriptor_version("core.source-snapshot", 2, ContractStability::Stable),
+    descriptor("core.yaml-query-result", ContractStability::Stable),
+];
+
 const fn descriptor(id: &'static str, stability: ContractStability) -> ContractDescriptor {
     ContractDescriptor {
         id,
@@ -256,6 +306,7 @@ enum RegistryVersion {
     V4,
     V5,
     V6,
+    V7,
 }
 
 impl Default for ContractRegistry {
@@ -313,6 +364,14 @@ impl ContractRegistry {
         }
     }
 
+    /// Consema 0.12 semantic-model v7 registry (CLI machine payloads).
+    #[must_use]
+    pub const fn v7() -> Self {
+        Self {
+            version: RegistryVersion::V7,
+        }
+    }
+
     /// Sorted registered contracts.
     #[must_use]
     pub const fn contracts(self) -> &'static [ContractDescriptor] {
@@ -322,6 +381,7 @@ impl ContractRegistry {
             RegistryVersion::V3 | RegistryVersion::V4 => CONTRACTS_V3,
             RegistryVersion::V5 => CONTRACTS_V5,
             RegistryVersion::V6 => CONTRACTS_V6,
+            RegistryVersion::V7 => CONTRACTS_V7,
         }
     }
 
@@ -349,6 +409,7 @@ impl ContractRegistry {
             RegistryVersion::V4 => ErrorCodeRegistry::v4(),
             RegistryVersion::V5 => ErrorCodeRegistry::v5(),
             RegistryVersion::V6 => ErrorCodeRegistry::v6(),
+            RegistryVersion::V7 => ErrorCodeRegistry::v7(),
         }
     }
 }
@@ -623,6 +684,7 @@ mod tests {
             ContractRegistry::v4(),
             ContractRegistry::v5(),
             ContractRegistry::v6(),
+            ContractRegistry::v7(),
         ] {
             assert!(
                 registry
@@ -637,10 +699,18 @@ mod tests {
         assert_eq!(ContractRegistry::v4().contracts().len(), 25);
         assert_eq!(ContractRegistry::v5().contracts().len(), 30);
         assert_eq!(ContractRegistry::v6().contracts().len(), 38);
+        assert_eq!(ContractRegistry::v7().contracts().len(), 41);
         for descriptor in ContractRegistry::v5().contracts() {
             let contract = ContractId::new(descriptor.id, descriptor.version).unwrap();
             assert_eq!(
                 ContractRegistry::v6().descriptor(&contract),
+                Some(descriptor)
+            );
+        }
+        for descriptor in ContractRegistry::v6().contracts() {
+            let contract = ContractId::new(descriptor.id, descriptor.version).unwrap();
+            assert_eq!(
+                ContractRegistry::v7().descriptor(&contract),
                 Some(descriptor)
             );
         }
@@ -661,6 +731,14 @@ mod tests {
         assert!(
             ContractRegistry::v2().recognizes(&ContractId::new("core.source-snapshot", 1).unwrap())
         );
+        for v7 in [
+            ContractId::new("core.cli-output", 1).unwrap(),
+            ContractId::new("core.batch-plan", 1).unwrap(),
+            ContractId::new("core.batch-result", 1).unwrap(),
+        ] {
+            assert!(!ContractRegistry::v6().recognizes(&v7));
+            assert!(ContractRegistry::v7().recognizes(&v7));
+        }
         assert!(ContractId::new("Core.Bad", 1).is_err());
         assert!(ContractId::new("core.bad", 0).is_err());
     }

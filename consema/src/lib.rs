@@ -25,6 +25,469 @@ pub use consema_yaml as yaml;
 
 use std::sync::Arc;
 
+/// Additive facade registry: the unified format-surface enumeration and the
+/// single parse entry by profile id.
+///
+/// Milestone M4 of the 0.12.0 CLI plan adds this module as the documented
+/// facade thin layer (implementation plan §1.2 "facade public API 按需小增"):
+/// the CLI's registry/capabilities/explain/inspect commands must derive every
+/// format fact from the facade public API (RFC 0015 hard gate 1; plan §3.1
+/// "registry 是 facade 既有类型的薄枚举，不是新 registry"), and the facade
+/// previously published no unified enumeration of families, profiles, or
+/// query domains — the family ids exist only as `format_family()` facts on
+/// parsed backend documents. This module is strictly additive: no existing
+/// API is rewritten. The drift guard is the `tests` module below: every
+/// enumerated family id is asserted against the `format_family()` of a parsed
+/// backend document, so a backend family change fails this crate's own tests.
+pub mod registry {
+    use crate::core::QueryDomain;
+    use crate::document::{
+        FatalFormationFailure, FormatFamilyId, FormatOperationRegistry, ProfileId,
+    };
+    use crate::{Document, hcl, ini, json, plist, properties, toml, xml, yaml};
+    use std::sync::Arc;
+
+    /// One profile together with the format family that publishes it.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct FormatProfile {
+        family: FormatFamilyId,
+        profile: ProfileId,
+    }
+
+    impl FormatProfile {
+        /// Format family of the profile.
+        #[must_use]
+        pub const fn family(&self) -> &FormatFamilyId {
+            &self.family
+        }
+
+        /// The profile itself.
+        #[must_use]
+        pub const fn profile(&self) -> &ProfileId {
+            &self.profile
+        }
+    }
+
+    /// The eight format families (RFC 0015 §6.2 `families`), sorted by id.
+    #[must_use]
+    pub fn format_families() -> Vec<FormatFamilyId> {
+        let mut families = vec![
+            FormatFamilyId::new("hcl", 1),
+            FormatFamilyId::new("ini", 1),
+            FormatFamilyId::new("java-properties", 1),
+            FormatFamilyId::new("json", 1),
+            FormatFamilyId::new("plist", 1),
+            FormatFamilyId::new("toml", 1),
+            FormatFamilyId::new("xml", 1),
+            FormatFamilyId::new("yaml", 1),
+        ];
+        families.sort_by(|left, right| left.id().cmp(right.id()));
+        families
+    }
+
+    /// All sixteen profiles with their owning family (RFC 0015 §6.2
+    /// `profiles`), sorted by profile id.
+    #[must_use]
+    pub fn profiles() -> Vec<FormatProfile> {
+        let mut profiles = vec![
+            family_profile("hcl", hcl::HclProfile::NativeV1.id()),
+            family_profile("hcl", hcl::HclProfile::TfvarsV1.id()),
+            family_profile("ini", ini::IniProfile::PortableV1.id()),
+            family_profile("ini", ini::IniProfile::WindowsV1.id()),
+            family_profile("ini", ini::IniProfile::PythonConfigParserV1.id()),
+            family_profile(
+                "java-properties",
+                properties::PropertiesProfile::ReaderV1.id(),
+            ),
+            family_profile(
+                "java-properties",
+                properties::PropertiesProfile::Latin1V1.id(),
+            ),
+            family_profile("json", json::JsonProfile::StrictV1.id()),
+            family_profile("json", json::JsonProfile::JsoncBoundedV1.id()),
+            family_profile("json", json::JsonProfile::Json5StandardV1.id()),
+            family_profile("plist", plist::PlistProfile::XmlV1.id()),
+            family_profile("plist", plist::PlistProfile::BinaryV1.id()),
+            family_profile("toml", toml::TomlProfile::Toml10V1.id()),
+            family_profile("xml", xml::XmlProfile::SafeV1.id()),
+            family_profile("yaml", yaml::YamlProfile::Yaml12CoreV1.id()),
+            family_profile("yaml", yaml::YamlProfile::Yaml11CompatV1.id()),
+        ];
+        profiles.sort_by(|left, right| {
+            left.profile
+                .id()
+                .cmp(right.profile.id())
+                .then(left.profile.version().cmp(&right.profile.version()))
+        });
+        profiles
+    }
+
+    /// The query-domain constructor inventory (RFC 0015 §6.2
+    /// `query_domains`), sorted by (id, version).
+    #[must_use]
+    pub fn query_domains() -> Vec<QueryDomain> {
+        let mut domains = vec![
+            QueryDomain::portable_value_v1(),
+            QueryDomain::portable_graph_v1(),
+            QueryDomain::json_native_v1(),
+            QueryDomain::json_native_v2(),
+            QueryDomain::toml_native_v1(),
+            QueryDomain::yaml_native_v1(),
+            QueryDomain::ini_native_v1(),
+            QueryDomain::java_properties_native_v1(),
+            QueryDomain::xml_native_v1(),
+            QueryDomain::json_lossless_syntax_v1(),
+            QueryDomain::json_lossless_syntax_v2(),
+            QueryDomain::toml_lossless_syntax_v1(),
+            QueryDomain::yaml_lossless_syntax_v1(),
+            QueryDomain::ini_lossless_syntax_v1(),
+            QueryDomain::java_properties_lossless_syntax_v1(),
+            QueryDomain::xml_lossless_syntax_v1(),
+            QueryDomain::plist_native_v1(),
+            QueryDomain::plist_lossless_syntax_v1(),
+            QueryDomain::plist_binary_structure_v1(),
+            QueryDomain::hcl_native_v1(),
+            QueryDomain::hcl_lossless_syntax_v1(),
+        ];
+        domains.sort_by(|left, right| {
+            left.id()
+                .cmp(right.id())
+                .then(left.version().cmp(&right.version()))
+        });
+        domains
+    }
+
+    /// The per-profile operation registry of one exact profile (RFC 0015
+    /// §6.2 `operations`); `None` for ids outside the facade surface.
+    #[must_use]
+    pub fn operation_registry(profile: &ProfileId) -> Option<FormatOperationRegistry> {
+        let registry = match profile.id() {
+            "hcl.native" => hcl::format_operation_registry(hcl::HclProfile::NativeV1),
+            "hcl.tfvars" => hcl::format_operation_registry(hcl::HclProfile::TfvarsV1),
+            "ini.portable" => ini::format_operation_registry(ini::IniProfile::PortableV1),
+            "ini.windows" => ini::format_operation_registry(ini::IniProfile::WindowsV1),
+            "ini.python-configparser" => {
+                ini::format_operation_registry(ini::IniProfile::PythonConfigParserV1)
+            }
+            "java-properties.reader" => {
+                properties::format_operation_registry(properties::PropertiesProfile::ReaderV1)
+            }
+            "java-properties.latin1" => {
+                properties::format_operation_registry(properties::PropertiesProfile::Latin1V1)
+            }
+            "json.strict" => json::format_operation_registry(json::JsonProfile::StrictV1),
+            "jsonc.bounded" => json::format_operation_registry(json::JsonProfile::JsoncBoundedV1),
+            "json5.standard" => json::format_operation_registry(json::JsonProfile::Json5StandardV1),
+            "plist.xml" => plist::format_operation_registry(plist::PlistProfile::XmlV1),
+            "plist.binary" => plist::format_operation_registry(plist::PlistProfile::BinaryV1),
+            "toml.1.0" => toml::format_operation_registry(toml::TomlProfile::Toml10V1),
+            "xml.1.0-safe" => xml::format_operation_registry(xml::XmlProfile::SafeV1),
+            "yaml.1.2-core" => yaml::format_operation_registry(yaml::YamlProfile::Yaml12CoreV1),
+            "yaml.1.1-compat" => yaml::format_operation_registry(yaml::YamlProfile::Yaml11CompatV1),
+            _ => return None,
+        };
+        Some(registry)
+    }
+
+    /// Parses one snapshot under an exact profile id through the single
+    /// facade parse entry (inspect's `--profile` parse facts, RFC 0015 §7.1
+    /// `cli.parse-facts@1`; plan §11 "每命令是参数 → facade 调用 → 渲染").
+    ///
+    /// The per-format encoding selection and limits use the frozen profile
+    /// defaults (`ProfileDefault`; the properties reader profile uses an
+    /// explicit UTF-8 selection because its contract has no profile default).
+    /// An unknown profile id returns the same failure the typed adapters do:
+    /// resolve ids against [`profiles`] first.
+    pub fn parse_document(
+        source: Arc<[u8]>,
+        profile: &ProfileId,
+    ) -> Result<Document, FatalFormationFailure> {
+        match profile.id() {
+            "ini.portable" => Document::parse_ini(
+                source,
+                ini::IniProfile::PortableV1,
+                ini::IniEncodingSelection::ProfileDefault,
+                ini::IniParseLimits::default(),
+            ),
+            "ini.windows" => Document::parse_ini(
+                source,
+                ini::IniProfile::WindowsV1,
+                ini::IniEncodingSelection::ProfileDefault,
+                ini::IniParseLimits::default(),
+            ),
+            "ini.python-configparser" => Document::parse_ini(
+                source,
+                ini::IniProfile::PythonConfigParserV1,
+                ini::IniEncodingSelection::ProfileDefault,
+                ini::IniParseLimits::default(),
+            ),
+            "java-properties.reader" => Document::parse_properties(
+                source,
+                properties::PropertiesProfile::ReaderV1,
+                properties::PropertiesEncodingSelection::Reader(
+                    crate::document::SourceEncoding::Utf8,
+                ),
+                properties::PropertiesParseLimits::default(),
+            ),
+            "java-properties.latin1" => Document::parse_properties(
+                source,
+                properties::PropertiesProfile::Latin1V1,
+                properties::PropertiesEncodingSelection::Latin1,
+                properties::PropertiesParseLimits::default(),
+            ),
+            "json.strict" => Document::parse_json(
+                source,
+                json::JsonProfile::StrictV1,
+                crate::document::ParseLimits::default(),
+            ),
+            "jsonc.bounded" => Document::parse_json(
+                source,
+                json::JsonProfile::JsoncBoundedV1,
+                crate::document::ParseLimits::default(),
+            ),
+            "json5.standard" => Document::parse_json(
+                source,
+                json::JsonProfile::Json5StandardV1,
+                crate::document::ParseLimits::default(),
+            ),
+            "toml.1.0" => Document::parse_toml(
+                source,
+                toml::TomlProfile::Toml10V1,
+                crate::document::ParseLimits::default(),
+            ),
+            "yaml.1.2-core" => Document::parse_yaml(
+                source,
+                yaml::YamlProfile::Yaml12CoreV1,
+                crate::document::ParseLimits::default(),
+            ),
+            "yaml.1.1-compat" => Document::parse_yaml(
+                source,
+                yaml::YamlProfile::Yaml11CompatV1,
+                crate::document::ParseLimits::default(),
+            ),
+            "xml.1.0-safe" => Document::parse_xml(
+                source,
+                xml::XmlProfile::SafeV1,
+                xml::XmlEncodingSelection::ProfileDefault,
+                xml::XmlParseLimits::default(),
+            ),
+            "plist.xml" => Document::parse_plist(
+                source,
+                plist::PlistProfile::XmlV1,
+                plist::PlistEncodingSelection::ProfileDefault,
+                plist::PlistParseLimits::default(),
+            ),
+            "plist.binary" => Document::parse_plist(
+                source,
+                plist::PlistProfile::BinaryV1,
+                plist::PlistEncodingSelection::ProfileDefault,
+                plist::PlistParseLimits::default(),
+            ),
+            "hcl.native" => Document::parse_hcl(
+                source,
+                hcl::HclProfile::NativeV1,
+                hcl::HclEncodingSelection::ProfileDefault,
+                hcl::HclParseLimits::default(),
+            ),
+            "hcl.tfvars" => Document::parse_hcl(
+                source,
+                hcl::HclProfile::TfvarsV1,
+                hcl::HclEncodingSelection::ProfileDefault,
+                hcl::HclParseLimits::default(),
+            ),
+            _ => Err(FatalFormationFailure::from_diagnostic(
+                crate::core::Diagnostic::new(
+                    "core.source.encoding-conflict@1",
+                    crate::core::DiagnosticCategory::Encoding,
+                    crate::core::DiagnosticSeverity::Error,
+                    None,
+                    0,
+                ),
+            )),
+        }
+    }
+
+    fn family_profile(family_id: &str, profile: ProfileId) -> FormatProfile {
+        FormatProfile {
+            family: FormatFamilyId::new(family_id, 1),
+            profile,
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn registry_lists_eight_families_and_sixteen_profiles() {
+            let families = format_families();
+            assert_eq!(families.len(), 8, "eight format families");
+            for pair in families.windows(2) {
+                assert!(pair[0].id() < pair[1].id(), "families sorted by id");
+            }
+            let profiles = profiles();
+            assert_eq!(profiles.len(), 16, "sixteen profiles across the families");
+            for pair in profiles.windows(2) {
+                assert!(
+                    pair[0].profile().id() < pair[1].profile().id(),
+                    "profiles sorted by id"
+                );
+            }
+            let expected: Vec<&str> = vec![
+                "hcl.native",
+                "hcl.tfvars",
+                "ini.portable",
+                "ini.python-configparser",
+                "ini.windows",
+                "java-properties.latin1",
+                "java-properties.reader",
+                "json.strict",
+                "json5.standard",
+                "jsonc.bounded",
+                "plist.binary",
+                "plist.xml",
+                "toml.1.0",
+                "xml.1.0-safe",
+                "yaml.1.1-compat",
+                "yaml.1.2-core",
+            ];
+            let actual: Vec<&str> = profiles.iter().map(|entry| entry.profile().id()).collect();
+            assert_eq!(actual, expected, "profile inventory");
+            // Every profile id maps to a per-profile operation registry.
+            for entry in &profiles {
+                assert!(
+                    operation_registry(entry.profile()).is_some(),
+                    "{} must resolve an operation registry",
+                    entry.profile().id()
+                );
+            }
+        }
+
+        #[test]
+        fn registry_query_domains_are_sorted_and_unique() {
+            let domains = query_domains();
+            assert_eq!(domains.len(), 21, "query-domain constructor inventory");
+            for pair in domains.windows(2) {
+                assert!(
+                    (pair[0].id(), pair[0].version()) < (pair[1].id(), pair[1].version()),
+                    "domains sorted by (id, version)"
+                );
+            }
+            assert!(
+                domains
+                    .iter()
+                    .any(|d| d.id() == "core.portable-value-query")
+            );
+            assert!(
+                domains
+                    .iter()
+                    .any(|d| d.id() == "hcl.native-semantic-query")
+            );
+            assert!(
+                domains
+                    .iter()
+                    .any(|d| d.id() == "plist.binary-structure-query")
+            );
+        }
+
+        #[test]
+        fn registry_parse_document_round_trips_every_profile() {
+            // Every profile parses its own minimal canonical document and
+            // reports the exact profile id back.
+            let cases: &[(&str, &[u8])] = &[
+                ("ini.portable", b"[section]\nvalue=1\n"),
+                ("ini.windows", b"[section]\nvalue=1\r\n"),
+                ("ini.python-configparser", b"[section]\nvalue=1\n"),
+                ("java-properties.reader", b"name=api\n"),
+                ("java-properties.latin1", b"name=api\n"),
+                ("json.strict", b"{\"a\":1}"),
+                ("jsonc.bounded", b"{\"a\":1,}"),
+                ("json5.standard", b"{a:1,}"),
+                ("toml.1.0", b"value = 1\n"),
+                ("yaml.1.2-core", b"value: 1\n"),
+                ("yaml.1.1-compat", b"value: 1\n"),
+                ("xml.1.0-safe", b"<service><name>catalog</name></service>"),
+                (
+                    "plist.xml",
+                    b"<plist version=\"1.0\"><string>x</string></plist>",
+                ),
+                // Minimal hand-built binary plist: header, one ASCII string
+                // object ("x"), a one-byte offset table, and the 32-byte
+                // trailer (RFC 0013 §5). The offset table starts at byte 10.
+                (
+                    "plist.binary",
+                    b"bplist00\x5f\x78\x08\
+                      \x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\x01\
+                      \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a",
+                ),
+                ("hcl.native", b"a = 1\n"),
+                ("hcl.tfvars", b"a = 1\n"),
+            ];
+            for (id, bytes) in cases {
+                let profile = ProfileId::new(*id, 1);
+                let document = parse_document(Arc::from(bytes.to_vec()), &profile)
+                    .unwrap_or_else(|error| panic!("{id} must parse: {error:?}"));
+                assert_eq!(document.profile().id(), *id, "{id} profile round trip");
+            }
+            // Unknown profile ids fail like the typed adapters.
+            let unknown = ProfileId::new("example.unknown", 1);
+            assert!(
+                parse_document(Arc::from(b"x".to_vec()), &unknown).is_err(),
+                "unknown profile id fails"
+            );
+        }
+
+        #[test]
+        fn registry_family_ids_match_parsed_backend_documents() {
+            // Drift guard (R-8): the enumerated family ids must equal the
+            // `format_family()` facts of the backend documents themselves.
+            let cases: &[(&str, &str, &[u8])] = &[
+                ("hcl", "hcl.native", b"a = 1\n"),
+                ("ini", "ini.portable", b"value=1\n"),
+                ("java-properties", "java-properties.reader", b"name=api\n"),
+                ("json", "json.strict", b"{}"),
+                (
+                    "plist",
+                    "plist.xml",
+                    b"<plist version=\"1.0\"><string>x</string></plist>",
+                ),
+                ("toml", "toml.1.0", b"value = 1\n"),
+                ("xml", "xml.1.0-safe", b"<a/>"),
+                ("yaml", "yaml.1.2-core", b"value: 1\n"),
+            ];
+            for (family_id, profile_id, bytes) in cases {
+                let profile = ProfileId::new(*profile_id, 1);
+                let document = parse_document(Arc::from(bytes.to_vec()), &profile)
+                    .unwrap_or_else(|error| panic!("{family_id} sample must parse: {error:?}"));
+                // The facade exposes the family through each typed adapter.
+                let observed = if let Ok(ini) = document.as_ini() {
+                    ini.format_family()
+                } else if let Ok(properties) = document.as_properties() {
+                    properties.format_family()
+                } else if let Ok(json) = document.as_json() {
+                    json.format_family()
+                } else if let Ok(toml) = document.as_toml() {
+                    toml.format_family()
+                } else if let Ok(yaml) = document.as_yaml() {
+                    yaml.format_family()
+                } else if let Ok(xml) = document.as_xml() {
+                    xml.format_family()
+                } else if let Ok(plist) = document.as_plist() {
+                    plist.format_family()
+                } else {
+                    document.as_hcl().expect("hcl adapter").format_family()
+                };
+                assert_eq!(
+                    observed.id(),
+                    *family_id,
+                    "family id {family_id} must match the backend format_family()"
+                );
+                assert_eq!(observed.version(), 1);
+            }
+        }
+    }
+}
+
 /// Typed adapter failure on the common opaque facade.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FormatMismatch {

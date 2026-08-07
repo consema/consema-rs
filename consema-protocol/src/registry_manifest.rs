@@ -72,10 +72,16 @@ impl RegistryManifest {
         Self::from_registries(6, ContractRegistry::v6(), ErrorCodeRegistry::v6())
     }
 
+    /// Builds the Consema 0.12 `core.semantic-model@7` manifest.
+    #[must_use]
+    pub fn v7() -> Self {
+        Self::from_registries(7, ContractRegistry::v7(), ErrorCodeRegistry::v7())
+    }
+
     /// Builds the exact current Rust semantic-model manifest.
     #[must_use]
     pub fn current() -> Self {
-        Self::v6()
+        Self::v7()
     }
 
     fn from_registries(
@@ -364,6 +370,14 @@ mod tests {
                 ErrorCodeRegistry::v6(),
                 38,
                 166,
+                false,
+            ),
+            (
+                RegistryManifest::v7(),
+                ContractRegistry::v7(),
+                ErrorCodeRegistry::v7(),
+                41,
+                186,
                 true,
             ),
         ];
@@ -387,6 +401,6 @@ mod tests {
                     .all(|entry| error_codes.contains(&entry.code))
             );
         }
-        assert_eq!(RegistryManifest::current(), RegistryManifest::v6());
+        assert_eq!(RegistryManifest::current(), RegistryManifest::v7());
     }
 }

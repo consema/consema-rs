@@ -1898,7 +1898,7 @@ mod tests {
                         ValuePathSegment::ObjectValue(body),
                         ValuePathSegment::ObjectValue(nested_items),
                         ValuePathSegment::SequenceElement(0),
-                        ValuePathSegment::ObjectValue(value),
+                        ValuePathSegment::ObjectValue(_),
                     ] if items == "items" && body == "body" && nested_items == "items"
                 )
             }),
