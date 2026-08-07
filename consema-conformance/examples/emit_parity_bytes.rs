@@ -46,8 +46,12 @@ fn main() {
     let text = fs::read_to_string(&cases_path)
         .unwrap_or_else(|error| panic!("cannot read case file {cases_path:?}: {error}"));
 
-    let document = parse(text.as_bytes(), JsonProfile::StrictV1, ParseLimits::default())
-        .expect("differential case file must form a strict JSON document");
+    let document = parse(
+        text.as_bytes(),
+        JsonProfile::StrictV1,
+        ParseLimits::default(),
+    )
+    .expect("differential case file must form a strict JSON document");
     let request = ProjectionRequestBuilder::new(ProjectionTarget::BestExactCoreV1)
         .build()
         .expect("fixed projection request");
@@ -111,7 +115,10 @@ fn main() {
             .unwrap_or_else(|error| panic!("case {id}: cannot write byte file: {error}"));
         emitted += 1;
     }
-    println!("emit_parity_bytes: {emitted} cases emitted into {:?}", out_dir);
+    println!(
+        "emit_parity_bytes: {emitted} cases emitted into {:?}",
+        out_dir
+    );
     if !failures.is_empty() {
         eprintln!("failed cases: {failures:?}");
         std::process::exit(1);
