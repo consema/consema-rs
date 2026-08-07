@@ -50,6 +50,10 @@ use consema_document::{
     SourceEncoding, SourceError, SourceLimits, SourcePatch, SourcePatchLimits, SourceReplacement,
     SourceSnapshot,
 };
+use consema_ini::{
+    IniEncodingSelection, IniMatch, IniProfile, IniSyntaxMatch, execute_ini_query,
+    execute_ini_syntax_query, materialize as ini_materialize, parse as parse_ini,
+};
 use consema_json::{
     DuplicateKeyPolicy, EditFailure, Fidelity, JsonMatch, JsonProfile, JsonSyntaxMatch, JsonValue,
     JsonValueKind, ProjectionEventKind, ProjectionFailure, ProjectionRequestBuilder,
@@ -57,11 +61,20 @@ use consema_json::{
     SemanticUnavailable, execute_json_query, execute_json_syntax_query,
     materialize as json_materialize, parse as parse_json,
 };
+use consema_properties::{
+    JavaString, PropertiesMatch, PropertiesSyntaxMatch, execute_properties_query,
+    execute_properties_syntax_query, materialize as properties_materialize,
+    parse_reader as parse_properties_reader,
+};
 use consema_protocol::{ProtocolLimits, decode_json, query_failure_code};
 use consema_toml::{
     EditFailure as TomlEditFailure, TomlItem, TomlItemKind, TomlMatch, TomlProfile,
     TomlSyntaxMatch, execute_toml_query, execute_toml_syntax_query,
     materialize as toml_materialize, parse as parse_toml,
+};
+use consema_yaml::{
+    YamlMatch, YamlProfile, YamlSyntaxMatch, execute_yaml_query, execute_yaml_syntax_query,
+    materialize_value as yaml_materialize, parse as parse_yaml,
 };
 
 // ---------------------------------------------------------------------------
@@ -575,6 +588,12 @@ fn build_query_definition(
 ) -> Result<ExecutableQuery, QueryFailure> {
     let format = if domain.id().starts_with("toml.") {
         "toml"
+    } else if domain.id().starts_with("yaml.") {
+        "yaml"
+    } else if domain.id().starts_with("ini.") {
+        "ini"
+    } else if domain.id().starts_with("java-properties.") {
+        "properties"
     } else {
         "json"
     };
@@ -622,6 +641,25 @@ fn build_query_definition(
                         argument: "argument".to_owned(),
                     })?,
                 ),
+            "yaml.where-node-kind"
+            | "yaml.where-tag"
+            | "yaml.scalar-canonical-equals"
+            | "ini.entry-value-state-is"
+            | "properties.property-value-state-is" => {
+                let argument_name = match operator {
+                    "yaml.where-node-kind" => "kind",
+                    "yaml.where-tag" => "tag",
+                    "yaml.scalar-canonical-equals" => "canonical",
+                    _ => "state",
+                };
+                OperatorCall::new(operator, 1).with_argument(
+                    argument_name,
+                    argument.ok_or_else(|| QueryFailure::InvalidArgument {
+                        operator: operator.to_owned(),
+                        argument: "argument".to_owned(),
+                    })?,
+                )
+            }
             other => OperatorCall::new(other, 1),
         };
         calls.push(call);
@@ -773,8 +811,14 @@ struct DocState {
 
     json_document: Option<consema_json::Document>,
     toml_document: Option<consema_toml::Document>,
+    yaml_document: Option<consema_yaml::Document>,
+    ini_document: Option<consema_ini::Document>,
+    properties_document: Option<consema_properties::Document>,
     foreign_json: Option<consema_json::Document>,
     foreign_toml: Option<consema_toml::Document>,
+    foreign_yaml: Option<consema_yaml::Document>,
+    foreign_ini: Option<consema_ini::Document>,
+    foreign_properties: Option<consema_properties::Document>,
 
     formation: String,
     diagnostic_codes: String,
@@ -793,7 +837,11 @@ struct DocState {
 
 impl DocState {
     fn document_parsed(&self) -> bool {
-        self.json_document.is_some() || self.toml_document.is_some()
+        self.json_document.is_some()
+            || self.toml_document.is_some()
+            || self.yaml_document.is_some()
+            || self.ini_document.is_some()
+            || self.properties_document.is_some()
     }
 }
 
@@ -865,7 +913,95 @@ fn parse_into_state(
             state.toml_document = Some(document);
             Ok(())
         }
+        "yaml" => {
+            let profile = match profile_name {
+                "yaml.1.2-core@1" => YamlProfile::Yaml12CoreV1,
+                "yaml.1.1-compat@1" => YamlProfile::Yaml11CompatV1,
+                other => panic!("unknown YAML profile {other:?}"),
+            };
+            let document = parse_yaml(source.as_bytes(), profile, limits)?;
+            state.formation = formation_name(document.formation_status());
+            state.diagnostic_codes = diagnostic_codes(document.diagnostics());
+            state.root_kind = yaml_root_kind(&document);
+            state.native = yaml_native_summary(&document);
+            state.yaml_document = Some(document);
+            Ok(())
+        }
+        "ini" => {
+            let profile = match profile_name {
+                "ini.portable@1" => IniProfile::PortableV1,
+                "ini.windows@1" => IniProfile::WindowsV1,
+                "ini.python-configparser@1" => IniProfile::PythonConfigParserV1,
+                other => panic!("unknown INI profile {other:?}"),
+            };
+            let ini_limits = consema_ini::IniParseLimits {
+                common: limits,
+                ..Default::default()
+            };
+            let document = parse_ini(
+                source.as_bytes(),
+                profile,
+                IniEncodingSelection::ProfileDefault,
+                ini_limits,
+            )?;
+            state.formation = formation_name(document.formation_status());
+            state.diagnostic_codes = diagnostic_codes(document.diagnostics());
+            state.root_kind = "Document".to_owned();
+            state.native = format!(
+                "sections={} entries={}",
+                document.sections().len(),
+                document.entries().len()
+            );
+            state.ini_document = Some(document);
+            Ok(())
+        }
+        "properties" => {
+            let properties_limits = consema_properties::PropertiesParseLimits {
+                common: limits,
+                ..Default::default()
+            };
+            let document = parse_properties_reader(
+                source.as_bytes(),
+                SourceEncoding::Utf8,
+                properties_limits,
+            )?;
+            state.formation = formation_name(document.formation_status());
+            state.diagnostic_codes = diagnostic_codes(document.diagnostics());
+            state.root_kind = "Document".to_owned();
+            state.native = format!(
+                "properties={} comments={}",
+                document.properties().len(),
+                document.comments().len()
+            );
+            state.properties_document = Some(document);
+            Ok(())
+        }
         other => panic!("unknown case format {other:?}"),
+    }
+}
+
+/// Renders the document-0 root node kind fact of a YAML stream.
+fn yaml_root_kind(document: &consema_yaml::Document) -> String {
+    match document.document(0) {
+        Some(doc) => yaml_node_kind_name(doc.root().kind()).to_owned(),
+        None => "EmptyStream".to_owned(),
+    }
+}
+
+/// Renders the stream-level native facts: document count and alias count.
+fn yaml_native_summary(document: &consema_yaml::Document) -> String {
+    format!(
+        "docs={} aliases={}",
+        document.document_count(),
+        document.alias_count()
+    )
+}
+
+fn yaml_node_kind_name(kind: consema_yaml::YamlNodeKind) -> &'static str {
+    match kind {
+        consema_yaml::YamlNodeKind::Scalar => "Scalar",
+        consema_yaml::YamlNodeKind::Sequence => "Sequence",
+        consema_yaml::YamlNodeKind::Mapping => "Mapping",
     }
 }
 
@@ -952,6 +1088,9 @@ fn emit_native_query(
         ("json.native-semantic-query", 1) => QueryDomain::json_native_v1(),
         ("json.native-semantic-query", 2) => QueryDomain::json_native_v2(),
         ("toml.native-semantic-query", 1) => QueryDomain::toml_native_v1(),
+        ("yaml.native-semantic-query", 1) => QueryDomain::yaml_native_v1(),
+        ("ini.native-semantic-query", 1) => QueryDomain::ini_native_v1(),
+        ("java-properties.native-semantic-query", 1) => QueryDomain::java_properties_native_v1(),
         _ => {
             set(facts, "query.native.status", "Failed");
             set(
@@ -1013,6 +1152,103 @@ fn emit_native_query(
                 set(facts, "query.native.matches", "");
             }
         }
+        return;
+    }
+    if let Some(document) = &state.yaml_document {
+        match execute_yaml_query(&executable, document, limits, &cancellation) {
+            Ok(execution) => {
+                let matches = execution.matches();
+                let items = matches.iter().map(yaml_native_match).collect::<Vec<_>>();
+                set(facts, "query.native.status", "Completed");
+                set(facts, "query.native.failure", "");
+                set(facts, "query.native.count", items.len().to_string());
+                set(facts, "query.native.matches", join(&items));
+            }
+            Err(failure) => {
+                set(facts, "query.native.status", "Failed");
+                set(facts, "query.native.failure", query_failure_code(&failure));
+                set(facts, "query.native.count", "");
+                set(facts, "query.native.matches", "");
+            }
+        }
+        return;
+    }
+    if let Some(document) = &state.ini_document {
+        match execute_ini_query(&executable, document, limits, &cancellation) {
+            Ok(execution) => {
+                let matches = execution.matches();
+                let items = matches.iter().map(ini_native_match).collect::<Vec<_>>();
+                set(facts, "query.native.status", "Completed");
+                set(facts, "query.native.failure", "");
+                set(facts, "query.native.count", items.len().to_string());
+                set(facts, "query.native.matches", join(&items));
+            }
+            Err(failure) => {
+                set(facts, "query.native.status", "Failed");
+                set(facts, "query.native.failure", query_failure_code(&failure));
+                set(facts, "query.native.count", "");
+                set(facts, "query.native.matches", "");
+            }
+        }
+        return;
+    }
+    if let Some(document) = &state.properties_document {
+        match execute_properties_query(&executable, document, limits, &cancellation) {
+            Ok(execution) => {
+                let matches = execution.matches();
+                let items = matches
+                    .iter()
+                    .map(properties_native_match)
+                    .collect::<Vec<_>>();
+                set(facts, "query.native.status", "Completed");
+                set(facts, "query.native.failure", "");
+                set(facts, "query.native.count", items.len().to_string());
+                set(facts, "query.native.matches", join(&items));
+            }
+            Err(failure) => {
+                set(facts, "query.native.status", "Failed");
+                set(facts, "query.native.failure", query_failure_code(&failure));
+                set(facts, "query.native.count", "");
+                set(facts, "query.native.matches", "");
+            }
+        }
+    }
+}
+
+/// Renders one YAML native match identity fact: KIND:identity.
+fn yaml_native_match(match_: &YamlMatch) -> String {
+    match match_ {
+        YamlMatch::Stream { .. } => "Stream:0".to_owned(),
+        YamlMatch::Document { ordinal, .. } => format!("Document:{ordinal}"),
+        YamlMatch::Node { kind, .. } => format!("Node:{}", yaml_node_kind_name(*kind)),
+        YamlMatch::MappingEntry { ordinal, .. } => format!("MappingEntry:{ordinal}"),
+        YamlMatch::SequenceElement { ordinal, .. } => format!("SequenceElement:{ordinal}"),
+        YamlMatch::AnchorDefinition { name, .. } => {
+            format!("AnchorDefinition:{}", escape(name))
+        }
+        YamlMatch::AliasOccurrence { ordinal, .. } => format!("AliasOccurrence:{ordinal}"),
+    }
+}
+
+/// Renders one INI native match identity fact: KIND:ordinal.
+fn ini_native_match(match_: &IniMatch) -> String {
+    match match_ {
+        IniMatch::Document { .. } => "Document:0".to_owned(),
+        IniMatch::Section { ordinal, .. } => format!("Section:{ordinal}"),
+        IniMatch::Entry { ordinal, .. } => format!("Entry:{ordinal}"),
+        IniMatch::PhysicalLine { ordinal, .. } => format!("PhysicalLine:{ordinal}"),
+        IniMatch::LogicalLine { ordinal, .. } => format!("LogicalLine:{ordinal}"),
+    }
+}
+
+/// Renders one Properties native match identity fact: KIND:ordinal.
+fn properties_native_match(match_: &PropertiesMatch) -> String {
+    match match_ {
+        PropertiesMatch::Document { .. } => "Document:0".to_owned(),
+        PropertiesMatch::Property { ordinal, .. } => format!("Property:{ordinal}"),
+        PropertiesMatch::NaturalLine { ordinal, .. } => format!("NaturalLine:{ordinal}"),
+        PropertiesMatch::LogicalLine { ordinal, .. } => format!("LogicalLine:{ordinal}"),
+        PropertiesMatch::Escape { ordinal, .. } => format!("Escape:{ordinal}"),
     }
 }
 
@@ -1074,6 +1310,11 @@ fn emit_syntax_query(
         ("json.lossless-syntax-query", 1) => QueryDomain::json_lossless_syntax_v1(),
         ("json.lossless-syntax-query", 2) => QueryDomain::json_lossless_syntax_v2(),
         ("toml.lossless-syntax-query", 1) => QueryDomain::toml_lossless_syntax_v1(),
+        ("yaml.lossless-syntax-query", 1) => QueryDomain::yaml_lossless_syntax_v1(),
+        ("ini.lossless-syntax-query", 1) => QueryDomain::ini_lossless_syntax_v1(),
+        ("java-properties.lossless-syntax-query", 1) => {
+            QueryDomain::java_properties_lossless_syntax_v1()
+        }
         _ => {
             set(facts, "query.syntax.status", "Failed");
             set(
@@ -1135,7 +1376,79 @@ fn emit_syntax_query(
                 set(facts, "query.syntax.matches", "");
             }
         }
+        return;
     }
+    if let Some(document) = &state.yaml_document {
+        match execute_yaml_syntax_query(&executable, document, limits, &cancellation) {
+            Ok(execution) => {
+                let matches = execution.matches();
+                let items = matches.iter().map(yaml_syntax_match).collect::<Vec<_>>();
+                set(facts, "query.syntax.status", "Completed");
+                set(facts, "query.syntax.failure", "");
+                set(facts, "query.syntax.count", items.len().to_string());
+                set(facts, "query.syntax.matches", join(&items));
+            }
+            Err(failure) => {
+                set(facts, "query.syntax.status", "Failed");
+                set(facts, "query.syntax.failure", query_failure_code(&failure));
+                set(facts, "query.syntax.count", "");
+                set(facts, "query.syntax.matches", "");
+            }
+        }
+        return;
+    }
+    if let Some(document) = &state.ini_document {
+        match execute_ini_syntax_query(&executable, document, limits, &cancellation) {
+            Ok(execution) => {
+                let matches = execution.matches();
+                let items = matches.iter().map(ini_syntax_match).collect::<Vec<_>>();
+                set(facts, "query.syntax.status", "Completed");
+                set(facts, "query.syntax.failure", "");
+                set(facts, "query.syntax.count", items.len().to_string());
+                set(facts, "query.syntax.matches", join(&items));
+            }
+            Err(failure) => {
+                set(facts, "query.syntax.status", "Failed");
+                set(facts, "query.syntax.failure", query_failure_code(&failure));
+                set(facts, "query.syntax.count", "");
+                set(facts, "query.syntax.matches", "");
+            }
+        }
+        return;
+    }
+    if let Some(document) = &state.properties_document {
+        match execute_properties_syntax_query(&executable, document, limits, &cancellation) {
+            Ok(execution) => {
+                let matches = execution.matches();
+                let items = matches
+                    .iter()
+                    .map(properties_syntax_match)
+                    .collect::<Vec<_>>();
+                set(facts, "query.syntax.status", "Completed");
+                set(facts, "query.syntax.failure", "");
+                set(facts, "query.syntax.count", items.len().to_string());
+                set(facts, "query.syntax.matches", join(&items));
+            }
+            Err(failure) => {
+                set(facts, "query.syntax.status", "Failed");
+                set(facts, "query.syntax.failure", query_failure_code(&failure));
+                set(facts, "query.syntax.count", "");
+                set(facts, "query.syntax.matches", "");
+            }
+        }
+    }
+}
+
+fn yaml_syntax_match(match_: &YamlSyntaxMatch) -> String {
+    format!("{}@{}", match_.kind().as_str(), match_.ordinal())
+}
+
+fn ini_syntax_match(match_: &IniSyntaxMatch) -> String {
+    format!("{}@{}", match_.kind().as_str(), match_.ordinal())
+}
+
+fn properties_syntax_match(match_: &PropertiesSyntaxMatch) -> String {
+    format!("{}@{}", match_.kind().as_str(), match_.ordinal())
 }
 
 fn json_syntax_match(match_: &JsonSyntaxMatch) -> String {
@@ -1295,7 +1608,237 @@ fn emit_project(
                 set(facts, "project.provenance_entries", "");
             }
         }
+        return;
     }
+    if let Some(document) = &state.yaml_document {
+        match document.project_value(consema_yaml::ValueProjectionRequest::best_exact_v1()) {
+            consema_yaml::ValueProjectionResult::Complete(complete) => {
+                state.value = Some(complete.value.clone());
+                state.projected = true;
+                set(facts, "project.status", "Completed");
+                set(facts, "project.failure", "");
+                set(
+                    facts,
+                    "project.fidelity",
+                    yaml_fidelity_name(complete.fidelity),
+                );
+                set(
+                    facts,
+                    "project.value_kind",
+                    portable_value_kind_name(complete.value.kind()),
+                );
+                set(
+                    facts,
+                    "project.report",
+                    yaml_event_summary(complete.report.events()),
+                );
+                set(
+                    facts,
+                    "project.provenance_entries",
+                    complete.provenance.entries().len().to_string(),
+                );
+            }
+            consema_yaml::ValueProjectionResult::Failed(failure) => {
+                set(facts, "project.status", "Failed");
+                set(
+                    facts,
+                    "project.failure",
+                    consema_yaml::value_projection_failure_code(&failure),
+                );
+                set(facts, "project.fidelity", "");
+                set(facts, "project.value_kind", "");
+                set(facts, "project.report", "");
+                set(facts, "project.provenance_entries", "");
+            }
+        }
+        return;
+    }
+    if let Some(document) = &state.ini_document {
+        let request = consema_ini::ProjectionRequest::best_exact_entry_mapping();
+        match document.project(request) {
+            consema_ini::ProjectionResult::Complete(complete) => {
+                state.value = Some(complete.value.clone());
+                state.projected = true;
+                set(facts, "project.status", "Completed");
+                set(facts, "project.failure", "");
+                set(
+                    facts,
+                    "project.fidelity",
+                    ini_fidelity_name(complete.fidelity),
+                );
+                set(
+                    facts,
+                    "project.value_kind",
+                    portable_value_kind_name(complete.value.kind()),
+                );
+                set(
+                    facts,
+                    "project.report",
+                    ini_event_summary(complete.report.events()),
+                );
+                set(
+                    facts,
+                    "project.provenance_entries",
+                    complete.provenance.entries().len().to_string(),
+                );
+            }
+            consema_ini::ProjectionResult::Failed(attempt) => {
+                let code = attempt
+                    .diagnostics
+                    .first()
+                    .map(|diagnostic| diagnostic.code.clone())
+                    .unwrap_or_default();
+                set(facts, "project.status", "Failed");
+                set(facts, "project.failure", code);
+                set(facts, "project.fidelity", "");
+                set(facts, "project.value_kind", "");
+                set(
+                    facts,
+                    "project.report",
+                    ini_event_summary(attempt.report.events()),
+                );
+                set(facts, "project.provenance_entries", "");
+            }
+        }
+        return;
+    }
+    if let Some(document) = &state.properties_document {
+        let request = consema_properties::ProjectionRequest::best_exact_entry_mapping();
+        match document.project(request) {
+            consema_properties::ProjectionResult::Complete(complete) => {
+                state.value = Some(complete.value.clone());
+                state.projected = true;
+                set(facts, "project.status", "Completed");
+                set(facts, "project.failure", "");
+                set(
+                    facts,
+                    "project.fidelity",
+                    properties_fidelity_name(complete.fidelity),
+                );
+                set(
+                    facts,
+                    "project.value_kind",
+                    portable_value_kind_name(complete.value.kind()),
+                );
+                set(
+                    facts,
+                    "project.report",
+                    properties_event_summary(complete.report.events()),
+                );
+                set(
+                    facts,
+                    "project.provenance_entries",
+                    complete.provenance.entries().len().to_string(),
+                );
+            }
+            consema_properties::ProjectionResult::Failed(attempt) => {
+                let code = attempt
+                    .diagnostics
+                    .first()
+                    .map(|diagnostic| diagnostic.code.clone())
+                    .unwrap_or_default();
+                set(facts, "project.status", "Failed");
+                set(facts, "project.failure", code);
+                set(facts, "project.fidelity", "");
+                set(facts, "project.value_kind", "");
+                set(
+                    facts,
+                    "project.report",
+                    properties_event_summary(attempt.report.events()),
+                );
+                set(facts, "project.provenance_entries", "");
+            }
+        }
+    }
+}
+
+/// Renders the YAML projection fidelity name.
+fn yaml_fidelity_name(fidelity: consema_yaml::Fidelity) -> &'static str {
+    match fidelity {
+        consema_yaml::Fidelity::Exact => "Exact",
+        consema_yaml::Fidelity::Transformed => "Transformed",
+        consema_yaml::Fidelity::Lossy => "Lossy",
+    }
+}
+
+/// Renders the INI projection fidelity name.
+fn ini_fidelity_name(fidelity: consema_ini::Fidelity) -> &'static str {
+    match fidelity {
+        consema_ini::Fidelity::Exact => "Exact",
+        consema_ini::Fidelity::Transformed => "Transformed",
+        consema_ini::Fidelity::Lossy => "Lossy",
+    }
+}
+
+/// Renders the Properties projection fidelity name.
+fn properties_fidelity_name(fidelity: consema_properties::Fidelity) -> &'static str {
+    match fidelity {
+        consema_properties::Fidelity::Exact => "Exact",
+        consema_properties::Fidelity::Transformed => "Transformed",
+        consema_properties::Fidelity::Lossy => "Lossy",
+    }
+}
+
+/// Renders the YAML projection report as ordered EventKind:count pairs.
+fn yaml_event_summary(events: &[consema_yaml::ProjectionEvent]) -> String {
+    let mut order = Vec::new();
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for event in events {
+        let name = match event.kind {
+            consema_yaml::ProjectionEventKind::SharingDuplicated => "SharingDuplicated",
+            consema_yaml::ProjectionEventKind::TagStripped => "TagStripped",
+        };
+        if !counts.contains_key(name) {
+            order.push(name.to_owned());
+        }
+        *counts.entry(name.to_owned()).or_default() += 1;
+    }
+    let parts = order
+        .iter()
+        .map(|name| format!("{name}:{}", counts[name]))
+        .collect::<Vec<_>>();
+    join(&parts)
+}
+
+/// Renders the INI projection report as ordered EventKind:count pairs.
+fn ini_event_summary(events: &[consema_ini::ProjectionEvent]) -> String {
+    let mut order = Vec::new();
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for event in events {
+        let name = match event.kind {
+            consema_ini::ProjectionEventKind::SectionCollisionCollapsed => {
+                "SectionCollisionCollapsed"
+            }
+            consema_ini::ProjectionEventKind::EntryCollisionCollapsed => "EntryCollisionCollapsed",
+        };
+        if !counts.contains_key(name) {
+            order.push(name.to_owned());
+        }
+        *counts.entry(name.to_owned()).or_default() += 1;
+    }
+    let parts = order
+        .iter()
+        .map(|name| format!("{name}:{}", counts[name]))
+        .collect::<Vec<_>>();
+    join(&parts)
+}
+
+/// Renders the Properties projection report as ordered event-code:count
+/// pairs.
+fn properties_event_summary(events: &[consema_properties::ProjectionEvent]) -> String {
+    let mut order = Vec::new();
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for event in events {
+        if !counts.contains_key(event.code) {
+            order.push(event.code.to_owned());
+        }
+        *counts.entry(event.code.to_owned()).or_default() += 1;
+    }
+    let parts = order
+        .iter()
+        .map(|name| format!("{name}:{}", counts[name]))
+        .collect::<Vec<_>>();
+    join(&parts)
 }
 
 /// Renders the JSON projection report as ordered EventKind:count pairs.
@@ -1423,30 +1966,119 @@ fn emit_materialize(
         }
         return;
     }
-    match toml_materialize(&value, &request) {
-        consema_document::MaterializationResult::Complete(complete) => {
-            set(facts, "materialize.status", "Completed");
-            set(facts, "materialize.failure", "");
-            set(
-                facts,
-                "materialize.output",
-                escape(&String::from_utf8_lossy(complete.document.render())),
-            );
-            set(
-                facts,
-                "materialize.fidelity",
-                materialization_fidelity_name(complete.fidelity),
-            );
+    if state.toml_document.is_some() {
+        match toml_materialize(&value, &request) {
+            consema_document::MaterializationResult::Complete(complete) => {
+                set(facts, "materialize.status", "Completed");
+                set(facts, "materialize.failure", "");
+                set(
+                    facts,
+                    "materialize.output",
+                    escape(&String::from_utf8_lossy(complete.document.render())),
+                );
+                set(
+                    facts,
+                    "materialize.fidelity",
+                    materialization_fidelity_name(complete.fidelity),
+                );
+            }
+            consema_document::MaterializationResult::Failed(attempt) => {
+                set(facts, "materialize.status", "Failed");
+                set(
+                    facts,
+                    "materialize.failure",
+                    materialization_failure_code(&attempt.failure),
+                );
+                set(facts, "materialize.output", "");
+                set(facts, "materialize.fidelity", "");
+            }
         }
-        consema_document::MaterializationResult::Failed(attempt) => {
-            set(facts, "materialize.status", "Failed");
-            set(
-                facts,
-                "materialize.failure",
-                materialization_failure_code(&attempt.failure),
-            );
-            set(facts, "materialize.output", "");
-            set(facts, "materialize.fidelity", "");
+        return;
+    }
+    if state.yaml_document.is_some() {
+        match yaml_materialize(&value, &request) {
+            consema_document::MaterializationResult::Complete(complete) => {
+                set(facts, "materialize.status", "Completed");
+                set(facts, "materialize.failure", "");
+                set(
+                    facts,
+                    "materialize.output",
+                    escape(&String::from_utf8_lossy(complete.document.render())),
+                );
+                set(
+                    facts,
+                    "materialize.fidelity",
+                    materialization_fidelity_name(complete.fidelity),
+                );
+            }
+            consema_document::MaterializationResult::Failed(attempt) => {
+                set(facts, "materialize.status", "Failed");
+                set(
+                    facts,
+                    "materialize.failure",
+                    materialization_failure_code(&attempt.failure),
+                );
+                set(facts, "materialize.output", "");
+                set(facts, "materialize.fidelity", "");
+            }
+        }
+        return;
+    }
+    if state.ini_document.is_some() {
+        match ini_materialize(&value, &request) {
+            consema_document::MaterializationResult::Complete(complete) => {
+                set(facts, "materialize.status", "Completed");
+                set(facts, "materialize.failure", "");
+                set(
+                    facts,
+                    "materialize.output",
+                    escape(&String::from_utf8_lossy(complete.document.render())),
+                );
+                set(
+                    facts,
+                    "materialize.fidelity",
+                    materialization_fidelity_name(complete.fidelity),
+                );
+            }
+            consema_document::MaterializationResult::Failed(attempt) => {
+                set(facts, "materialize.status", "Failed");
+                set(
+                    facts,
+                    "materialize.failure",
+                    materialization_failure_code(&attempt.failure),
+                );
+                set(facts, "materialize.output", "");
+                set(facts, "materialize.fidelity", "");
+            }
+        }
+        return;
+    }
+    if state.properties_document.is_some() {
+        match properties_materialize(&value, &request) {
+            consema_document::MaterializationResult::Complete(complete) => {
+                set(facts, "materialize.status", "Completed");
+                set(facts, "materialize.failure", "");
+                set(
+                    facts,
+                    "materialize.output",
+                    escape(&String::from_utf8_lossy(complete.document.render())),
+                );
+                set(
+                    facts,
+                    "materialize.fidelity",
+                    materialization_fidelity_name(complete.fidelity),
+                );
+            }
+            consema_document::MaterializationResult::Failed(attempt) => {
+                set(facts, "materialize.status", "Failed");
+                set(
+                    facts,
+                    "materialize.failure",
+                    materialization_failure_code(&attempt.failure),
+                );
+                set(facts, "materialize.output", "");
+                set(facts, "materialize.fidelity", "");
+            }
         }
     }
 }
@@ -1599,6 +2231,109 @@ fn emit_edit(facts: &mut Facts, state: &mut DocState, step: Option<&[consema_cor
                 set(facts, "edit.source_edit_count", "");
             }
         }
+        return;
+    }
+    if let Some(document) = &state.yaml_document {
+        let mut builder = consema_yaml::EditTransactionBuilder::new(document);
+        if !apply_yaml_edit_operations(&mut builder, state, fields) {
+            set(facts, "edit.status", "Failed");
+            set(facts, "edit.failure", "core.edit.target-not-found@1");
+            set(facts, "edit.output", "");
+            set(facts, "edit.source_edit_count", "");
+            return;
+        }
+        match document.commit(&builder.build()) {
+            Ok(commit) => {
+                set(facts, "edit.status", "Completed");
+                set(facts, "edit.failure", "");
+                set(
+                    facts,
+                    "edit.output",
+                    escape(&String::from_utf8_lossy(commit.document.render())),
+                );
+                set(
+                    facts,
+                    "edit.source_edit_count",
+                    commit.change_set.source_edits().len().to_string(),
+                );
+            }
+            Err(failure) => {
+                set(facts, "edit.status", "Failed");
+                set(
+                    facts,
+                    "edit.failure",
+                    consema_yaml::edit_failure_code(&failure),
+                );
+                set(facts, "edit.output", "");
+                set(facts, "edit.source_edit_count", "");
+            }
+        }
+        return;
+    }
+    if let Some(document) = &state.ini_document {
+        let mut builder = consema_ini::EditTransactionBuilder::new(document);
+        if !apply_ini_edit_operations(&mut builder, state, fields) {
+            set(facts, "edit.status", "Failed");
+            set(facts, "edit.failure", "core.edit.target-not-found@1");
+            set(facts, "edit.output", "");
+            set(facts, "edit.source_edit_count", "");
+            return;
+        }
+        match document.commit(&builder.build()) {
+            Ok(commit) => {
+                set(facts, "edit.status", "Completed");
+                set(facts, "edit.failure", "");
+                set(
+                    facts,
+                    "edit.output",
+                    escape(&String::from_utf8_lossy(commit.document.render())),
+                );
+                set(
+                    facts,
+                    "edit.source_edit_count",
+                    commit.change_set.source_edits().len().to_string(),
+                );
+            }
+            Err(failure) => {
+                set(facts, "edit.status", "Failed");
+                set(facts, "edit.failure", failure.diagnostic_code());
+                set(facts, "edit.output", "");
+                set(facts, "edit.source_edit_count", "");
+            }
+        }
+        return;
+    }
+    if let Some(document) = &state.properties_document {
+        let mut builder = consema_properties::EditTransactionBuilder::new(document);
+        if !apply_properties_edit_operations(&mut builder, state, fields) {
+            set(facts, "edit.status", "Failed");
+            set(facts, "edit.failure", "core.edit.target-not-found@1");
+            set(facts, "edit.output", "");
+            set(facts, "edit.source_edit_count", "");
+            return;
+        }
+        match document.commit(&builder.build()) {
+            Ok(commit) => {
+                set(facts, "edit.status", "Completed");
+                set(facts, "edit.failure", "");
+                set(
+                    facts,
+                    "edit.output",
+                    escape(&String::from_utf8_lossy(commit.document.render())),
+                );
+                set(
+                    facts,
+                    "edit.source_edit_count",
+                    commit.change_set.source_edits().len().to_string(),
+                );
+            }
+            Err(failure) => {
+                set(facts, "edit.status", "Failed");
+                set(facts, "edit.failure", failure.diagnostic_code());
+                set(facts, "edit.output", "");
+                set(facts, "edit.source_edit_count", "");
+            }
+        }
     }
 }
 
@@ -1608,6 +2343,9 @@ fn emit_edit(facts: &mut Facts, state: &mut DocState, step: Option<&[consema_cor
 fn ensure_foreign(state: &mut DocState) -> bool {
     if state.foreign_json.is_some()
         || state.foreign_toml.is_some()
+        || state.foreign_yaml.is_some()
+        || state.foreign_ini.is_some()
+        || state.foreign_properties.is_some()
         || (state.foreign_source.is_empty() && state.foreign_source_hex.is_empty())
     {
         return true;
@@ -1644,6 +2382,61 @@ fn ensure_foreign(state: &mut DocState) -> bool {
             }
             Err(_) => false,
         },
+        "yaml" => {
+            let profile = match state.profile_name.as_str() {
+                "yaml.1.2-core@1" => YamlProfile::Yaml12CoreV1,
+                "yaml.1.1-compat@1" => YamlProfile::Yaml11CompatV1,
+                _ => YamlProfile::Yaml12CoreV1,
+            };
+            match parse_yaml(source_bytes.as_slice(), profile, limits) {
+                Ok(document) => {
+                    state.foreign_yaml = Some(document);
+                    true
+                }
+                Err(_) => false,
+            }
+        }
+        "ini" => {
+            let profile = match state.profile_name.as_str() {
+                "ini.portable@1" => IniProfile::PortableV1,
+                "ini.windows@1" => IniProfile::WindowsV1,
+                "ini.python-configparser@1" => IniProfile::PythonConfigParserV1,
+                _ => IniProfile::PortableV1,
+            };
+            let ini_limits = consema_ini::IniParseLimits {
+                common: limits,
+                ..Default::default()
+            };
+            match parse_ini(
+                source_bytes.as_slice(),
+                profile,
+                IniEncodingSelection::ProfileDefault,
+                ini_limits,
+            ) {
+                Ok(document) => {
+                    state.foreign_ini = Some(document);
+                    true
+                }
+                Err(_) => false,
+            }
+        }
+        "properties" => {
+            let properties_limits = consema_properties::PropertiesParseLimits {
+                common: limits,
+                ..Default::default()
+            };
+            match parse_properties_reader(
+                source_bytes.as_slice(),
+                SourceEncoding::Utf8,
+                properties_limits,
+            ) {
+                Ok(document) => {
+                    state.foreign_properties = Some(document);
+                    true
+                }
+                Err(_) => false,
+            }
+        }
         _ => false,
     }
 }
@@ -1785,6 +2578,451 @@ fn apply_toml_edit_operations(
         }
     }
     true
+}
+
+/// Applies the declared YAML edit operations; false means a descriptor
+/// could not be resolved.
+fn apply_yaml_edit_operations(
+    builder: &mut consema_yaml::EditTransactionBuilder,
+    state: &DocState,
+    fields: &[consema_core::ObjectEntry],
+) -> bool {
+    let Some(operations) = object_field(fields, "operations").and_then(PortableValue::as_sequence)
+    else {
+        return false;
+    };
+    for operation in operations {
+        let Some(op) = operation.as_object() else {
+            return false;
+        };
+        let name = object_string(op, "operation").unwrap_or("");
+        match name {
+            "semantic-scalar" => {
+                let Some(value) = value_from_desc(op) else {
+                    return false;
+                };
+                let Some(target) = resolve_yaml_target(state, op) else {
+                    return false;
+                };
+                let Some(policy) = yaml_representation_policy(op) else {
+                    return false;
+                };
+                builder.semantic_scalar(target, value, policy);
+            }
+            "literal-scalar" => {
+                let Some(target) = resolve_yaml_target(state, op) else {
+                    return false;
+                };
+                let Some(literal) = hex_field(op, "literal_hex") else {
+                    return false;
+                };
+                builder.literal_scalar(target, literal);
+            }
+            "rename-anchor" => {
+                let Some(target) = resolve_yaml_target(state, op) else {
+                    return false;
+                };
+                let name = object_string(op, "name").unwrap_or("");
+                builder.rename_anchor(target, name);
+            }
+            "insert-mapping-entry" => {
+                let Some(container) = resolve_yaml_target(state, op) else {
+                    return false;
+                };
+                let Some(value) = value_from_desc(op) else {
+                    return false;
+                };
+                let Some(placement) = resolve_yaml_placement(state, op) else {
+                    return false;
+                };
+                let key = PortableValue::string(object_string(op, "name").unwrap_or(""));
+                builder.insert_mapping_entry(container, key, value, placement);
+            }
+            "remove-mapping-entry" => {
+                let Some(target) = resolve_yaml_target(state, op) else {
+                    return false;
+                };
+                builder.remove_mapping_entry(target);
+            }
+            "insert-sequence-element" => {
+                let Some(container) = resolve_yaml_target(state, op) else {
+                    return false;
+                };
+                let Some(value) = value_from_desc(op) else {
+                    return false;
+                };
+                let Some(placement) = resolve_yaml_placement(state, op) else {
+                    return false;
+                };
+                builder.insert_sequence_element(container, value, placement);
+            }
+            "remove-sequence-element" => {
+                let Some(target) = resolve_yaml_target(state, op) else {
+                    return false;
+                };
+                builder.remove_sequence_element(target);
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// Applies the declared INI edit operations; false means a descriptor
+/// could not be resolved.
+fn apply_ini_edit_operations(
+    builder: &mut consema_ini::EditTransactionBuilder,
+    state: &DocState,
+    fields: &[consema_core::ObjectEntry],
+) -> bool {
+    let Some(operations) = object_field(fields, "operations").and_then(PortableValue::as_sequence)
+    else {
+        return false;
+    };
+    for operation in operations {
+        let Some(op) = operation.as_object() else {
+            return false;
+        };
+        let name = object_string(op, "operation").unwrap_or("");
+        match name {
+            "semantic-value" => {
+                let Some(target) = resolve_ini_target(state, op) else {
+                    return false;
+                };
+                let Some(value) = string_from_desc(op) else {
+                    return false;
+                };
+                let Some(policy) = ini_representation_policy(op) else {
+                    return false;
+                };
+                builder.semantic_value(target, value, policy);
+            }
+            "literal-value" => {
+                let Some(target) = resolve_ini_target(state, op) else {
+                    return false;
+                };
+                let Some(literal) = hex_field(op, "literal_hex") else {
+                    return false;
+                };
+                builder.literal_value(target, literal);
+            }
+            "insert-section" => {
+                let Some(container) = resolve_ini_target(state, op) else {
+                    return false;
+                };
+                let Some(placement) = resolve_ini_placement(state, op) else {
+                    return false;
+                };
+                let name = object_string(op, "name").unwrap_or("");
+                builder.insert_section(container, name, placement);
+            }
+            "remove-section" => {
+                let Some(target) = resolve_ini_target(state, op) else {
+                    return false;
+                };
+                builder.remove_section(target);
+            }
+            "rename-section" => {
+                let Some(target) = resolve_ini_target(state, op) else {
+                    return false;
+                };
+                let name = object_string(op, "name").unwrap_or("");
+                builder.rename_section(target, name);
+            }
+            "insert-entry" => {
+                let Some(container) = resolve_ini_target(state, op) else {
+                    return false;
+                };
+                let Some(value) = string_from_desc(op) else {
+                    return false;
+                };
+                let Some(placement) = resolve_ini_placement(state, op) else {
+                    return false;
+                };
+                let key = object_string(op, "name").unwrap_or("");
+                builder.insert_entry(container, key, value, placement);
+            }
+            "remove-entry" => {
+                let Some(target) = resolve_ini_target(state, op) else {
+                    return false;
+                };
+                builder.remove_entry(target);
+            }
+            "rename-entry" => {
+                let Some(target) = resolve_ini_target(state, op) else {
+                    return false;
+                };
+                let key = object_string(op, "name").unwrap_or("");
+                builder.rename_entry(target, key);
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// Applies the declared Properties edit operations; false means a
+/// descriptor could not be resolved.
+fn apply_properties_edit_operations(
+    builder: &mut consema_properties::EditTransactionBuilder,
+    state: &DocState,
+    fields: &[consema_core::ObjectEntry],
+) -> bool {
+    let Some(operations) = object_field(fields, "operations").and_then(PortableValue::as_sequence)
+    else {
+        return false;
+    };
+    for operation in operations {
+        let Some(op) = operation.as_object() else {
+            return false;
+        };
+        let name = object_string(op, "operation").unwrap_or("");
+        match name {
+            "semantic-value" => {
+                let Some(target) = resolve_properties_target(state, op) else {
+                    return false;
+                };
+                let Some(value) = string_from_desc(op) else {
+                    return false;
+                };
+                builder.semantic_value(target, JavaString::from_unicode(&value));
+            }
+            "literal-value" => {
+                let Some(target) = resolve_properties_target(state, op) else {
+                    return false;
+                };
+                let Some(literal) = hex_field(op, "literal_hex") else {
+                    return false;
+                };
+                builder.literal_value(target, literal);
+            }
+            "insert-property" => {
+                let Some(container) = resolve_properties_target(state, op) else {
+                    return false;
+                };
+                let Some(value) = string_from_desc(op) else {
+                    return false;
+                };
+                let Some(placement) = resolve_properties_placement(state, op) else {
+                    return false;
+                };
+                let key = object_string(op, "name").unwrap_or("");
+                builder.insert_property(
+                    container,
+                    JavaString::from_unicode(&key),
+                    JavaString::from_unicode(&value),
+                    placement,
+                );
+            }
+            "remove-property" => {
+                let Some(target) = resolve_properties_target(state, op) else {
+                    return false;
+                };
+                builder.remove_property(target);
+            }
+            "rename-property" => {
+                let Some(target) = resolve_properties_target(state, op) else {
+                    return false;
+                };
+                let key = object_string(op, "name").unwrap_or("");
+                builder.rename_property(target, JavaString::from_unicode(&key));
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// Resolves one YAML target descriptor to a node handle.
+fn resolve_yaml_target(state: &DocState, op: &[consema_core::ObjectEntry]) -> Option<NodeRef> {
+    let target = object_field(op, "target")?.as_object()?;
+    let kind = object_string(target, "kind").unwrap_or("");
+    let ordinal = object_usize(target, "ordinal").unwrap_or(0);
+    let foreign = object_bool(target, "foreign").unwrap_or(false);
+    let document = if foreign {
+        state.foreign_yaml.as_ref()?
+    } else {
+        state.yaml_document.as_ref()?
+    };
+    let yaml_document = document.document(0)?;
+    let root = yaml_document.root();
+    match kind {
+        "document-root" => Some(root.node_ref()),
+        "mapping-entry" => root.mapping_entry(ordinal)?.node_ref().into(),
+        "mapping-value" => root.mapping_entry(ordinal)?.value().node_ref().into(),
+        "mapping-key" => root.mapping_entry(ordinal)?.key().node_ref().into(),
+        "sequence-element" => {
+            if let Some(item) = root.sequence_item(ordinal) {
+                Some(item.node_ref())
+            } else {
+                root.mapping_entry(0)?
+                    .value()
+                    .sequence_item(ordinal)?
+                    .node_ref()
+                    .into()
+            }
+        }
+        "sequence-element-node" => {
+            if let Some(item) = root.sequence_item(ordinal) {
+                Some(item.node().node_ref())
+            } else {
+                root.mapping_entry(0)?
+                    .value()
+                    .sequence_item(ordinal)?
+                    .node()
+                    .node_ref()
+                    .into()
+            }
+        }
+        "anchor-value" => root.mapping_entry(ordinal)?.value().anchor_node_ref(),
+        _ => None,
+    }
+}
+
+/// Resolves one INI target descriptor to a node handle.
+fn resolve_ini_target(state: &DocState, op: &[consema_core::ObjectEntry]) -> Option<NodeRef> {
+    let target = object_field(op, "target")?.as_object()?;
+    let kind = object_string(target, "kind").unwrap_or("");
+    let ordinal = object_usize(target, "ordinal").unwrap_or(0);
+    let foreign = object_bool(target, "foreign").unwrap_or(false);
+    let document = if foreign {
+        state.foreign_ini.as_ref()?
+    } else {
+        state.ini_document.as_ref()?
+    };
+    match kind {
+        "document" => Some(document.node_ref()),
+        "section" => Some(document.sections().get(ordinal)?.node_ref()),
+        "entry" => Some(document.entries().get(ordinal)?.node_ref()),
+        _ => None,
+    }
+}
+
+/// Resolves one Properties target descriptor to a node handle.
+fn resolve_properties_target(
+    state: &DocState,
+    op: &[consema_core::ObjectEntry],
+) -> Option<NodeRef> {
+    let target = object_field(op, "target")?.as_object()?;
+    let kind = object_string(target, "kind").unwrap_or("");
+    let ordinal = object_usize(target, "ordinal").unwrap_or(0);
+    let foreign = object_bool(target, "foreign").unwrap_or(false);
+    let document = if foreign {
+        state.foreign_properties.as_ref()?
+    } else {
+        state.properties_document.as_ref()?
+    };
+    match kind {
+        "document" => Some(document.node_ref()),
+        "property" => Some(document.properties().get(ordinal)?.node_ref()),
+        _ => None,
+    }
+}
+
+/// Resolves one YAML placement descriptor.
+fn resolve_yaml_placement(
+    state: &DocState,
+    op: &[consema_core::ObjectEntry],
+) -> Option<AssociationPlacement> {
+    let placement = object_field(op, "placement").and_then(PortableValue::as_object);
+    let Some(placement) = placement else {
+        return Some(AssociationPlacement::End);
+    };
+    match object_string(placement, "at").unwrap_or("") {
+        "start" => return Some(AssociationPlacement::Start),
+        "end" => return Some(AssociationPlacement::End),
+        _ => {}
+    }
+    if let Some(ordinal) = object_usize(placement, "before_ordinal") {
+        let anchor = yaml_ordinal_anchor(state, ordinal)?;
+        return Some(AssociationPlacement::Before(anchor));
+    }
+    if let Some(ordinal) = object_usize(placement, "after_ordinal") {
+        let anchor = yaml_ordinal_anchor(state, ordinal)?;
+        return Some(AssociationPlacement::After(anchor));
+    }
+    Some(AssociationPlacement::End)
+}
+
+/// Resolves one INI placement descriptor.
+fn resolve_ini_placement(
+    _state: &DocState,
+    op: &[consema_core::ObjectEntry],
+) -> Option<AssociationPlacement> {
+    let placement = object_field(op, "placement").and_then(PortableValue::as_object);
+    let Some(placement) = placement else {
+        return Some(AssociationPlacement::End);
+    };
+    match object_string(placement, "at").unwrap_or("") {
+        "start" => return Some(AssociationPlacement::Start),
+        "end" => return Some(AssociationPlacement::End),
+        _ => {}
+    }
+    Some(AssociationPlacement::End)
+}
+
+/// Resolves one Properties placement descriptor.
+fn resolve_properties_placement(
+    _state: &DocState,
+    op: &[consema_core::ObjectEntry],
+) -> Option<AssociationPlacement> {
+    let placement = object_field(op, "placement").and_then(PortableValue::as_object);
+    let Some(placement) = placement else {
+        return Some(AssociationPlacement::End);
+    };
+    match object_string(placement, "at").unwrap_or("") {
+        "start" => return Some(AssociationPlacement::Start),
+        "end" => return Some(AssociationPlacement::End),
+        _ => {}
+    }
+    Some(AssociationPlacement::End)
+}
+
+/// Resolves the anchor of the current YAML container: the mapping entries
+/// for insert-mapping-entry, the sequence elements for
+/// insert-sequence-element.
+fn yaml_ordinal_anchor(state: &DocState, ordinal: usize) -> Option<NodeRef> {
+    let document = state.yaml_document.as_ref()?;
+    let root = document.document(0)?.root();
+    if let Some(entry) = root.mapping_entry(ordinal) {
+        return Some(entry.node_ref());
+    }
+    if let Some(item) = root.sequence_item(ordinal) {
+        return Some(item.node_ref());
+    }
+    None
+}
+
+/// Resolves one YAML representation policy.
+fn yaml_representation_policy(
+    op: &[consema_core::ObjectEntry],
+) -> Option<consema_yaml::RepresentationPolicy> {
+    match object_string(op, "policy").unwrap_or("") {
+        "PreserveCompatible" => Some(consema_yaml::RepresentationPolicy::PreserveCompatible),
+        "CanonicalForProfile" => Some(consema_yaml::RepresentationPolicy::CanonicalForProfile),
+        "PreserveElseCanonical" => Some(consema_yaml::RepresentationPolicy::PreserveElseCanonical),
+        "ExactLiteral" => Some(consema_yaml::RepresentationPolicy::ExactLiteral),
+        _ => None,
+    }
+}
+
+/// Resolves one INI representation policy.
+fn ini_representation_policy(
+    op: &[consema_core::ObjectEntry],
+) -> Option<consema_ini::RepresentationPolicy> {
+    match object_string(op, "policy").unwrap_or("") {
+        "PreserveCompatible" => Some(consema_ini::RepresentationPolicy::PreserveCompatible),
+        "CanonicalForProfile" => Some(consema_ini::RepresentationPolicy::CanonicalForProfile),
+        "PreserveElseCanonical" => Some(consema_ini::RepresentationPolicy::PreserveElseCanonical),
+        "ExactLiteral" => Some(consema_ini::RepresentationPolicy::ExactLiteral),
+        _ => None,
+    }
+}
+
+/// Builds one plain text value from a scalar descriptor.
+fn string_from_desc(op: &[consema_core::ObjectEntry]) -> Option<String> {
+    let desc = object_field(op, "value")?.as_object()?;
+    object_string(desc, "string").map(ToOwned::to_owned)
 }
 
 /// Resolves one JSON target descriptor to a node handle.
