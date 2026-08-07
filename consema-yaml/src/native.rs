@@ -625,7 +625,9 @@ fn resolve_explicit(
         YamlScalarKind::Boolean => parse_bool(decoded, profile).map(str::to_owned),
         YamlScalarKind::Integer => parse_integer(decoded, profile),
         YamlScalarKind::Float => parse_float(decoded, profile),
-        _ => unreachable!(),
+        _ => unreachable!(
+            "remaining scalar kinds are handled by the caller before explicit-tag formation"
+        ),
     }
     .ok_or_else(|| native_failure("yaml.scalar.invalid-explicit-tag@1"))?;
     Ok((tag.to_owned(), scalar(decoded, &canonical, kind, style)))

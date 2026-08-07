@@ -186,6 +186,68 @@ pub enum NodeRole {
     PropertiesErrorLine,
     /// One Java Properties lossless syntax piece.
     PropertiesSyntaxPiece,
+    /// Complete XML document.
+    XmlDocument,
+    /// XML declaration.
+    XmlDeclaration,
+    /// XML internal-only DOCTYPE occurrence.
+    XmlDoctype,
+    /// XML element occurrence.
+    XmlElement,
+    /// XML attribute association.
+    XmlAttribute,
+    /// XML namespace declaration association.
+    XmlNamespaceBinding,
+    /// XML text occurrence.
+    XmlText,
+    /// XML CDATA occurrence.
+    XmlCdata,
+    /// XML comment occurrence.
+    XmlComment,
+    /// XML processing instruction.
+    XmlProcessingInstruction,
+    /// XML entity reference occurrence.
+    XmlEntityReference,
+    /// One recovered XML error region.
+    XmlErrorRegion,
+    /// One XML lossless syntax piece.
+    XmlSyntaxPiece,
+    /// Complete plist document (native-domain root handle, RFC 0013 §8.1).
+    PlistDocument,
+    /// One plist dictionary key/value association (RFC 0013 §8.1).
+    PlistDictEntry,
+    /// One plist string key identity (RFC 0013 §8.1).
+    PlistKey,
+    /// One plist array element association (RFC 0013 §8.1).
+    PlistArrayElement,
+    /// One native plist value node; shared identity lets one node serve
+    /// several containers (RFC 0013 §6, §8.1).
+    PlistValue,
+    /// One plist XML lossless syntax piece, parallel to the format-owned
+    /// `PlistSyntaxKind` (RFC 0013 §8.2).
+    PlistSyntaxPiece,
+    /// Complete HCL document (native-domain root handle, RFC 0014 §7.1).
+    HclDocument,
+    /// One HCL body: an ordered container of attributes and blocks, shared by
+    /// the root and nested bodies (RFC 0014 §7.1).
+    HclBody,
+    /// One HCL attribute occurrence (RFC 0014 §7.1).
+    HclAttribute,
+    /// One HCL block occurrence (RFC 0014 §7.1).
+    HclBlock,
+    /// One HCL block label with its quote/naked fact (RFC 0014 §7.1).
+    HclBlockLabel,
+    /// One HCL expression AST node (RFC 0014 §7.1).
+    HclExpression,
+    /// One ordered HCL template part: literal, interpolation, or directive
+    /// (RFC 0014 §7.1).
+    HclTemplatePart,
+    /// One recovered HCL error region, parallel to `XmlErrorRegion`
+    /// (RFC 0014 §3).
+    HclErrorRegion,
+    /// One HCL lossless syntax piece, parallel to the format-owned
+    /// `HclSyntaxKind` (RFC 0014 §7.2).
+    HclSyntaxPiece,
 }
 
 /// Opaque handle to one structural identity in exactly one snapshot.
@@ -220,6 +282,12 @@ impl NodeRef {
     #[must_use]
     pub const fn role(self) -> NodeRole {
         self.role
+    }
+
+    /// Process-local ordinal within the owning snapshot.
+    #[must_use]
+    pub const fn index(self) -> u64 {
+        self.index
     }
 }
 
@@ -852,6 +920,83 @@ mod tests {
         let second = DocumentAuthority::fresh();
         let node = first.node_ref(0, NodeRole::Value);
         assert_eq!(second.verify(node), Err(LocationError::WrongSnapshot));
+    }
+
+    #[test]
+    fn plist_roles_issue_and_report_stable_identities() {
+        let authority = DocumentAuthority::fresh();
+        for role in [
+            NodeRole::PlistDocument,
+            NodeRole::PlistDictEntry,
+            NodeRole::PlistKey,
+            NodeRole::PlistArrayElement,
+            NodeRole::PlistValue,
+            NodeRole::PlistSyntaxPiece,
+        ] {
+            let node = authority.node_ref(0, role);
+            assert_eq!(node.role(), role);
+            assert_eq!(node.snapshot(), authority.identity());
+            assert_eq!(node.index(), 0);
+            assert_eq!(authority.resolve_index(node), Ok(0));
+        }
+        // The plist roles are distinct from the generic and XML roles they
+        // parallel, so a handle can never be mistaken for another domain.
+        for role in [
+            NodeRole::PlistDocument,
+            NodeRole::PlistDictEntry,
+            NodeRole::PlistKey,
+            NodeRole::PlistArrayElement,
+            NodeRole::PlistValue,
+            NodeRole::PlistSyntaxPiece,
+        ] {
+            assert_ne!(role, NodeRole::Value);
+            assert_ne!(role, NodeRole::SyntaxNode);
+            assert_ne!(role, NodeRole::Token);
+            assert_ne!(role, NodeRole::XmlSyntaxPiece);
+            assert_ne!(role, NodeRole::BinaryRegion);
+        }
+    }
+
+    #[test]
+    fn hcl_roles_issue_and_report_stable_identities() {
+        let authority = DocumentAuthority::fresh();
+        for role in [
+            NodeRole::HclDocument,
+            NodeRole::HclBody,
+            NodeRole::HclAttribute,
+            NodeRole::HclBlock,
+            NodeRole::HclBlockLabel,
+            NodeRole::HclExpression,
+            NodeRole::HclTemplatePart,
+            NodeRole::HclErrorRegion,
+            NodeRole::HclSyntaxPiece,
+        ] {
+            let node = authority.node_ref(0, role);
+            assert_eq!(node.role(), role);
+            assert_eq!(node.snapshot(), authority.identity());
+            assert_eq!(node.index(), 0);
+            assert_eq!(authority.resolve_index(node), Ok(0));
+        }
+        // The HCL roles are distinct from the generic, XML, and plist roles
+        // they parallel, so a handle can never be mistaken for another domain.
+        for role in [
+            NodeRole::HclDocument,
+            NodeRole::HclBody,
+            NodeRole::HclAttribute,
+            NodeRole::HclBlock,
+            NodeRole::HclBlockLabel,
+            NodeRole::HclExpression,
+            NodeRole::HclTemplatePart,
+            NodeRole::HclErrorRegion,
+            NodeRole::HclSyntaxPiece,
+        ] {
+            assert_ne!(role, NodeRole::Value);
+            assert_ne!(role, NodeRole::SyntaxNode);
+            assert_ne!(role, NodeRole::Token);
+            assert_ne!(role, NodeRole::XmlSyntaxPiece);
+            assert_ne!(role, NodeRole::PlistValue);
+            assert_ne!(role, NodeRole::BinaryRegion);
+        }
     }
 
     #[test]

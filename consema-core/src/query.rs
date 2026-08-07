@@ -74,6 +74,12 @@ impl QueryDomain {
         Self::new("java-properties.native-semantic-query", 1)
     }
 
+    /// `xml.native-semantic-query@1`.
+    #[must_use]
+    pub fn xml_native_v1() -> Self {
+        Self::new("xml.native-semantic-query", 1)
+    }
+
     /// `json.lossless-syntax-query@1`.
     #[must_use]
     pub fn json_lossless_syntax_v1() -> Self {
@@ -108,6 +114,42 @@ impl QueryDomain {
     #[must_use]
     pub fn java_properties_lossless_syntax_v1() -> Self {
         Self::new("java-properties.lossless-syntax-query", 1)
+    }
+
+    /// `xml.lossless-syntax-query@1`.
+    #[must_use]
+    pub fn xml_lossless_syntax_v1() -> Self {
+        Self::new("xml.lossless-syntax-query", 1)
+    }
+
+    /// `plist.native-semantic-query@1` (RFC 0013 §8.1).
+    #[must_use]
+    pub fn plist_native_v1() -> Self {
+        Self::new("plist.native-semantic-query", 1)
+    }
+
+    /// `plist.lossless-syntax-query@1` (RFC 0013 §8.2).
+    #[must_use]
+    pub fn plist_lossless_syntax_v1() -> Self {
+        Self::new("plist.lossless-syntax-query", 1)
+    }
+
+    /// `plist.binary-structure-query@1` (RFC 0013 §8.3).
+    #[must_use]
+    pub fn plist_binary_structure_v1() -> Self {
+        Self::new("plist.binary-structure-query", 1)
+    }
+
+    /// `hcl.native-semantic-query@1` (RFC 0014 §7.1).
+    #[must_use]
+    pub fn hcl_native_v1() -> Self {
+        Self::new("hcl.native-semantic-query", 1)
+    }
+
+    /// `hcl.lossless-syntax-query@1` (RFC 0014 §7.2).
+    #[must_use]
+    pub fn hcl_lossless_syntax_v1() -> Self {
+        Self::new("hcl.lossless-syntax-query", 1)
     }
 
     /// Domain namespace.
@@ -202,6 +244,75 @@ pub enum MatchRole {
     GraphSequenceElement,
     /// PortableGraph mapping association.
     GraphMappingEntry,
+    /// Complete XML document.
+    XmlDocument,
+    /// XML declaration.
+    XmlDeclaration,
+    /// XML DOCTYPE occurrence.
+    XmlDoctype,
+    /// XML prolog or epilog occurrence.
+    XmlPrologItem,
+    /// XML element occurrence.
+    XmlElement,
+    /// One XML content child occurrence.
+    XmlContentItem,
+    /// XML attribute association.
+    XmlAttribute,
+    /// XML namespace binding association.
+    XmlNamespaceBinding,
+    /// XML text occurrence.
+    XmlText,
+    /// XML CDATA occurrence.
+    XmlCdata,
+    /// XML comment occurrence.
+    XmlComment,
+    /// XML processing instruction.
+    XmlProcessingInstruction,
+    /// XML reference occurrence.
+    XmlReference,
+    /// One recovered XML error region.
+    XmlErrorRegion,
+    /// XML lossless syntax piece.
+    XmlSyntaxPiece,
+    /// Complete plist document and native value matches (RFC 0013 §8.1).
+    PlistValue,
+    /// One plist dictionary key/value association.
+    PlistDictEntry,
+    /// One plist string key identity.
+    PlistKey,
+    /// One plist array element association.
+    PlistArrayElement,
+    /// One plist XML lossless syntax piece.
+    PlistSyntaxPiece,
+    /// Complete plist binary structure (binary-structure-domain root,
+    /// RFC 0013 §8.3).
+    PlistBinaryStructure,
+    /// One plist binary object-table or top-object fact.
+    PlistBinaryObject,
+    /// One plist binary offset-table fact.
+    PlistBinaryOffset,
+    /// One plist binary object-reference fact.
+    PlistBinaryRef,
+    /// One plist binary trailer fact.
+    PlistBinaryTrailer,
+    /// One HCL body; the domain root input of `hcl.native-semantic-query@1`
+    /// is the root body (RFC 0014 §7.1).
+    HclBody,
+    /// One HCL attribute occurrence (RFC 0014 §7.1).
+    HclAttribute,
+    /// One HCL block occurrence (RFC 0014 §7.1).
+    HclBlock,
+    /// One HCL block label with its quote/naked fact (RFC 0014 §7.1).
+    HclBlockLabel,
+    /// One HCL expression AST node (RFC 0014 §7.1).
+    HclExpression,
+    /// One ordered HCL template part (RFC 0014 §7.1).
+    HclTemplatePart,
+    /// One recovered HCL error region (RFC 0014 §3, §7).
+    HclErrorRegion,
+    /// One HCL lossless syntax piece, parallel to the format-owned
+    /// `HclSyntaxKind` (RFC 0014 §7.2).
+    HclSyntaxPiece,
 }
 
 /// One versioned operator call with deterministic arguments.
@@ -396,11 +507,18 @@ impl QueryDefinition {
             ("yaml.native-semantic-query", 1) => MatchRole::YamlStream,
             ("ini.native-semantic-query", 1) => MatchRole::IniDocument,
             ("java-properties.native-semantic-query", 1) => MatchRole::PropertiesDocument,
+            ("xml.native-semantic-query", 1) => MatchRole::XmlDocument,
             ("json.lossless-syntax-query", 1 | 2) => MatchRole::JsonSyntaxPiece,
             ("toml.lossless-syntax-query", 1) => MatchRole::TomlSyntaxPiece,
             ("yaml.lossless-syntax-query", 1) => MatchRole::YamlSyntaxPiece,
             ("ini.lossless-syntax-query", 1) => MatchRole::IniSyntaxPiece,
             ("java-properties.lossless-syntax-query", 1) => MatchRole::PropertiesSyntaxPiece,
+            ("xml.lossless-syntax-query", 1) => MatchRole::XmlSyntaxPiece,
+            ("plist.native-semantic-query", 1) => MatchRole::PlistValue,
+            ("plist.lossless-syntax-query", 1) => MatchRole::PlistSyntaxPiece,
+            ("plist.binary-structure-query", 1) => MatchRole::PlistBinaryStructure,
+            ("hcl.native-semantic-query", 1) => MatchRole::HclBody,
+            ("hcl.lossless-syntax-query", 1) => MatchRole::HclSyntaxPiece,
             _ => return Err(QueryFailure::DomainMismatch(self.domain.clone())),
         };
         let output_role = validate_expression(&self.domain, &self.expression, input_role)?;
@@ -1077,6 +1195,404 @@ fn validate_operator(
                 "core.portable-graph-query",
                 "graph.mapping-entry-key" | "graph.mapping-entry-value",
             ) => (MatchRole::GraphMappingEntry, MatchRole::GraphNode, &[]),
+            ("xml.native-semantic-query", "xml.document-root") => {
+                (MatchRole::XmlDocument, MatchRole::XmlElement, &[])
+            }
+            ("xml.native-semantic-query", "xml.document-declaration") => {
+                (MatchRole::XmlDocument, MatchRole::XmlDeclaration, &[])
+            }
+            ("xml.native-semantic-query", "xml.document-doctype") => {
+                (MatchRole::XmlDocument, MatchRole::XmlDoctype, &[])
+            }
+            ("xml.native-semantic-query", "xml.document-prolog" | "xml.document-epilog") => {
+                (MatchRole::XmlDocument, MatchRole::XmlPrologItem, &[])
+            }
+            ("xml.native-semantic-query", "xml.element-children") => {
+                (MatchRole::XmlElement, MatchRole::XmlContentItem, &[])
+            }
+            (
+                "xml.native-semantic-query",
+                "xml.element-child-elements" | "xml.element-descendants",
+            ) => (MatchRole::XmlElement, MatchRole::XmlElement, &[]),
+            ("xml.native-semantic-query", "xml.element-child-text") => {
+                (MatchRole::XmlElement, MatchRole::XmlText, &[])
+            }
+            ("xml.native-semantic-query", "xml.element-child-cdata") => {
+                (MatchRole::XmlElement, MatchRole::XmlCdata, &[])
+            }
+            ("xml.native-semantic-query", "xml.element-child-comments") => {
+                (MatchRole::XmlElement, MatchRole::XmlComment, &[])
+            }
+            ("xml.native-semantic-query", "xml.element-child-pi") => (
+                MatchRole::XmlElement,
+                MatchRole::XmlProcessingInstruction,
+                &[],
+            ),
+            ("xml.native-semantic-query", "xml.element-attributes") => {
+                (MatchRole::XmlElement, MatchRole::XmlAttribute, &[])
+            }
+            (
+                "xml.native-semantic-query",
+                "xml.element-namespace-bindings" | "xml.element-in-scope-namespaces",
+            ) => (MatchRole::XmlElement, MatchRole::XmlNamespaceBinding, &[]),
+            (
+                "xml.native-semantic-query",
+                "xml.content-parent" | "xml.attribute-element" | "xml.reference-text",
+            ) => {
+                if !matches!(
+                    input,
+                    MatchRole::XmlContentItem
+                        | MatchRole::XmlAttribute
+                        | MatchRole::XmlNamespaceBinding
+                        | MatchRole::XmlReference
+                        | MatchRole::XmlElement
+                        | MatchRole::XmlText
+                        | MatchRole::XmlCdata
+                        | MatchRole::XmlComment
+                        | MatchRole::XmlProcessingInstruction
+                ) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::XmlContentItem,
+                        actual: input,
+                    });
+                }
+                (input, MatchRole::XmlElement, &[])
+            }
+            ("xml.native-semantic-query", "xml.text-references") => {
+                (MatchRole::XmlText, MatchRole::XmlReference, &[])
+            }
+            ("xml.native-semantic-query", "xml.name-equals") => (
+                input,
+                input,
+                &[
+                    ("prefix", PortableValueKind::String),
+                    ("local", PortableValueKind::String),
+                    ("namespace", PortableValueKind::String),
+                    ("comparison", PortableValueKind::String),
+                ],
+            ),
+            ("xml.native-semantic-query", "xml.attribute-value-equals") => (
+                MatchRole::XmlAttribute,
+                MatchRole::XmlAttribute,
+                &[("value", PortableValueKind::String)],
+            ),
+            ("xml.native-semantic-query", "xml.pi-target-equals") => (
+                MatchRole::XmlProcessingInstruction,
+                MatchRole::XmlProcessingInstruction,
+                &[("target", PortableValueKind::String)],
+            ),
+            ("xml.native-semantic-query", "xml.reference-kind-is") => (
+                MatchRole::XmlReference,
+                MatchRole::XmlReference,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("xml.native-semantic-query", "xml.reference-name-equals") => (
+                MatchRole::XmlReference,
+                MatchRole::XmlReference,
+                &[("name", PortableValueKind::String)],
+            ),
+            ("xml.native-semantic-query", "xml.node-kind-is") => (input, input, {
+                let xml_roles = [
+                    MatchRole::XmlDocument,
+                    MatchRole::XmlDeclaration,
+                    MatchRole::XmlDoctype,
+                    MatchRole::XmlPrologItem,
+                    MatchRole::XmlElement,
+                    MatchRole::XmlContentItem,
+                    MatchRole::XmlAttribute,
+                    MatchRole::XmlNamespaceBinding,
+                    MatchRole::XmlText,
+                    MatchRole::XmlCdata,
+                    MatchRole::XmlComment,
+                    MatchRole::XmlProcessingInstruction,
+                    MatchRole::XmlReference,
+                    MatchRole::XmlErrorRegion,
+                ];
+                if !xml_roles.contains(&input) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::XmlDocument,
+                        actual: input,
+                    });
+                }
+                &[("kind", PortableValueKind::String)]
+            }),
+            ("xml.lossless-syntax-query", "xml.syntax-kind-is") => (
+                MatchRole::XmlSyntaxPiece,
+                MatchRole::XmlSyntaxPiece,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("xml.lossless-syntax-query", "xml.syntax-text-equals") => (
+                MatchRole::XmlSyntaxPiece,
+                MatchRole::XmlSyntaxPiece,
+                &[("text", PortableValueKind::String)],
+            ),
+            ("plist.native-semantic-query", "plist.document-root") => {
+                (MatchRole::PlistValue, MatchRole::PlistValue, &[])
+            }
+            ("plist.native-semantic-query", "plist.dict-entries") => {
+                (MatchRole::PlistValue, MatchRole::PlistDictEntry, &[])
+            }
+            ("plist.native-semantic-query", "plist.dict-entry-key") => {
+                (MatchRole::PlistDictEntry, MatchRole::PlistKey, &[])
+            }
+            ("plist.native-semantic-query", "plist.dict-entry-value") => {
+                (MatchRole::PlistDictEntry, MatchRole::PlistValue, &[])
+            }
+            ("plist.native-semantic-query", "plist.dict-key-equals") => (
+                MatchRole::PlistDictEntry,
+                MatchRole::PlistDictEntry,
+                &[("key", PortableValueKind::String)],
+            ),
+            ("plist.native-semantic-query", "plist.duplicate-key-group") => {
+                (MatchRole::PlistDictEntry, MatchRole::PlistDictEntry, &[])
+            }
+            ("plist.native-semantic-query", "plist.array-elements") => {
+                (MatchRole::PlistValue, MatchRole::PlistArrayElement, &[])
+            }
+            // The value operators accept every value-bearing match: plain
+            // values and array elements (the RFC 0013 §8.1 list has no
+            // array-element-value operator, so element matches flow
+            // directly into the value operators).
+            ("plist.native-semantic-query", "plist.value-type-is") => {
+                if !matches!(input, MatchRole::PlistValue | MatchRole::PlistArrayElement) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::PlistValue,
+                        actual: input,
+                    });
+                }
+                (input, input, &[("kind", PortableValueKind::String)])
+            }
+            (
+                "plist.native-semantic-query",
+                "plist.value-as-integer"
+                | "plist.value-as-real"
+                | "plist.value-as-string"
+                | "plist.value-as-data"
+                | "plist.value-as-date"
+                | "plist.value-as-uid",
+            ) => {
+                if !matches!(input, MatchRole::PlistValue | MatchRole::PlistArrayElement) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::PlistValue,
+                        actual: input,
+                    });
+                }
+                (input, input, &[])
+            }
+            ("plist.native-semantic-query", "plist.value-as-boolean-is") => {
+                if !matches!(input, MatchRole::PlistValue | MatchRole::PlistArrayElement) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::PlistValue,
+                        actual: input,
+                    });
+                }
+                (input, input, &[("value", PortableValueKind::Boolean)])
+            }
+            ("plist.lossless-syntax-query", "plist.syntax-kind-is") => (
+                MatchRole::PlistSyntaxPiece,
+                MatchRole::PlistSyntaxPiece,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("plist.lossless-syntax-query", "plist.syntax-text-equals") => (
+                MatchRole::PlistSyntaxPiece,
+                MatchRole::PlistSyntaxPiece,
+                &[("text", PortableValueKind::String)],
+            ),
+            (
+                "plist.binary-structure-query",
+                "plist.object-table"
+                | "plist.object-offset"
+                | "plist.object-refs"
+                | "plist.offset-table"
+                | "plist.trailer-facts"
+                | "plist.top-object",
+            ) => {
+                if !matches!(
+                    input,
+                    MatchRole::PlistBinaryStructure
+                        | MatchRole::PlistBinaryObject
+                        | MatchRole::PlistBinaryOffset
+                        | MatchRole::PlistBinaryRef
+                        | MatchRole::PlistBinaryTrailer
+                ) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::PlistBinaryStructure,
+                        actual: input,
+                    });
+                }
+                // The structure facts are document-level; every operator
+                // accepts any binary-structure match as input so that chains
+                // of structure operators validate (RFC 0013 §8.3).
+                let output = if matches!(operator.id(), "plist.object-table" | "plist.top-object") {
+                    MatchRole::PlistBinaryObject
+                } else if matches!(operator.id(), "plist.object-offset" | "plist.offset-table") {
+                    MatchRole::PlistBinaryOffset
+                } else if operator.id() == "plist.object-refs" {
+                    MatchRole::PlistBinaryRef
+                } else {
+                    MatchRole::PlistBinaryTrailer
+                };
+                (input, output, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.document-body") => {
+                (MatchRole::HclBody, MatchRole::HclBody, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.body-items") => {
+                // The body-item union: the output matches are attributes and
+                // blocks; the canonical attribute role types the union so the
+                // attribute/block operators below accept the chain.
+                (MatchRole::HclBody, MatchRole::HclAttribute, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.body-attributes") => {
+                (MatchRole::HclBody, MatchRole::HclAttribute, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.body-blocks") => {
+                (MatchRole::HclBody, MatchRole::HclBlock, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.body-block-type-equals") => (
+                MatchRole::HclBody,
+                MatchRole::HclBlock,
+                &[("type", PortableValueKind::String)],
+            ),
+            // The attribute and block operators accept the attribute/block
+            // union so that chains from `hcl.body-items@1` validate; each
+            // operator acts on its own matches only (the plist value-operator
+            // union pattern, RFC 0014 §7.1).
+            ("hcl.native-semantic-query", "hcl.attribute-name" | "hcl.attribute-name-equals") => {
+                if !matches!(input, MatchRole::HclAttribute | MatchRole::HclBlock) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::HclAttribute,
+                        actual: input,
+                    });
+                }
+                (
+                    input,
+                    input,
+                    if operator.id() == "hcl.attribute-name-equals" {
+                        &[("name", PortableValueKind::String)]
+                    } else {
+                        &[]
+                    },
+                )
+            }
+            ("hcl.native-semantic-query", "hcl.attribute-expression") => {
+                if !matches!(input, MatchRole::HclAttribute | MatchRole::HclBlock) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::HclAttribute,
+                        actual: input,
+                    });
+                }
+                (input, MatchRole::HclExpression, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.attribute-literal-value") => {
+                // The typed literal accessor family accepts the expression
+                // directly or the owning attribute (RFC 0014 §7.1).
+                if !matches!(input, MatchRole::HclExpression | MatchRole::HclAttribute) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::HclExpression,
+                        actual: input,
+                    });
+                }
+                (input, input, &[("accessor", PortableValueKind::String)])
+            }
+            ("hcl.native-semantic-query", "hcl.block-type" | "hcl.block-type-equals") => {
+                if !matches!(input, MatchRole::HclAttribute | MatchRole::HclBlock) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::HclBlock,
+                        actual: input,
+                    });
+                }
+                (
+                    input,
+                    input,
+                    if operator.id() == "hcl.block-type-equals" {
+                        &[("type", PortableValueKind::String)]
+                    } else {
+                        &[]
+                    },
+                )
+            }
+            ("hcl.native-semantic-query", "hcl.block-labels") => {
+                if !matches!(input, MatchRole::HclAttribute | MatchRole::HclBlock) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::HclBlock,
+                        actual: input,
+                    });
+                }
+                (input, MatchRole::HclBlockLabel, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.block-nested-body") => {
+                if !matches!(input, MatchRole::HclAttribute | MatchRole::HclBlock) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::HclBlock,
+                        actual: input,
+                    });
+                }
+                (input, MatchRole::HclBody, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.block-label-equals") => (
+                MatchRole::HclBlockLabel,
+                MatchRole::HclBlockLabel,
+                &[("label", PortableValueKind::String)],
+            ),
+            ("hcl.native-semantic-query", "hcl.expression-kind-is") => (
+                MatchRole::HclExpression,
+                MatchRole::HclExpression,
+                &[("kind", PortableValueKind::String)],
+            ),
+            (
+                "hcl.native-semantic-query",
+                "hcl.expression-is-literal" | "hcl.expression-text" | "hcl.expression-children",
+            ) => (MatchRole::HclExpression, MatchRole::HclExpression, &[]),
+            ("hcl.native-semantic-query", "hcl.template-parts") => {
+                (MatchRole::HclExpression, MatchRole::HclTemplatePart, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.tuple-elements" | "hcl.object-entries") => {
+                (MatchRole::HclExpression, MatchRole::HclExpression, &[])
+            }
+            ("hcl.native-semantic-query", "hcl.error-regions") => {
+                // The error regions are document-level facts (RFC 0014 §3):
+                // every operator projects them once from any native match.
+                if !matches!(
+                    input,
+                    MatchRole::HclBody
+                        | MatchRole::HclAttribute
+                        | MatchRole::HclBlock
+                        | MatchRole::HclBlockLabel
+                        | MatchRole::HclExpression
+                        | MatchRole::HclTemplatePart
+                        | MatchRole::HclErrorRegion
+                ) {
+                    return Err(QueryFailure::InvalidOperatorComposition {
+                        operator: operator.id.clone(),
+                        expected: MatchRole::HclBody,
+                        actual: input,
+                    });
+                }
+                (input, MatchRole::HclErrorRegion, &[])
+            }
+            ("hcl.lossless-syntax-query", "hcl.syntax-kind-is") => (
+                MatchRole::HclSyntaxPiece,
+                MatchRole::HclSyntaxPiece,
+                &[("kind", PortableValueKind::String)],
+            ),
+            ("hcl.lossless-syntax-query", "hcl.syntax-text-equals") => (
+                MatchRole::HclSyntaxPiece,
+                MatchRole::HclSyntaxPiece,
+                &[("text", PortableValueKind::String)],
+            ),
             (_, "core.take" | "core.distinct-by-identity") => (
                 input,
                 input,
@@ -1192,6 +1708,78 @@ fn validate_operator(
         return Err(QueryFailure::InvalidArgument {
             operator: operator.id.clone(),
             argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "xml.syntax-kind-is"
+        && !is_xml_syntax_kind(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "plist.value-type-is"
+        && !is_plist_value_kind(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "plist.syntax-kind-is"
+        && !is_plist_syntax_kind(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "hcl.expression-kind-is"
+        && !is_hcl_expression_kind(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "hcl.syntax-kind-is"
+        && !is_hcl_syntax_kind(
+            operator.arguments()["kind"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "kind".to_owned(),
+        });
+    }
+    if operator.id() == "hcl.attribute-literal-value"
+        && !is_hcl_literal_accessor(
+            operator.arguments()["accessor"]
+                .as_string()
+                .expect("validated string"),
+        )
+    {
+        return Err(QueryFailure::InvalidArgument {
+            operator: operator.id.clone(),
+            argument: "accessor".to_owned(),
         });
     }
     if matches!(
@@ -1415,6 +2003,184 @@ fn is_properties_syntax_kind(kind: &str) -> bool {
             | "EscapeBody"
             | "ContinuationMarker"
             | "ErrorRegion"
+    )
+}
+
+/// Accepts the frozen `xml.lossless-syntax-query@1` kind names (RFC 0012 §7).
+fn is_xml_syntax_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "bom"
+            | "whitespace"
+            | "line-break"
+            | "declaration-open"
+            | "declaration-name"
+            | "declaration-value"
+            | "declaration-close"
+            | "doctype-open"
+            | "doctype-name"
+            | "dtd-markup"
+            | "doctype-close"
+            | "tag-open"
+            | "tag-close"
+            | "empty-element-close"
+            | "end-tag-open"
+            | "prefix"
+            | "local-name"
+            | "colon"
+            | "attribute-name"
+            | "equals"
+            | "quote"
+            | "attribute-value"
+            | "namespace-declaration"
+            | "text"
+            | "entity-reference"
+            | "character-reference"
+            | "cdata-open"
+            | "cdata-text"
+            | "cdata-close"
+            | "comment-open"
+            | "comment-text"
+            | "comment-close"
+            | "processing-instruction-open"
+            | "processing-instruction-target"
+            | "processing-instruction-content"
+            | "processing-instruction-close"
+            | "error-region"
+    )
+}
+
+/// Accepts the frozen `plist.native-semantic-query@1` value-kind names
+/// (RFC 0013 §6): the closed nine-kind plist vocabulary.
+fn is_plist_value_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "dict" | "array" | "string" | "integer" | "real" | "boolean" | "date" | "data" | "uid"
+    )
+}
+
+/// Accepts the frozen `plist.lossless-syntax-query@1` kind names (RFC 0013
+/// §8.2), parallel to the `PlistSyntaxKind` protocol names.
+fn is_plist_syntax_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "bom"
+            | "whitespace"
+            | "line-break"
+            | "declaration-open"
+            | "declaration-name"
+            | "declaration-value"
+            | "declaration-close"
+            | "doctype-open"
+            | "doctype-body"
+            | "doctype-close"
+            | "plist-open"
+            | "plist-version-name"
+            | "plist-version-value"
+            | "plist-close"
+            | "dict-open"
+            | "dict-close"
+            | "key-open"
+            | "key-close"
+            | "array-open"
+            | "array-close"
+            | "string-open"
+            | "string-close"
+            | "integer-open"
+            | "integer-close"
+            | "real-open"
+            | "real-close"
+            | "date-open"
+            | "date-close"
+            | "data-open"
+            | "data-close"
+            | "true"
+            | "false"
+            | "text"
+            | "entity-reference"
+            | "character-reference"
+            | "cdata-open"
+            | "cdata-text"
+            | "cdata-close"
+            | "comment-open"
+            | "comment-text"
+            | "comment-close"
+            | "processing-instruction-open"
+            | "processing-instruction-target"
+            | "processing-instruction-content"
+            | "processing-instruction-close"
+            | "error-region"
+    )
+}
+
+/// Accepts the frozen `hcl.native-semantic-query@1` expression-kind names
+/// (RFC 0014 §7.1), parallel to the `HclExpressionKindName` protocol names.
+fn is_hcl_expression_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "number"
+            | "boolean"
+            | "null"
+            | "template"
+            | "function-call"
+            | "variable-ref"
+            | "traversal"
+            | "unary"
+            | "binary"
+            | "conditional"
+            | "for-tuple"
+            | "for-object"
+            | "tuple"
+            | "object"
+            | "parenthesized"
+    )
+}
+
+/// Accepts the frozen `hcl.lossless-syntax-query@1` kind names (RFC 0014
+/// §7.2), parallel to the `HclSyntaxKind` protocol names. There is no `Bom`
+/// kind: a BOM is excluded at formation (RFC 0014 §2).
+fn is_hcl_syntax_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Whitespace"
+            | "LineBreak"
+            | "LineComment"
+            | "InlineComment"
+            | "Identifier"
+            | "Equals"
+            | "Number"
+            | "StringOpen"
+            | "StringContent"
+            | "StringClose"
+            | "InterpolationOpen"
+            | "InterpolationContent"
+            | "InterpolationClose"
+            | "DirectiveOpen"
+            | "DirectiveContent"
+            | "DirectiveClose"
+            | "HeredocOpen"
+            | "HeredocContent"
+            | "HeredocClose"
+            | "BraceOpen"
+            | "BraceClose"
+            | "BracketOpen"
+            | "BracketClose"
+            | "ParenOpen"
+            | "ParenClose"
+            | "Comma"
+            | "Colon"
+            | "QuestionMark"
+            | "Operator"
+            | "ErrorRegion"
+    )
+}
+
+/// Accepts the frozen `hcl.attribute-literal-value@1` accessor names (RFC
+/// 0014 §7.1).
+fn is_hcl_literal_accessor(accessor: &str) -> bool {
+    matches!(
+        accessor,
+        "as-string" | "as-integer" | "as-real" | "as-boolean-is" | "as-null-is"
     )
 }
 
@@ -2660,6 +3426,23 @@ mod tests {
     }
 
     #[test]
+    fn xml_content_parent_rejects_document_input_role() {
+        let definition = QueryDefinition::new(QueryDomain::xml_native_v1()).with_expression(
+            QueryExpression::Input.then(OperatorCall::new("xml.content-parent", 1)),
+        );
+        assert!(matches!(
+            definition.validate(),
+            Err(QueryFailure::InvalidOperatorComposition {
+                operator,
+                expected,
+                actual,
+            }) if operator == "xml.content-parent"
+                && expected == MatchRole::XmlContentItem
+                && actual == MatchRole::XmlDocument
+        ));
+    }
+
+    #[test]
     fn duplicate_value_results_keep_object_order() {
         let mut object = ObjectBuilder::new();
         object
@@ -2762,6 +3545,25 @@ mod tests {
             )
             .validate()
             .unwrap();
+
+        assert!(matches!(
+            QueryDefinition::new(QueryDomain::xml_lossless_syntax_v1()).with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("xml.syntax-kind-is", 1)
+                        .with_argument("kind", PortableValue::string("NotAnXmlKind")),
+                ),
+            ).validate(),
+            Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "kind"
+        ));
+        QueryDefinition::new(QueryDomain::xml_lossless_syntax_v1())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("xml.syntax-kind-is", 1)
+                        .with_argument("kind", PortableValue::string("tag-open")),
+                ),
+            )
+            .validate()
+            .unwrap();
     }
 
     #[test]
@@ -2779,6 +3581,11 @@ mod tests {
             (
                 QueryDomain::java_properties_lossless_syntax_v1(),
                 MatchRole::PropertiesSyntaxPiece,
+            ),
+            (QueryDomain::xml_native_v1(), MatchRole::XmlDocument),
+            (
+                QueryDomain::xml_lossless_syntax_v1(),
+                MatchRole::XmlSyntaxPiece,
             ),
         ];
         for (domain, role) in cases {
@@ -2812,5 +3619,359 @@ mod tests {
             assert_eq!(cursor.next(), None);
             assert_eq!(cursor.terminal_state(), Some(terminal));
         }
+    }
+
+    #[test]
+    fn plist_domains_have_distinct_root_roles() {
+        let cases = [
+            (QueryDomain::plist_native_v1(), MatchRole::PlistValue),
+            (
+                QueryDomain::plist_lossless_syntax_v1(),
+                MatchRole::PlistSyntaxPiece,
+            ),
+            (
+                QueryDomain::plist_binary_structure_v1(),
+                MatchRole::PlistBinaryStructure,
+            ),
+        ];
+        for (domain, role) in cases {
+            assert_eq!(
+                QueryDefinition::new(domain)
+                    .validate()
+                    .expect("plist domain validates")
+                    .output_role(),
+                role
+            );
+        }
+    }
+
+    #[test]
+    fn plist_native_operator_roles_compose_and_reject() {
+        let chain = QueryDefinition::new(QueryDomain::plist_native_v1()).with_expression(
+            QueryExpression::Input
+                .then(OperatorCall::new("plist.document-root", 1))
+                .then(OperatorCall::new("plist.dict-entries", 1))
+                .then(
+                    OperatorCall::new("plist.dict-key-equals", 1)
+                        .with_argument("key", crate::PortableValue::string("count")),
+                )
+                .then(OperatorCall::new("plist.dict-entry-value", 1))
+                .then(
+                    OperatorCall::new("plist.value-type-is", 1)
+                        .with_argument("kind", crate::PortableValue::string("integer")),
+                )
+                .then(OperatorCall::new("plist.value-as-integer", 1)),
+        );
+        chain.validate().expect("native operator chain validates");
+
+        let entry_chain = QueryDefinition::new(QueryDomain::plist_native_v1()).with_expression(
+            QueryExpression::Input
+                .then(OperatorCall::new("plist.document-root", 1))
+                .then(OperatorCall::new("plist.dict-entries", 1))
+                .then(OperatorCall::new("plist.duplicate-key-group", 1))
+                .then(OperatorCall::new("plist.dict-entry-key", 1)),
+        );
+        entry_chain.validate().expect("entry chain validates");
+
+        let mismatched = QueryDefinition::new(QueryDomain::plist_native_v1()).with_expression(
+            QueryExpression::Input.then(
+                OperatorCall::new("plist.dict-key-equals", 1)
+                    .with_argument("key", crate::PortableValue::string("k")),
+            ),
+        );
+        assert!(matches!(
+            mismatched.validate(),
+            Err(QueryFailure::InvalidOperatorComposition { .. })
+        ));
+
+        // Element matches flow directly into the value operators (RFC 0013
+        // §8.1 has no array-element-value operator).
+        QueryDefinition::new(QueryDomain::plist_native_v1())
+            .with_expression(
+                QueryExpression::Input
+                    .then(OperatorCall::new("plist.document-root", 1))
+                    .then(OperatorCall::new("plist.array-elements", 1))
+                    .then(OperatorCall::new("plist.value-as-integer", 1)),
+            )
+            .validate()
+            .expect("array elements are value-bearing");
+
+        let entry_mismatch = QueryDefinition::new(QueryDomain::plist_native_v1()).with_expression(
+            QueryExpression::Input
+                .then(OperatorCall::new("plist.document-root", 1))
+                .then(OperatorCall::new("plist.dict-entries", 1))
+                .then(OperatorCall::new("plist.value-as-integer", 1)),
+        );
+        assert!(matches!(
+            entry_mismatch.validate(),
+            Err(QueryFailure::InvalidOperatorComposition { .. })
+        ));
+    }
+
+    #[test]
+    fn plist_operator_arguments_are_validated_before_binding() {
+        let bad_value_kind = QueryDefinition::new(QueryDomain::plist_native_v1()).with_expression(
+            QueryExpression::Input.then(
+                OperatorCall::new("plist.value-type-is", 1)
+                    .with_argument("kind", crate::PortableValue::string("int")),
+            ),
+        );
+        assert!(matches!(
+            bad_value_kind.validate(),
+            Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "kind"
+        ));
+        QueryDefinition::new(QueryDomain::plist_native_v1())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("plist.value-type-is", 1)
+                        .with_argument("kind", crate::PortableValue::string("uid")),
+                ),
+            )
+            .validate()
+            .expect("closed kind name validates");
+
+        let bad_syntax_kind = QueryDefinition::new(QueryDomain::plist_lossless_syntax_v1())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("plist.syntax-kind-is", 1)
+                        .with_argument("kind", crate::PortableValue::string("NotAPlistKind")),
+                ),
+            );
+        assert!(matches!(
+            bad_syntax_kind.validate(),
+            Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "kind"
+        ));
+        QueryDefinition::new(QueryDomain::plist_lossless_syntax_v1())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("plist.syntax-kind-is", 1)
+                        .with_argument("kind", crate::PortableValue::string("plist-open")),
+                ),
+            )
+            .validate()
+            .expect("frozen kind name validates");
+    }
+
+    #[test]
+    fn plist_binary_structure_operators_accept_any_structure_input() {
+        let from_root = QueryDefinition::new(QueryDomain::plist_binary_structure_v1())
+            .with_expression(
+                QueryExpression::Input.then(OperatorCall::new("plist.object-table", 1)),
+            );
+        assert_eq!(
+            from_root.validate().expect("validates").output_role(),
+            MatchRole::PlistBinaryObject
+        );
+        let chained = QueryDefinition::new(QueryDomain::plist_binary_structure_v1())
+            .with_expression(
+                QueryExpression::Input
+                    .then(OperatorCall::new("plist.object-table", 1))
+                    .then(OperatorCall::new("plist.offset-table", 1))
+                    .then(OperatorCall::new("plist.trailer-facts", 1))
+                    .then(OperatorCall::new("plist.top-object", 1)),
+            );
+        assert_eq!(
+            chained.validate().expect("chain validates").output_role(),
+            MatchRole::PlistBinaryObject
+        );
+        let foreign = QueryDefinition::new(QueryDomain::plist_binary_structure_v1())
+            .with_expression(
+                QueryExpression::Input
+                    .then(OperatorCall::new("plist.object-table", 1))
+                    .then(
+                        OperatorCall::new("plist.syntax-kind-is", 1)
+                            .with_argument("kind", crate::PortableValue::string("text")),
+                    ),
+            );
+        assert!(matches!(
+            foreign.validate(),
+            Err(QueryFailure::UnknownOperator { .. })
+        ));
+    }
+
+    #[test]
+    fn hcl_domain_constructors_are_stable() {
+        assert_eq!(
+            QueryDomain::hcl_native_v1(),
+            QueryDomain::new("hcl.native-semantic-query", 1)
+        );
+        assert_eq!(
+            QueryDomain::hcl_lossless_syntax_v1(),
+            QueryDomain::new("hcl.lossless-syntax-query", 1)
+        );
+        assert_ne!(
+            QueryDomain::hcl_native_v1(),
+            QueryDomain::hcl_lossless_syntax_v1()
+        );
+        assert_eq!(
+            QueryDomain::hcl_native_v1().id(),
+            "hcl.native-semantic-query"
+        );
+        assert_eq!(QueryDomain::hcl_native_v1().version(), 1);
+    }
+
+    #[test]
+    fn hcl_native_chain_validates_and_reports_the_output_role() {
+        let chain = QueryDefinition::new(QueryDomain::hcl_native_v1()).with_expression(
+            QueryExpression::Input
+                .then(OperatorCall::new("hcl.document-body", 1))
+                .then(OperatorCall::new("hcl.body-attributes", 1))
+                .then(
+                    OperatorCall::new("hcl.attribute-name-equals", 1)
+                        .with_argument("name", crate::PortableValue::string("count")),
+                )
+                .then(OperatorCall::new("hcl.attribute-expression", 1))
+                .then(OperatorCall::new("hcl.expression-is-literal", 1))
+                .then(
+                    OperatorCall::new("hcl.expression-kind-is", 1)
+                        .with_argument("kind", crate::PortableValue::string("number")),
+                )
+                .then(OperatorCall::new("hcl.expression-text", 1)),
+        );
+        assert_eq!(
+            chain.validate().expect("chain validates").output_role(),
+            MatchRole::HclExpression
+        );
+        // `hcl.body-items@1` chains into both attribute and block operators
+        // through the attribute/block union.
+        let items = QueryDefinition::new(QueryDomain::hcl_native_v1()).with_expression(
+            QueryExpression::Input
+                .then(OperatorCall::new("hcl.body-items", 1))
+                .then(
+                    OperatorCall::new("hcl.block-type-equals", 1)
+                        .with_argument("type", crate::PortableValue::string("server")),
+                )
+                .then(OperatorCall::new("hcl.block-labels", 1))
+                .then(
+                    OperatorCall::new("hcl.block-label-equals", 1)
+                        .with_argument("label", crate::PortableValue::string("web")),
+                ),
+        );
+        assert_eq!(
+            items
+                .validate()
+                .expect("items chain validates")
+                .output_role(),
+            MatchRole::HclBlockLabel
+        );
+        // The lossless domain validates its own kind and text filters.
+        let lossless = QueryDefinition::new(QueryDomain::hcl_lossless_syntax_v1()).with_expression(
+            QueryExpression::Input
+                .then(
+                    OperatorCall::new("hcl.syntax-kind-is", 1)
+                        .with_argument("kind", crate::PortableValue::string("LineComment")),
+                )
+                .then(
+                    OperatorCall::new("hcl.syntax-text-equals", 1)
+                        .with_argument("text", crate::PortableValue::string("# c")),
+                ),
+        );
+        assert_eq!(
+            lossless
+                .validate()
+                .expect("lossless chain validates")
+                .output_role(),
+            MatchRole::HclSyntaxPiece
+        );
+    }
+
+    #[test]
+    fn hcl_validation_rejects_foreign_operators_and_composition() {
+        // A foreign-domain operator is unknown to the HCL domains.
+        let foreign = QueryDefinition::new(QueryDomain::hcl_native_v1()).with_expression(
+            QueryExpression::Input.then(OperatorCall::new("plist.dict-entries", 1)),
+        );
+        assert!(matches!(
+            foreign.validate(),
+            Err(QueryFailure::UnknownOperator { .. })
+        ));
+        // An attribute operator directly on the domain root input (a body)
+        // is a composition error.
+        let composition = QueryDefinition::new(QueryDomain::hcl_native_v1()).with_expression(
+            QueryExpression::Input.then(
+                OperatorCall::new("hcl.attribute-name-equals", 1)
+                    .with_argument("name", crate::PortableValue::string("x")),
+            ),
+        );
+        assert!(matches!(
+            composition.validate(),
+            Err(QueryFailure::InvalidOperatorComposition { .. })
+        ));
+        // An unregistered domain is rejected before any operator check.
+        let unregistered = QueryDefinition::new(QueryDomain::new("hcl.unknown-query", 1))
+            .with_expression(QueryExpression::Input);
+        assert!(matches!(
+            unregistered.validate(),
+            Err(QueryFailure::DomainMismatch(_))
+        ));
+    }
+
+    #[test]
+    fn hcl_kind_and_accessor_arguments_are_validated() {
+        // Closed expression-kind names only.
+        let expression_kind = QueryDefinition::new(QueryDomain::hcl_native_v1()).with_expression(
+            QueryExpression::Input
+                .then(OperatorCall::new("hcl.document-body", 1))
+                .then(OperatorCall::new("hcl.body-attributes", 1))
+                .then(OperatorCall::new("hcl.attribute-expression", 1))
+                .then(
+                    OperatorCall::new("hcl.expression-kind-is", 1)
+                        .with_argument("kind", crate::PortableValue::string("bogus")),
+                ),
+        );
+        assert!(matches!(
+            expression_kind.validate(),
+            Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "kind"
+        ));
+        // The 30-kind lossless set has no `Bom` kind (RFC 0014 §2, §7.2).
+        let syntax_kind = QueryDefinition::new(QueryDomain::hcl_lossless_syntax_v1())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("hcl.syntax-kind-is", 1)
+                        .with_argument("kind", crate::PortableValue::string("Bom")),
+                ),
+            );
+        assert!(matches!(
+            syntax_kind.validate(),
+            Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "kind"
+        ));
+        // The literal accessor names are a closed family (RFC 0014 §7.1).
+        let accessor = QueryDefinition::new(QueryDomain::hcl_native_v1()).with_expression(
+            QueryExpression::Input
+                .then(OperatorCall::new("hcl.document-body", 1))
+                .then(OperatorCall::new("hcl.body-attributes", 1))
+                .then(OperatorCall::new("hcl.attribute-expression", 1))
+                .then(
+                    OperatorCall::new("hcl.attribute-literal-value", 1)
+                        .with_argument("accessor", crate::PortableValue::string("as-foo")),
+                ),
+        );
+        assert!(matches!(
+            accessor.validate(),
+            Err(QueryFailure::InvalidArgument { argument, .. }) if argument == "accessor"
+        ));
+        // A missing or wrong-typed argument is rejected before binding.
+        let missing = QueryDefinition::new(QueryDomain::hcl_native_v1()).with_expression(
+            QueryExpression::Input
+                .then(OperatorCall::new("hcl.document-body", 1))
+                .then(OperatorCall::new("hcl.body-attributes", 1))
+                .then(OperatorCall::new("hcl.attribute-expression", 1))
+                .then(OperatorCall::new("hcl.attribute-literal-value", 1)),
+        );
+        assert!(matches!(
+            missing.validate(),
+            Err(QueryFailure::InvalidArgument { .. })
+        ));
+        let wrong_type = QueryDefinition::new(QueryDomain::hcl_lossless_syntax_v1())
+            .with_expression(
+                QueryExpression::Input.then(
+                    OperatorCall::new("hcl.syntax-kind-is", 1)
+                        .with_argument("kind", crate::PortableValue::integer(3.into())),
+                ),
+            );
+        assert!(matches!(
+            wrong_type.validate(),
+            Err(QueryFailure::WrongArgumentType { .. })
+        ));
     }
 }

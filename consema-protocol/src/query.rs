@@ -586,7 +586,40 @@ fn role_name(role: MatchRole) -> &'static str {
         | MatchRole::PropertiesComment
         | MatchRole::PropertiesEscape
         | MatchRole::PropertiesErrorLine
-        | MatchRole::PropertiesSyntaxPiece => {
+        | MatchRole::PropertiesSyntaxPiece
+        | MatchRole::XmlDocument
+        | MatchRole::XmlDeclaration
+        | MatchRole::XmlDoctype
+        | MatchRole::XmlPrologItem
+        | MatchRole::XmlElement
+        | MatchRole::XmlContentItem
+        | MatchRole::XmlAttribute
+        | MatchRole::XmlNamespaceBinding
+        | MatchRole::XmlText
+        | MatchRole::XmlCdata
+        | MatchRole::XmlComment
+        | MatchRole::XmlProcessingInstruction
+        | MatchRole::XmlReference
+        | MatchRole::XmlErrorRegion
+        | MatchRole::XmlSyntaxPiece
+        | MatchRole::PlistValue
+        | MatchRole::PlistDictEntry
+        | MatchRole::PlistKey
+        | MatchRole::PlistArrayElement
+        | MatchRole::PlistSyntaxPiece
+        | MatchRole::PlistBinaryStructure
+        | MatchRole::PlistBinaryObject
+        | MatchRole::PlistBinaryOffset
+        | MatchRole::PlistBinaryRef
+        | MatchRole::PlistBinaryTrailer
+        | MatchRole::HclBody
+        | MatchRole::HclAttribute
+        | MatchRole::HclBlock
+        | MatchRole::HclBlockLabel
+        | MatchRole::HclExpression
+        | MatchRole::HclTemplatePart
+        | MatchRole::HclErrorRegion
+        | MatchRole::HclSyntaxPiece => {
             unreachable!("core.query-result@1 construction rejects newer roles")
         }
     }
@@ -622,6 +655,39 @@ const fn is_v1_role(role: MatchRole) -> bool {
             | MatchRole::PropertiesEscape
             | MatchRole::PropertiesErrorLine
             | MatchRole::PropertiesSyntaxPiece
+            | MatchRole::XmlDocument
+            | MatchRole::XmlDeclaration
+            | MatchRole::XmlDoctype
+            | MatchRole::XmlPrologItem
+            | MatchRole::XmlElement
+            | MatchRole::XmlContentItem
+            | MatchRole::XmlAttribute
+            | MatchRole::XmlNamespaceBinding
+            | MatchRole::XmlText
+            | MatchRole::XmlCdata
+            | MatchRole::XmlComment
+            | MatchRole::XmlProcessingInstruction
+            | MatchRole::XmlReference
+            | MatchRole::XmlErrorRegion
+            | MatchRole::XmlSyntaxPiece
+            | MatchRole::PlistValue
+            | MatchRole::PlistDictEntry
+            | MatchRole::PlistKey
+            | MatchRole::PlistArrayElement
+            | MatchRole::PlistSyntaxPiece
+            | MatchRole::PlistBinaryStructure
+            | MatchRole::PlistBinaryObject
+            | MatchRole::PlistBinaryOffset
+            | MatchRole::PlistBinaryRef
+            | MatchRole::PlistBinaryTrailer
+            | MatchRole::HclBody
+            | MatchRole::HclAttribute
+            | MatchRole::HclBlock
+            | MatchRole::HclBlockLabel
+            | MatchRole::HclExpression
+            | MatchRole::HclTemplatePart
+            | MatchRole::HclErrorRegion
+            | MatchRole::HclSyntaxPiece
     )
 }
 

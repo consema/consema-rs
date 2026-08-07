@@ -464,7 +464,7 @@ fn is_punctuation(byte: u8) -> bool {
     matches!(byte, b'=' | b'[' | b']' | b'{' | b'}' | b',' | b'.')
 }
 
-const fn punctuation_kind(byte: u8) -> TomlSyntaxKind {
+fn punctuation_kind(byte: u8) -> TomlSyntaxKind {
     match byte {
         b'=' => TomlSyntaxKind::Equals,
         b'[' => TomlSyntaxKind::LeftBracket,
@@ -473,7 +473,7 @@ const fn punctuation_kind(byte: u8) -> TomlSyntaxKind {
         b'}' => TomlSyntaxKind::RightBrace,
         b',' => TomlSyntaxKind::Comma,
         b'.' => TomlSyntaxKind::Dot,
-        _ => unreachable!(),
+        _ => unreachable!("caller filtered the byte before syntax-kind dispatch"),
     }
 }
 

@@ -194,7 +194,9 @@ impl<'a> Scanner<'a> {
                         '&' => YamlSyntaxKind::Anchor,
                         '*' => YamlSyntaxKind::Alias,
                         '!' => YamlSyntaxKind::Tag,
-                        _ => unreachable!(),
+                        _ => unreachable!(
+                            "caller checked the byte is an anchor, alias, or tag marker"
+                        ),
                     },
                 )?;
                 self.end_plain_scalar();

@@ -90,6 +90,7 @@ impl WindowsCodePage {
             1257 => "windows-1257",
             1258 => "windows-1258",
             65001 => "windows-65001",
+            // WindowsCodePage constructor rejects unpublished values.
             _ => unreachable!(),
         }
     }
@@ -111,6 +112,7 @@ impl WindowsCodePage {
             1257 => WINDOWS_1257,
             1258 => WINDOWS_1258,
             65001 => UTF_8,
+            // WindowsCodePage constructor rejects unpublished values.
             _ => unreachable!(),
         }
     }
