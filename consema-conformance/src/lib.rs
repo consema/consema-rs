@@ -1,5 +1,6 @@
 //! Language-neutral conformance vectors and Rust reference runner.
 
+mod hcl_v1;
 mod ini_dotnet_oracle;
 mod ini_python_oracle;
 mod ini_qt_oracle;
@@ -7,6 +8,7 @@ mod ini_v1;
 mod ini_windows_oracle;
 mod json_family_v2;
 mod operations_v1;
+mod plist_v1;
 mod portable_graph_v1;
 mod properties_jdk25;
 mod properties_v1;
@@ -17,6 +19,7 @@ mod semantic_model_v6;
 mod source_v1;
 mod syntax_query_v1;
 mod toml_v1;
+mod xml_v1;
 mod yaml_v1;
 
 use consema_core::{
@@ -36,6 +39,7 @@ use consema_pvce::{
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+pub use hcl_v1::{HCL_V1_VECTORS_JSON, run_hcl_v1, run_hcl_v1_json};
 pub use ini_dotnet_oracle::{
     INI_DOTNET_ORACLE_JSON, run_ini_dotnet_oracle, run_ini_dotnet_oracle_json,
 };
@@ -52,6 +56,7 @@ pub use json_family_v2::{
     run_json_family_v2_json, run_json5_reference_corpus, run_json5_reference_corpus_json,
 };
 pub use operations_v1::{OPERATIONS_V1_VECTORS_JSON, run_operations_v1, run_operations_v1_json};
+pub use plist_v1::{PLIST_V1_VECTORS_JSON, run_plist_v1, run_plist_v1_json};
 pub use portable_graph_v1::{
     PORTABLE_GRAPH_V1_VECTORS_JSON, run_portable_graph_v1, run_portable_graph_v1_json,
 };
@@ -72,6 +77,7 @@ pub use syntax_query_v1::{
     SYNTAX_QUERY_V1_VECTORS_JSON, run_syntax_query_v1, run_syntax_query_v1_json,
 };
 pub use toml_v1::{TOML_V1_VECTORS_JSON, run_toml_v1};
+pub use xml_v1::{XML_V1_VECTORS_JSON, run_xml_v1, run_xml_v1_json};
 pub use yaml_v1::{YAML_V1_VECTORS_JSON, run_yaml_v1, run_yaml_v1_json};
 
 /// Embedded language-neutral suite bytes.

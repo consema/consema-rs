@@ -1,22 +1,26 @@
-//! Consema public facade for core semantics, protocol, INI, Java Properties, JSON, TOML, YAML, and PVCE.
+//! Consema public facade for core semantics, protocol, INI, Java Properties,
+//! JSON, TOML, YAML, XML, Property List, HCL, and PVCE.
 
 mod conversion;
 
 pub use conversion::{
     CompleteConversion, ConversionFailure, ConversionFidelity, ConversionProjectionProvenance,
-    ConversionProjectionReport, ConversionReport, ConversionResult, convert_ini, convert_json,
-    convert_properties, convert_toml, convert_yaml,
+    ConversionProjectionReport, ConversionReport, ConversionResult, convert_hcl, convert_ini,
+    convert_json, convert_plist, convert_properties, convert_toml, convert_xml, convert_yaml,
 };
 
 pub use consema_core as core;
 pub use consema_document as document;
 pub use consema_graph as graph;
+pub use consema_hcl as hcl;
 pub use consema_ini as ini;
 pub use consema_json as json;
+pub use consema_plist as plist;
 pub use consema_properties as properties;
 pub use consema_protocol as protocol;
 pub use consema_pvce as pvce;
 pub use consema_toml as toml;
+pub use consema_xml as xml;
 pub use consema_yaml as yaml;
 
 use std::sync::Arc;
@@ -34,6 +38,12 @@ pub enum FormatMismatch {
     Toml,
     /// The snapshot is not a YAML document.
     Yaml,
+    /// The snapshot is not an XML document.
+    Xml,
+    /// The snapshot is not a Property List document.
+    Plist,
+    /// The snapshot is not an HCL document.
+    Hcl,
 }
 
 /// Common opaque document snapshot over the supported format documents.
@@ -47,10 +57,13 @@ pub struct Document {
 
 #[derive(Clone, Debug)]
 enum DocumentInner {
+    Hcl(Box<hcl::Document>),
     Ini(Box<ini::Document>),
     Json(json::Document),
+    Plist(Box<plist::Document>),
     Properties(Box<properties::Document>),
     Toml(toml::Document),
+    Xml(Box<xml::Document>),
     Yaml(Box<yaml::Document>),
 }
 
@@ -114,14 +127,58 @@ impl Document {
         })
     }
 
+    /// Parses one XML 1.0 safe snapshot under the exact profile and explicit
+    /// encoding selection.
+    pub fn parse_xml(
+        source: impl Into<Arc<[u8]>>,
+        profile: xml::XmlProfile,
+        selection: xml::XmlEncodingSelection,
+        limits: xml::XmlParseLimits,
+    ) -> Result<Self, document::FatalFormationFailure> {
+        Ok(Self {
+            inner: DocumentInner::Xml(Box::new(xml::parse(source, profile, selection, limits)?)),
+        })
+    }
+
+    /// Parses one Property List snapshot under an exact profile and explicit
+    /// encoding selection.
+    pub fn parse_plist(
+        source: Arc<[u8]>,
+        profile: plist::PlistProfile,
+        selection: plist::PlistEncodingSelection,
+        limits: plist::PlistParseLimits,
+    ) -> Result<Self, document::FatalFormationFailure> {
+        Ok(Self {
+            inner: DocumentInner::Plist(Box::new(plist::parse(
+                source, profile, selection, limits,
+            )?)),
+        })
+    }
+
+    /// Parses one HCL snapshot under the exact profile and explicit encoding
+    /// selection.
+    pub fn parse_hcl(
+        source: Arc<[u8]>,
+        profile: hcl::HclProfile,
+        selection: hcl::HclEncodingSelection,
+        limits: hcl::HclParseLimits,
+    ) -> Result<Self, document::FatalFormationFailure> {
+        Ok(Self {
+            inner: DocumentInner::Hcl(Box::new(hcl::parse(source, profile, selection, limits)?)),
+        })
+    }
+
     /// Default rendering is byte-for-byte identical to the source.
     #[must_use]
     pub fn render(&self) -> &[u8] {
         match &self.inner {
+            DocumentInner::Hcl(document) => document.render(),
             DocumentInner::Ini(document) => document.render(),
             DocumentInner::Json(document) => document.render(),
+            DocumentInner::Plist(document) => document.render(),
             DocumentInner::Properties(document) => document.render(),
             DocumentInner::Toml(document) => document.render(),
+            DocumentInner::Xml(document) => document.render(),
             DocumentInner::Yaml(document) => document.render(),
         }
     }
@@ -130,10 +187,13 @@ impl Document {
     #[must_use]
     pub fn formation_status(&self) -> document::FormationStatus {
         match &self.inner {
+            DocumentInner::Hcl(document) => document.status(),
             DocumentInner::Ini(document) => document.formation_status(),
             DocumentInner::Json(document) => document.formation_status(),
+            DocumentInner::Plist(document) => document.status(),
             DocumentInner::Properties(document) => document.formation_status(),
             DocumentInner::Toml(document) => document.formation_status(),
+            DocumentInner::Xml(document) => document.status(),
             DocumentInner::Yaml(document) => document.formation_status(),
         }
     }
@@ -142,10 +202,13 @@ impl Document {
     #[must_use]
     pub fn diagnostics(&self) -> &[core::Diagnostic] {
         match &self.inner {
+            DocumentInner::Hcl(document) => document.diagnostics(),
             DocumentInner::Ini(document) => document.diagnostics(),
             DocumentInner::Json(document) => document.diagnostics(),
+            DocumentInner::Plist(document) => document.diagnostics(),
             DocumentInner::Properties(document) => document.diagnostics(),
             DocumentInner::Toml(document) => document.diagnostics(),
+            DocumentInner::Xml(document) => document.diagnostics(),
             DocumentInner::Yaml(document) => document.diagnostics(),
         }
     }
@@ -154,10 +217,13 @@ impl Document {
     #[must_use]
     pub fn snapshot_identity(&self) -> document::SnapshotIdentity {
         match &self.inner {
+            DocumentInner::Hcl(document) => document.snapshot_identity(),
             DocumentInner::Ini(document) => document.snapshot_identity(),
             DocumentInner::Json(document) => document.snapshot_identity(),
+            DocumentInner::Plist(document) => document.snapshot_identity(),
             DocumentInner::Properties(document) => document.snapshot_identity(),
             DocumentInner::Toml(document) => document.snapshot_identity(),
+            DocumentInner::Xml(document) => document.snapshot_identity(),
             DocumentInner::Yaml(document) => document.snapshot_identity(),
         }
     }
@@ -166,10 +232,13 @@ impl Document {
     #[must_use]
     pub fn profile(&self) -> document::ProfileId {
         match &self.inner {
+            DocumentInner::Hcl(document) => document.profile(),
             DocumentInner::Ini(document) => document.profile(),
             DocumentInner::Json(document) => document.profile(),
+            DocumentInner::Plist(document) => document.profile(),
             DocumentInner::Properties(document) => document.profile(),
             DocumentInner::Toml(document) => document.profile(),
+            DocumentInner::Xml(document) => document.profile(),
             DocumentInner::Yaml(document) => document.profile(),
         }
     }
@@ -178,9 +247,12 @@ impl Document {
     pub fn as_json(&self) -> Result<&json::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Json(document) => Ok(document),
-            DocumentInner::Ini(_)
+            DocumentInner::Hcl(_)
+            | DocumentInner::Ini(_)
+            | DocumentInner::Plist(_)
             | DocumentInner::Properties(_)
             | DocumentInner::Toml(_)
+            | DocumentInner::Xml(_)
             | DocumentInner::Yaml(_) => Err(FormatMismatch::Json),
         }
     }
@@ -189,9 +261,12 @@ impl Document {
     pub fn as_toml(&self) -> Result<&toml::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Toml(document) => Ok(document),
-            DocumentInner::Ini(_)
+            DocumentInner::Hcl(_)
+            | DocumentInner::Ini(_)
             | DocumentInner::Json(_)
+            | DocumentInner::Plist(_)
             | DocumentInner::Properties(_)
+            | DocumentInner::Xml(_)
             | DocumentInner::Yaml(_) => Err(FormatMismatch::Toml),
         }
     }
@@ -199,11 +274,14 @@ impl Document {
     /// Typed YAML adapter; fails only when the snapshot is not YAML.
     pub fn as_yaml(&self) -> Result<&yaml::Document, FormatMismatch> {
         match &self.inner {
-            DocumentInner::Ini(_)
-            | DocumentInner::Json(_)
-            | DocumentInner::Properties(_)
-            | DocumentInner::Toml(_) => Err(FormatMismatch::Yaml),
             DocumentInner::Yaml(document) => Ok(document),
+            DocumentInner::Hcl(_)
+            | DocumentInner::Ini(_)
+            | DocumentInner::Json(_)
+            | DocumentInner::Plist(_)
+            | DocumentInner::Properties(_)
+            | DocumentInner::Toml(_)
+            | DocumentInner::Xml(_) => Err(FormatMismatch::Yaml),
         }
     }
 
@@ -211,9 +289,12 @@ impl Document {
     pub fn as_ini(&self) -> Result<&ini::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Ini(document) => Ok(document),
-            DocumentInner::Json(_)
+            DocumentInner::Hcl(_)
+            | DocumentInner::Json(_)
+            | DocumentInner::Plist(_)
             | DocumentInner::Properties(_)
             | DocumentInner::Toml(_)
+            | DocumentInner::Xml(_)
             | DocumentInner::Yaml(_) => Err(FormatMismatch::Ini),
         }
     }
@@ -222,10 +303,55 @@ impl Document {
     pub fn as_properties(&self) -> Result<&properties::Document, FormatMismatch> {
         match &self.inner {
             DocumentInner::Properties(document) => Ok(document),
+            DocumentInner::Hcl(_)
+            | DocumentInner::Ini(_)
+            | DocumentInner::Json(_)
+            | DocumentInner::Plist(_)
+            | DocumentInner::Toml(_)
+            | DocumentInner::Xml(_)
+            | DocumentInner::Yaml(_) => Err(FormatMismatch::Properties),
+        }
+    }
+
+    /// Typed XML adapter; fails only when the snapshot is not XML.
+    pub fn as_xml(&self) -> Result<&xml::Document, FormatMismatch> {
+        match &self.inner {
+            DocumentInner::Xml(document) => Ok(document),
+            DocumentInner::Hcl(_)
+            | DocumentInner::Ini(_)
+            | DocumentInner::Json(_)
+            | DocumentInner::Plist(_)
+            | DocumentInner::Properties(_)
+            | DocumentInner::Toml(_)
+            | DocumentInner::Yaml(_) => Err(FormatMismatch::Xml),
+        }
+    }
+
+    /// Typed Property List adapter; fails only when the snapshot is not a plist.
+    pub fn as_plist(&self) -> Result<&plist::Document, FormatMismatch> {
+        match &self.inner {
+            DocumentInner::Plist(document) => Ok(document),
+            DocumentInner::Hcl(_)
+            | DocumentInner::Ini(_)
+            | DocumentInner::Json(_)
+            | DocumentInner::Properties(_)
+            | DocumentInner::Toml(_)
+            | DocumentInner::Xml(_)
+            | DocumentInner::Yaml(_) => Err(FormatMismatch::Plist),
+        }
+    }
+
+    /// Typed HCL adapter; fails only when the snapshot is not HCL.
+    pub fn as_hcl(&self) -> Result<&hcl::Document, FormatMismatch> {
+        match &self.inner {
+            DocumentInner::Hcl(document) => Ok(document),
             DocumentInner::Ini(_)
             | DocumentInner::Json(_)
+            | DocumentInner::Plist(_)
+            | DocumentInner::Properties(_)
             | DocumentInner::Toml(_)
-            | DocumentInner::Yaml(_) => Err(FormatMismatch::Properties),
+            | DocumentInner::Xml(_)
+            | DocumentInner::Yaml(_) => Err(FormatMismatch::Hcl),
         }
     }
 }
@@ -317,6 +443,58 @@ mod tests {
         );
         assert!(matches!(properties.as_ini(), Err(FormatMismatch::Ini)));
 
+        let xml = Document::parse_xml(
+            b"<service><name>catalog</name></service>".as_slice(),
+            xml::XmlProfile::SafeV1,
+            xml::XmlEncodingSelection::ProfileDefault,
+            xml::XmlParseLimits::default(),
+        )
+        .expect("XML facade");
+        assert_eq!(xml.render(), b"<service><name>catalog</name></service>");
+        assert_eq!(xml.formation_status(), document::FormationStatus::Complete);
+        assert_eq!(xml.profile().id(), "xml.1.0-safe");
+        assert_eq!(
+            xml.as_xml().expect("xml adapter").render(),
+            b"<service><name>catalog</name></service>"
+        );
+        assert!(matches!(xml.as_json(), Err(FormatMismatch::Json)));
+        assert!(matches!(xml.as_plist(), Err(FormatMismatch::Plist)));
+        assert!(matches!(xml.as_hcl(), Err(FormatMismatch::Hcl)));
+        assert!(xml.diagnostics().is_empty());
+
+        let plist = Document::parse_plist(
+            Arc::from(b"<plist version=\"1.0\"><string>x</string></plist>".as_slice()),
+            plist::PlistProfile::XmlV1,
+            plist::PlistEncodingSelection::ProfileDefault,
+            plist::PlistParseLimits::default(),
+        )
+        .expect("plist facade");
+        assert_eq!(
+            plist.render(),
+            b"<plist version=\"1.0\"><string>x</string></plist>"
+        );
+        assert_eq!(plist.profile().id(), "plist.xml");
+        assert_eq!(
+            plist.as_plist().expect("plist adapter").render(),
+            b"<plist version=\"1.0\"><string>x</string></plist>"
+        );
+        assert!(matches!(plist.as_xml(), Err(FormatMismatch::Xml)));
+        assert!(matches!(plist.as_hcl(), Err(FormatMismatch::Hcl)));
+
+        let hcl = Document::parse_hcl(
+            Arc::from(b"a = 1\n".as_slice()),
+            hcl::HclProfile::NativeV1,
+            hcl::HclEncodingSelection::ProfileDefault,
+            hcl::HclParseLimits::default(),
+        )
+        .expect("HCL facade");
+        assert_eq!(hcl.render(), b"a = 1\n");
+        assert_eq!(hcl.profile().id(), "hcl.native");
+        assert_eq!(hcl.as_hcl().expect("hcl adapter").render(), b"a = 1\n");
+        assert!(matches!(hcl.as_xml(), Err(FormatMismatch::Xml)));
+        assert!(matches!(hcl.as_plist(), Err(FormatMismatch::Plist)));
+        assert!(hcl.diagnostics().is_empty());
+
         let other = Document::parse_json(
             b"{}".as_slice(),
             json::JsonProfile::StrictV1,
@@ -360,11 +538,38 @@ mod tests {
             properties::PropertiesParseLimits::default(),
         )
         .expect("Properties through facade");
+        let xml = xml::parse(
+            b"<service><name>catalog</name></service>".as_slice(),
+            xml::XmlProfile::SafeV1,
+            xml::XmlEncodingSelection::ProfileDefault,
+            xml::XmlParseLimits::default(),
+        )
+        .expect("XML through facade");
+        let plist = plist::parse(
+            Arc::from(b"<plist version=\"1.0\"><string>x</string></plist>".as_slice()),
+            plist::PlistProfile::XmlV1,
+            plist::PlistEncodingSelection::ProfileDefault,
+            plist::PlistParseLimits::default(),
+        )
+        .expect("plist through facade");
+        let hcl = hcl::parse(
+            Arc::<[u8]>::from(b"a = 1\n".as_slice()),
+            hcl::HclProfile::NativeV1,
+            hcl::HclEncodingSelection::ProfileDefault,
+            hcl::HclParseLimits::default(),
+        )
+        .expect("HCL through facade");
         assert_eq!(json.render(), b"{\"value\":1}");
         assert_eq!(toml.render(), b"value = 1");
         assert_eq!(yaml.render(), b"value: 1\n");
         assert_eq!(ini.render(), b"[section]\nvalue=1\n");
         assert_eq!(properties.render(), b"value=1\n");
+        assert_eq!(xml.render(), b"<service><name>catalog</name></service>");
+        assert_eq!(
+            plist.render(),
+            b"<plist version=\"1.0\"><string>x</string></plist>"
+        );
+        assert_eq!(hcl.render(), b"a = 1\n");
     }
 
     #[test]

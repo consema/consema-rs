@@ -1,6 +1,37 @@
 //! Audited projection-to-materialization composition.
+//!
+//! Every `convert_*` function composes one format-owned projection and the
+//! requested target materializer, retaining the intermediate portable value,
+//! both provenance directions, and the two-stage report. The composition
+//! never invents a cross-format convention: the baseline formats (JSON,
+//! TOML, YAML, INI, Java Properties) project plain portable values, while
+//! the record formats (XML, plist, HCL) project versioned internal records
+//! (`xml.element-tree@1`, `plist.value-tree@1`, `hcl.body@1`; RFC 0012 §9,
+//! RFC 0013 §9, RFC 0014 §8.2) that only their owning format family's
+//! materializer consumes.
+//!
+//! # Record-consumption gate
+//!
+//! A conversion whose source is a record format projects the internal record
+//! envelope; presenting that envelope as a target document would be an
+//! internal record dump, not a conversion. The facade therefore fails the
+//! conversion atomically — `ConversionFailure::MaterializationFailed` with
+//! `core.materialization.invalid-request@1`, no target document and no
+//! partial bytes — whenever the record's owning family is not the target
+//! profile's family. Same-family directions (for example `plist.xml` to
+//! `plist.binary`, or `hcl.native` to `hcl.tfvars`) pass the gate and the
+//! owning materializer consumes the record under its own validation and
+//! closure. The gate keys on the record-publishing projection, never on
+//! value shape alone: a baseline source never projects an envelope, so a
+//! `"record"` member in JSON/TOML/YAML/INI/Properties content is content
+//! (`{"record":"my-app"}` remains ordinary JSON), and the explicit
+//! non-record projection targets of the record formats (XML
+//! `SimpleEntryMappingV1` and `TextContentV1`, plist `RequireObjectV1`)
+//! publish plain portable values that convert like any baseline projection.
 
-use crate::{Document, DocumentInner, core, document, ini, json, properties, toml, yaml};
+use crate::{
+    Document, DocumentInner, core, document, hcl, ini, json, plist, properties, toml, xml, yaml,
+};
 use core::{OperationKind, PortableValue, StableFailure};
 use document::{
     CompleteMaterialization, MaterializationFidelity, MaterializationProvenanceMap,
@@ -30,6 +61,12 @@ pub enum ConversionProjectionReport {
     Json(json::ProjectionReport),
     /// TOML projection report.
     Toml(toml::ProjectionReport),
+    /// HCL body projection report.
+    Hcl(hcl::ProjectionReport),
+    /// XML element-tree projection report.
+    Xml(xml::ProjectionReport),
+    /// Property List value-tree projection report.
+    Plist(plist::ProjectionReport),
     /// YAML value-projection report.
     Yaml(yaml::ProjectionReport),
 }
@@ -45,6 +82,12 @@ pub enum ConversionProjectionProvenance {
     Json(json::ProvenanceMap),
     /// TOML projection provenance.
     Toml(toml::ProvenanceMap),
+    /// HCL body projection provenance.
+    Hcl(hcl::ProvenanceMap),
+    /// XML element-tree projection provenance.
+    Xml(xml::ProvenanceMap),
+    /// Property List value-tree projection provenance.
+    Plist(plist::ProvenanceMap),
     /// YAML value-projection provenance.
     Yaml(yaml::ProvenanceMap),
 }
@@ -158,6 +201,20 @@ impl CompleteConversion {
             {
                 crate::protocol::ProjectionReportMessage::default()
             }
+            (ConversionProjectionReport::Hcl(report), ConversionProjectionProvenance::Hcl(_))
+                if report.events().is_empty() =>
+            {
+                crate::protocol::ProjectionReportMessage::default()
+            }
+            (ConversionProjectionReport::Xml(report), ConversionProjectionProvenance::Xml(_))
+                if report.events().is_empty() =>
+            {
+                crate::protocol::ProjectionReportMessage::default()
+            }
+            (
+                ConversionProjectionReport::Plist(report),
+                ConversionProjectionProvenance::Plist(_),
+            ) if report.events().is_empty() => crate::protocol::ProjectionReportMessage::default(),
             _ => {
                 return Err(crate::protocol::ProtocolError::new(
                     crate::protocol::ProtocolErrorKind::InvalidValue,
@@ -191,10 +248,13 @@ impl CompleteConversion {
         F: FnMut(document::NodeRef) -> Option<String>,
     {
         let snapshot = match &self.document.inner {
+            DocumentInner::Hcl(document) => document.source(),
             DocumentInner::Ini(document) => document.source(),
             DocumentInner::Json(document) => document.source(),
+            DocumentInner::Plist(document) => document.source(),
             DocumentInner::Properties(document) => document.source(),
             DocumentInner::Toml(document) => document.source(),
+            DocumentInner::Xml(document) => document.source(),
             DocumentInner::Yaml(document) => document.source(),
         };
         let report = crate::protocol::MaterializationReportMessage::from_report(
@@ -418,6 +478,216 @@ pub fn convert_yaml(
     }
 }
 
+/// Converts one XML document by composing its element-tree projection and a
+/// target materializer.
+///
+/// The XML projection publishes the exact `xml.element-tree@1` record, which
+/// only the XML materializer family consumes; the facade's record-consumption
+/// gate rejects the record atomically for every non-XML target (module docs)
+/// instead of presenting the internal envelope as a target document.
+/// Recovered documents never project.
+#[must_use]
+pub fn convert_xml(
+    source: &xml::Document,
+    projection_request: xml::ProjectionRequest,
+    materialization_request: &MaterializationRequest,
+) -> ConversionResult {
+    match source.project(projection_request) {
+        xml::ProjectionResult::Complete(projection) => complete_conversion(
+            source.profile(),
+            projection.value,
+            xml_fidelity(projection.fidelity),
+            ConversionProjectionReport::Xml(projection.report),
+            ConversionProjectionProvenance::Xml(projection.provenance),
+            materialization_request,
+        ),
+        xml::ProjectionResult::Failed(failure) => {
+            ConversionResult::Failed(ConversionFailure::ProjectionFailed {
+                report: ConversionProjectionReport::Xml(failure.report),
+                diagnostics: failure.diagnostics,
+                partial_analysis: Vec::new(),
+            })
+        }
+    }
+}
+
+/// Converts one Property List document by composing its value-tree
+/// projection and a target materializer.
+///
+/// The plist projection publishes the exact `plist.value-tree@1` record,
+/// which only the plist materializer family consumes; the facade's
+/// record-consumption gate rejects the record atomically for every non-plist
+/// target (module docs) instead of presenting the internal envelope as a
+/// target document. Recovered documents never project.
+#[must_use]
+pub fn convert_plist(
+    source: &plist::Document,
+    projection_request: plist::ProjectionRequest,
+    materialization_request: &MaterializationRequest,
+) -> ConversionResult {
+    match plist::project(source, projection_request) {
+        plist::ProjectionResult::Complete(projection) => complete_conversion(
+            source.profile(),
+            projection.value,
+            plist_fidelity(projection.fidelity),
+            ConversionProjectionReport::Plist(projection.report),
+            ConversionProjectionProvenance::Plist(projection.provenance),
+            materialization_request,
+        ),
+        plist::ProjectionResult::Failed(failure) => {
+            ConversionResult::Failed(ConversionFailure::ProjectionFailed {
+                report: ConversionProjectionReport::Plist(failure.report),
+                diagnostics: failure.diagnostics,
+                partial_analysis: Vec::new(),
+            })
+        }
+    }
+}
+
+/// Converts one HCL document by composing its body projection and a target
+/// materializer.
+///
+/// The HCL projection publishes the exact `hcl.body@1` record, which only
+/// the HCL materializer family consumes; the facade's record-consumption
+/// gate rejects the record atomically for every non-HCL target (module docs)
+/// instead of presenting the internal envelope as a target document.
+/// Recovered documents never project.
+///
+/// The exact body target is the default `ExpressionPolicy::Fail`: an
+/// attribute whose expression is derived (a variable reference, traversal,
+/// call, binary operation, conditional, for-expression, or any template
+/// containing interpolation or a directive) fails the conversion atomically
+/// with `hcl.projection.non-literal-expression@1`. Conversion never
+/// implicitly enables the `ProjectExpression` strategy; callers that want
+/// derived expressions projected as `hcl.expression@1` ExtendedValues must
+/// request that policy explicitly through the projection request (RFC 0014
+/// §8.2).
+#[must_use]
+pub fn convert_hcl(
+    source: &hcl::Document,
+    projection_request: hcl::ProjectionRequest,
+    materialization_request: &MaterializationRequest,
+) -> ConversionResult {
+    match hcl::project(source, projection_request) {
+        hcl::ProjectionResult::Complete(projection) => complete_conversion(
+            source.profile(),
+            projection.value,
+            hcl_fidelity(projection.fidelity),
+            ConversionProjectionReport::Hcl(projection.report),
+            ConversionProjectionProvenance::Hcl(projection.provenance),
+            materialization_request,
+        ),
+        hcl::ProjectionResult::Failed(failure) => {
+            ConversionResult::Failed(ConversionFailure::ProjectionFailed {
+                report: ConversionProjectionReport::Hcl(failure.report),
+                diagnostics: failure.diagnostics,
+                partial_analysis: Vec::new(),
+            })
+        }
+    }
+}
+
+/// Published record envelope ids produced by the record-format projections
+/// (RFC 0012 §9, RFC 0013 §9, RFC 0014 §8.2). `hcl.expression@1` is nested
+/// inside body items and is never the projected root.
+const XML_ELEMENT_TREE_RECORD: &str = "xml.element-tree@1";
+const PLIST_VALUE_TREE_RECORD: &str = "plist.value-tree@1";
+const HCL_BODY_RECORD: &str = "hcl.body@1";
+
+/// One published Consema format record envelope, identified by its exact
+/// versioned `record` member; any other object is ordinary content.
+fn published_record(value: &PortableValue) -> Option<&str> {
+    let object = value.as_object()?;
+    let record = object.iter().find(|entry| entry.key() == "record")?;
+    let id = record.value().as_string()?;
+    matches!(
+        id,
+        XML_ELEMENT_TREE_RECORD | PLIST_VALUE_TREE_RECORD | HCL_BODY_RECORD
+    )
+    .then_some(id)
+}
+
+/// Owning format family of one published record id.
+fn record_family(record: &str) -> Option<&'static str> {
+    match record {
+        XML_ELEMENT_TREE_RECORD => Some("xml"),
+        PLIST_VALUE_TREE_RECORD => Some("plist"),
+        HCL_BODY_RECORD => Some("hcl"),
+        _ => None,
+    }
+}
+
+/// Exact invalid-request diagnostic for one published record id.
+fn record_family_message(record: &str) -> &'static str {
+    match record {
+        XML_ELEMENT_TREE_RECORD => {
+            "the projected value is the xml.element-tree@1 internal record; \
+             only the xml family materializer consumes it"
+        }
+        PLIST_VALUE_TREE_RECORD => {
+            "the projected value is the plist.value-tree@1 internal record; \
+             only the plist family materializer consumes it"
+        }
+        HCL_BODY_RECORD => {
+            "the projected value is the hcl.body@1 internal record; \
+             only the hcl family materializer consumes it"
+        }
+        _ => {
+            "the projected value is an internal format record; \
+             only its owning format family materializer consumes it"
+        }
+    }
+}
+
+/// Format family of one profile id; unknown profiles return `None`.
+fn format_family(profile_id: &str) -> Option<&'static str> {
+    match profile_id {
+        "json.strict" | "jsonc.bounded" | "json5.standard" => Some("json"),
+        "toml.1.0" => Some("toml"),
+        "yaml.1.2-core" | "yaml.1.1-compat" => Some("yaml"),
+        "ini.portable" | "ini.windows" | "ini.python-configparser" => Some("ini"),
+        "java-properties.reader" | "java-properties.latin1" => Some("properties"),
+        "xml.1.0-safe" => Some("xml"),
+        "plist.xml" | "plist.binary" => Some("plist"),
+        "hcl.native" | "hcl.tfvars" => Some("hcl"),
+        _ => None,
+    }
+}
+
+/// Record-consumption gate of the composition (module docs).
+///
+/// A record-format source (XML, plist, HCL) projects its versioned internal
+/// record envelope; the envelope is consumed only by the owning format
+/// family's materializer. When the target profile belongs to a different
+/// family, the conversion fails atomically with the shared invalid-request
+/// vocabulary instead of presenting the envelope as a target document.
+/// Baseline sources never project envelopes — a `"record"` member in their
+/// content is content — and the explicit non-record projection targets of
+/// the record formats publish plain values, so both pass the gate untouched.
+fn validate_record_consumption(
+    source_profile: &ProfileId,
+    value: &PortableValue,
+    request: &MaterializationRequest,
+) -> Result<(), ConversionFailure> {
+    let Some(source_family) = format_family(source_profile.id()) else {
+        return Ok(());
+    };
+    if !matches!(source_family, "xml" | "plist" | "hcl") {
+        return Ok(());
+    }
+    let Some(record) = published_record(value) else {
+        return Ok(());
+    };
+    if record_family(record) == format_family(request.target_profile().id()) {
+        return Ok(());
+    }
+    Err(ConversionFailure::MaterializationFailed {
+        failure: document::MaterializationFailure::InvalidRequest(record_family_message(record)),
+        report: MaterializationReport::default(),
+        analyzed_input_paths: Vec::new(),
+    })
+}
+
 fn complete_conversion(
     source_profile: ProfileId,
     projected_value: PortableValue,
@@ -426,6 +696,9 @@ fn complete_conversion(
     projection_provenance: ConversionProjectionProvenance,
     request: &MaterializationRequest,
 ) -> ConversionResult {
+    if let Err(failure) = validate_record_consumption(&source_profile, &projected_value, request) {
+        return ConversionResult::Failed(failure);
+    }
     let materialized = match materialize_target(&projected_value, request) {
         Ok(complete) => complete,
         Err(failure) => return ConversionResult::Failed(failure),
@@ -565,6 +838,60 @@ fn materialize_target(
                 Err(materialization_failure(failure))
             }
         },
+        "hcl.native" | "hcl.tfvars" => match hcl::materialize(value, request) {
+            document::MaterializationResult::Complete(CompleteMaterialization {
+                document,
+                fidelity,
+                report,
+                provenance,
+            }) => Ok(MaterializedTarget {
+                document: Document {
+                    inner: DocumentInner::Hcl(Box::new(document)),
+                },
+                fidelity,
+                report,
+                provenance,
+            }),
+            document::MaterializationResult::Failed(failure) => {
+                Err(materialization_failure(failure))
+            }
+        },
+        "xml.1.0-safe" => match xml::materialize(value, request) {
+            document::MaterializationResult::Complete(CompleteMaterialization {
+                document,
+                fidelity,
+                report,
+                provenance,
+            }) => Ok(MaterializedTarget {
+                document: Document {
+                    inner: DocumentInner::Xml(Box::new(document)),
+                },
+                fidelity,
+                report,
+                provenance,
+            }),
+            document::MaterializationResult::Failed(failure) => {
+                Err(materialization_failure(failure))
+            }
+        },
+        "plist.xml" | "plist.binary" => match plist::materialize(value, request) {
+            document::MaterializationResult::Complete(CompleteMaterialization {
+                document,
+                fidelity,
+                report,
+                provenance,
+            }) => Ok(MaterializedTarget {
+                document: Document {
+                    inner: DocumentInner::Plist(Box::new(document)),
+                },
+                fidelity,
+                report,
+                provenance,
+            }),
+            document::MaterializationResult::Failed(failure) => {
+                Err(materialization_failure(failure))
+            }
+        },
         _ => Err(ConversionFailure::MaterializationFailed {
             failure: document::MaterializationFailure::UnsupportedProfile,
             report: MaterializationReport::default(),
@@ -618,6 +945,30 @@ const fn yaml_fidelity(fidelity: yaml::Fidelity) -> ConversionFidelity {
         yaml::Fidelity::Exact => ConversionFidelity::Exact,
         yaml::Fidelity::Transformed => ConversionFidelity::Transformed,
         yaml::Fidelity::Lossy => ConversionFidelity::Lossy,
+    }
+}
+
+const fn xml_fidelity(fidelity: xml::Fidelity) -> ConversionFidelity {
+    match fidelity {
+        xml::Fidelity::Exact => ConversionFidelity::Exact,
+        xml::Fidelity::Transformed => ConversionFidelity::Transformed,
+        xml::Fidelity::Lossy => ConversionFidelity::Lossy,
+    }
+}
+
+const fn plist_fidelity(fidelity: plist::Fidelity) -> ConversionFidelity {
+    match fidelity {
+        plist::Fidelity::Exact => ConversionFidelity::Exact,
+        plist::Fidelity::Transformed => ConversionFidelity::Transformed,
+        plist::Fidelity::Lossy => ConversionFidelity::Lossy,
+    }
+}
+
+const fn hcl_fidelity(fidelity: hcl::Fidelity) -> ConversionFidelity {
+    match fidelity {
+        hcl::Fidelity::Exact => ConversionFidelity::Exact,
+        hcl::Fidelity::Transformed => ConversionFidelity::Transformed,
+        hcl::Fidelity::Lossy => ConversionFidelity::Lossy,
     }
 }
 
@@ -844,13 +1195,17 @@ mod tests {
     use document::{MappingPolicy, MaterializationStyleId, NewlinePolicy, ParseLimits};
     use json::{DuplicateKeyPolicy, ProjectionRequestBuilder};
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     fn projection_provenance_json(complete: &CompleteConversion) -> &[json::ProvenanceEntry] {
         match &complete.projection_provenance {
             ConversionProjectionProvenance::Json(provenance) => provenance.entries(),
-            ConversionProjectionProvenance::Ini(_)
+            ConversionProjectionProvenance::Hcl(_)
+            | ConversionProjectionProvenance::Ini(_)
+            | ConversionProjectionProvenance::Plist(_)
             | ConversionProjectionProvenance::Properties(_)
             | ConversionProjectionProvenance::Toml(_)
+            | ConversionProjectionProvenance::Xml(_)
             | ConversionProjectionProvenance::Yaml(_) => &[],
         }
     }
@@ -899,6 +1254,49 @@ mod tests {
         MaterializationRequest::new(
             ProfileId::new("java-properties.reader", 1),
             MaterializationStyleId::new("java-properties.reader-canonical", 1),
+        )
+        .with_encoding(document::SourceEncoding::Utf8)
+        .with_newline(NewlinePolicy::Lf)
+    }
+
+    fn xml_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("xml.1.0-safe", 1),
+            MaterializationStyleId::new("xml.safe-canonical-document", 1),
+        )
+    }
+
+    fn plist_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("plist.xml", 1),
+            MaterializationStyleId::new("plist.xml-canonical", 1),
+        )
+        .with_encoding(document::SourceEncoding::Utf8)
+        .with_newline(NewlinePolicy::Lf)
+    }
+
+    fn plist_binary_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("plist.binary", 1),
+            MaterializationStyleId::new("plist.binary-canonical", 1),
+        )
+        .with_encoding(document::SourceEncoding::Binary)
+        .with_newline(NewlinePolicy::None)
+    }
+
+    fn hcl_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("hcl.native", 1),
+            MaterializationStyleId::new("hcl.canonical-document", 1),
+        )
+        .with_encoding(document::SourceEncoding::Utf8)
+        .with_newline(NewlinePolicy::Lf)
+    }
+
+    fn hcl_tfvars_request() -> MaterializationRequest {
+        MaterializationRequest::new(
+            ProfileId::new("hcl.tfvars", 1),
+            MaterializationStyleId::new("hcl.canonical-document", 1),
         )
         .with_encoding(document::SourceEncoding::Utf8)
         .with_newline(NewlinePolicy::Lf)
@@ -1561,6 +1959,558 @@ mod tests {
                 failure: document::MaterializationFailure::Unrepresentable { .. },
                 ..
             })
+        ));
+    }
+
+    #[test]
+    fn xml_converts_to_canonical_xml_exactly() {
+        let source = xml::parse(
+            b"<service><name>catalog</name></service>".as_slice(),
+            xml::XmlProfile::SafeV1,
+            xml::XmlEncodingSelection::ProfileDefault,
+            xml::XmlParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(complete) = convert_xml(
+            &source,
+            xml::ProjectionRequest::element_tree(),
+            &xml_request(),
+        ) else {
+            panic!("XML to canonical XML should complete exactly")
+        };
+        assert_eq!(
+            complete.document.render(),
+            b"<service><name>catalog</name></service>\n"
+        );
+        assert_eq!(
+            complete.report.overall_fidelity(),
+            ConversionFidelity::Exact
+        );
+        assert_eq!(
+            complete.report.source_profile(),
+            &ProfileId::new("xml.1.0-safe", 1)
+        );
+        assert_eq!(
+            complete.report.target_profile(),
+            &ProfileId::new("xml.1.0-safe", 1)
+        );
+        assert!(matches!(
+            complete.projection_provenance,
+            ConversionProjectionProvenance::Xml(_)
+        ));
+        assert!(!complete.materialization_provenance.entries().is_empty());
+        let report = complete
+            .protocol_report("source:xml", "target:xml")
+            .unwrap();
+        assert_eq!(
+            report.overall_fidelity(),
+            protocol::ConversionFidelityMessage::Exact
+        );
+    }
+
+    #[test]
+    fn plist_value_tree_record_is_consumed_only_by_the_plist_family() {
+        let source = plist::parse(
+            Arc::from(
+                b"<plist version=\"1.0\"><dict><key>name</key><string>api</string></dict></plist>"
+                    .as_slice(),
+            ),
+            plist::PlistProfile::XmlV1,
+            plist::PlistEncodingSelection::ProfileDefault,
+            plist::PlistParseLimits::default(),
+        )
+        .unwrap();
+        // The plist projection publishes the exact `plist.value-tree@1`
+        // record (RFC 0013 §9). The facade's record-consumption gate never
+        // presents that internal record as a JSON document: the JSON target
+        // would be a record dump, not a conversion, so the conversion fails
+        // atomically with the shared invalid-request vocabulary and no
+        // target document.
+        assert!(matches!(
+            convert_plist(
+                &source,
+                plist::ProjectionRequest::value_tree(),
+                &json_request()
+            ),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::InvalidRequest(_),
+                ..
+            })
+        ));
+        // The owning family still consumes the record exactly.
+        assert!(matches!(
+            convert_plist(
+                &source,
+                plist::ProjectionRequest::value_tree(),
+                &plist_request()
+            ),
+            ConversionResult::Complete(_)
+        ));
+    }
+
+    #[test]
+    fn plist_converts_between_profiles_exactly() {
+        // Same-family conversion: the facade composes the value-tree
+        // projection and the target plist materializer, so the projected
+        // record is the materialization input directly (RFC 0013 §9, §10).
+        // The source carries a nested dict/array, repeated dict keys, a
+        // date, and data.
+        let source = plist::parse(
+            Arc::from(
+                b"<plist version=\"1.0\"><dict>\
+                  <key>name</key><string>api</string>\
+                  <key>port</key><integer>8080</integer>\
+                  <key>enabled</key><true/>\
+                  <key>nested</key><dict><key>tags</key>\
+                  <array><string>a</string><string>b</string></array></dict>\
+                  <key>dup</key><string>first</string>\
+                  <key>dup</key><string>second</string>\
+                  <key>created</key><date>2023-01-01T00:00:00Z</date>\
+                  <key>payload</key><data>AQID</data>\
+                  </dict></plist>"
+                    .as_slice(),
+            ),
+            plist::PlistProfile::XmlV1,
+            plist::PlistEncodingSelection::ProfileDefault,
+            plist::PlistParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(complete) = convert_plist(
+            &source,
+            plist::ProjectionRequest::value_tree(),
+            &plist_binary_request(),
+        ) else {
+            panic!("plist to plist.binary should complete exactly")
+        };
+        assert_eq!(
+            complete.report.overall_fidelity(),
+            ConversionFidelity::Exact
+        );
+        assert_eq!(
+            complete.report.target_profile(),
+            &ProfileId::new("plist.binary", 1)
+        );
+        let rendered = complete.document.render();
+        assert!(rendered.starts_with(b"bplist00"), "binary output header");
+        // The conversion closed the loop: reparsing the generated bytes
+        // yields the source native model exactly.
+        let reparsed = plist::parse(
+            Arc::from(rendered),
+            plist::PlistProfile::BinaryV1,
+            plist::PlistEncodingSelection::ProfileDefault,
+            plist::PlistParseLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(reparsed.document(), source.document());
+        // And back: plist.binary -> plist.xml preserves the same native
+        // model.
+        let ConversionResult::Complete(back) = convert_plist(
+            &reparsed,
+            plist::ProjectionRequest::value_tree(),
+            &plist_request(),
+        ) else {
+            panic!("plist.binary to plist.xml should complete exactly")
+        };
+        assert_eq!(back.report.overall_fidelity(), ConversionFidelity::Exact);
+        assert_eq!(
+            back.report.target_profile(),
+            &ProfileId::new("plist.xml", 1)
+        );
+        let re_reparsed = plist::parse(
+            Arc::from(back.document.render()),
+            plist::PlistProfile::XmlV1,
+            plist::PlistEncodingSelection::ProfileDefault,
+            plist::PlistParseLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(re_reparsed.document(), source.document());
+    }
+
+    #[test]
+    fn json_cannot_materialize_into_record_formats() {
+        let json_source = json::parse(
+            br#"{"service":{"port":8080}}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection = ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        assert!(matches!(
+            convert_json(&json_source, &projection, &xml_request()),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::InvalidRequest(_),
+                ..
+            })
+        ));
+        assert!(matches!(
+            convert_json(&json_source, &projection, &plist_request()),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::InvalidRequest(_),
+                ..
+            })
+        ));
+        assert!(matches!(
+            convert_json(&json_source, &projection, &hcl_request()),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::InvalidRequest(_),
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn hcl_body_record_is_consumed_only_by_the_hcl_family() {
+        let source = hcl::parse(
+            Arc::<[u8]>::from(b"a = 1\n".as_slice()),
+            hcl::HclProfile::NativeV1,
+            hcl::HclEncodingSelection::ProfileDefault,
+            hcl::HclParseLimits::default(),
+        )
+        .unwrap();
+        // The HCL projection publishes the exact `hcl.body@1` record (RFC
+        // 0014 §8.2): one ordered `items` sequence. The facade's
+        // record-consumption gate never presents that internal record as a
+        // JSON document: the JSON target would be a record dump, not a
+        // conversion, so the conversion fails atomically with the shared
+        // invalid-request vocabulary and no target document.
+        assert!(matches!(
+            convert_hcl(&source, hcl::ProjectionRequest::body(), &json_request()),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::InvalidRequest(_),
+                ..
+            })
+        ));
+        // The owning family still consumes the record exactly.
+        assert!(matches!(
+            convert_hcl(&source, hcl::ProjectionRequest::body(), &hcl_request()),
+            ConversionResult::Complete(_)
+        ));
+    }
+
+    #[test]
+    fn xml_element_tree_record_is_consumed_only_by_the_xml_family() {
+        let source = xml::parse(
+            b"<service><name>catalog</name></service>".as_slice(),
+            xml::XmlProfile::SafeV1,
+            xml::XmlEncodingSelection::ProfileDefault,
+            xml::XmlParseLimits::default(),
+        )
+        .unwrap();
+        // The XML projection publishes the exact `xml.element-tree@1` record
+        // (RFC 0012 §9). The facade's record-consumption gate never presents
+        // that internal record as a JSON or TOML document: the target would
+        // be a record dump, not a conversion, so the conversion fails
+        // atomically with the shared invalid-request vocabulary and no
+        // target document.
+        assert!(matches!(
+            convert_xml(
+                &source,
+                xml::ProjectionRequest::element_tree(),
+                &json_request()
+            ),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::InvalidRequest(_),
+                ..
+            })
+        ));
+        assert!(matches!(
+            convert_xml(
+                &source,
+                xml::ProjectionRequest::element_tree(),
+                &toml_request()
+            ),
+            ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                failure: document::MaterializationFailure::InvalidRequest(_),
+                ..
+            })
+        ));
+        // The owning family still consumes the record exactly.
+        assert!(matches!(
+            convert_xml(
+                &source,
+                xml::ProjectionRequest::element_tree(),
+                &xml_request()
+            ),
+            ConversionResult::Complete(_)
+        ));
+    }
+
+    #[test]
+    fn record_envelopes_fail_every_non_owning_target_atomically() {
+        // One source per record format; every non-owning target fails the
+        // record-consumption gate atomically (module docs), including the
+        // other record families whose materializers also validate the record
+        // marker.
+        let xml_source = xml::parse(
+            b"<root><name>api</name></root>".as_slice(),
+            xml::XmlProfile::SafeV1,
+            xml::XmlEncodingSelection::ProfileDefault,
+            xml::XmlParseLimits::default(),
+        )
+        .unwrap();
+        let plist_source = plist::parse(
+            Arc::from(
+                b"<plist version=\"1.0\"><dict><key>name</key><string>api</string></dict></plist>"
+                    .as_slice(),
+            ),
+            plist::PlistProfile::XmlV1,
+            plist::PlistEncodingSelection::ProfileDefault,
+            plist::PlistParseLimits::default(),
+        )
+        .unwrap();
+        let hcl_source = hcl::parse(
+            Arc::<[u8]>::from(b"a = 1\n".as_slice()),
+            hcl::HclProfile::NativeV1,
+            hcl::HclEncodingSelection::ProfileDefault,
+            hcl::HclParseLimits::default(),
+        )
+        .unwrap();
+        let toml_target = toml_request();
+        let yaml_target = yaml_request();
+        let ini_target = ini_request();
+        let properties_target = properties_reader_request();
+        let xml_target = xml_request();
+        let plist_target = plist_request();
+        let hcl_target = hcl_request();
+        let targets: [&MaterializationRequest; 7] = [
+            &toml_target,
+            &yaml_target,
+            &ini_target,
+            &properties_target,
+            &xml_target,
+            &plist_target,
+            &hcl_target,
+        ];
+        let assert_fails = |result: ConversionResult| {
+            assert!(
+                matches!(
+                    result,
+                    ConversionResult::Failed(ConversionFailure::MaterializationFailed {
+                        failure: document::MaterializationFailure::InvalidRequest(_),
+                        ..
+                    })
+                ),
+                "record envelope must fail atomically on a non-owning target"
+            );
+        };
+        for request in targets {
+            let family = format_family(request.target_profile().id());
+            // The owning family consumes the record (asserted by the
+            // dedicated same-family tests); every other target fails.
+            if family != Some("xml") {
+                assert_fails(convert_xml(
+                    &xml_source,
+                    xml::ProjectionRequest::element_tree(),
+                    request,
+                ));
+            }
+            if family != Some("plist") {
+                assert_fails(convert_plist(
+                    &plist_source,
+                    plist::ProjectionRequest::value_tree(),
+                    request,
+                ));
+            }
+            if family != Some("hcl") {
+                assert_fails(convert_hcl(
+                    &hcl_source,
+                    hcl::ProjectionRequest::body(),
+                    request,
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_non_record_projection_targets_convert_across_families() {
+        // The record-consumption gate fires only on the record envelope
+        // (module docs). The explicit non-record projection targets of the
+        // record formats publish plain portable values that convert like any
+        // baseline projection: XML simple-entry-mapping and plist
+        // require-object both complete to JSON.
+        let xml_source = xml::parse(
+            b"<root><name>api</name><port>8080</port></root>".as_slice(),
+            xml::XmlProfile::SafeV1,
+            xml::XmlEncodingSelection::ProfileDefault,
+            xml::XmlParseLimits::default(),
+        )
+        .unwrap();
+        let subtree = xml_source.root().expect("root").node_ref();
+        let ConversionResult::Complete(xml_target) = convert_xml(
+            &xml_source,
+            xml::ProjectionRequest::simple_entry_mapping(
+                subtree,
+                xml::AttributePolicy::RejectAttributes,
+                xml::TextKeyPolicy::RejectText,
+                xml::RepeatedChildPolicy::Reject,
+                xml::ExpandedNameKeyPolicy::LocalOnly,
+                xml::CollisionPolicy::Reject,
+            ),
+            &json_request(),
+        ) else {
+            panic!("explicit entry mapping should convert to JSON")
+        };
+        assert_eq!(
+            xml_target.document.render(),
+            br#"{"name":"api","port":"8080"}"#
+        );
+        assert_eq!(
+            xml_target.report.overall_fidelity(),
+            ConversionFidelity::Transformed
+        );
+
+        let plist_source = plist::parse(
+            Arc::from(
+                b"<plist version=\"1.0\"><dict><key>name</key><string>api</string><key>port</key><integer>8080</integer></dict></plist>"
+                    .as_slice(),
+            ),
+            plist::PlistProfile::XmlV1,
+            plist::PlistEncodingSelection::ProfileDefault,
+            plist::PlistParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(plist_target) = convert_plist(
+            &plist_source,
+            plist::ProjectionRequest::require_object(plist::CollisionPolicy::Reject),
+            &json_request(),
+        ) else {
+            panic!("explicit require-object projection should convert to JSON")
+        };
+        assert_eq!(
+            plist_target.document.render(),
+            br#"{"name":"api","port":8080}"#
+        );
+    }
+
+    #[test]
+    fn record_member_content_from_baseline_sources_stays_content() {
+        // The record-consumption gate keys on the record-publishing
+        // projection, never on value shape (module docs): a baseline source
+        // never projects an envelope, so `"record"` members in its content
+        // are content and convert faithfully, including a member whose value
+        // equals a published record id.
+        let json_source = json::parse(
+            br#"{"record":"plist.value-tree@1","root":{"name":"api"}}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let projection = ProjectionRequestBuilder::new(json::ProjectionTarget::BestExactCoreV1)
+            .build()
+            .unwrap();
+        let ConversionResult::Complete(toml_target) =
+            convert_json(&json_source, &projection, &toml_request())
+        else {
+            panic!("record-shaped JSON content should convert as content")
+        };
+        let rendered = toml_target.document.render();
+        assert!(
+            std::str::from_utf8(rendered)
+                .unwrap()
+                .contains("\"record\" = \"plist.value-tree@1\""),
+            "the record member is preserved as content: {}",
+            String::from_utf8_lossy(rendered)
+        );
+
+        let yaml_source = yaml::parse(
+            b"record: hcl.body@1\n".as_slice(),
+            yaml::YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(yaml_target) = convert_yaml(
+            &yaml_source,
+            yaml::ValueProjectionRequest::best_exact_v1(),
+            &json_request(),
+        ) else {
+            panic!("YAML record-looking content should convert as content")
+        };
+        assert_eq!(yaml_target.document.render(), br#"{"record":"hcl.body@1"}"#);
+
+        let unknown = json::parse(
+            br#"{"record":"my-app","port":8080}"#.as_slice(),
+            json::JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .unwrap();
+        let ConversionResult::Complete(unknown_target) =
+            convert_json(&unknown, &projection, &toml_request())
+        else {
+            panic!("unknown record member should convert as content")
+        };
+        assert_eq!(
+            unknown_target.document.render(),
+            b"\"record\" = \"my-app\"\n\"port\" = 8080\n"
+        );
+    }
+
+    #[test]
+    fn hcl_native_converts_to_canonical_tfvars_within_the_family() {
+        // Same-family conversion closes the project→materialize loop through
+        // the facade: an `hcl.native@1` source materializes canonically as
+        // `hcl.tfvars@1` (RFC 0014 §9). Number spellings canonicalize
+        // (`1.50` and `15e-1` both emit `1.5`), and the explicit
+        // ProjectExpression policy carries the derived expression through as
+        // the authorized `hcl.expression@1` ExtendedValue.
+        let source = hcl::parse(
+            Arc::<[u8]>::from(
+                b"region = \"us-east-1\"\ncount = 3\nratio = 1.50\nsmall = 15e-1\nderived = 1 + 2\n"
+                    .as_slice(),
+            ),
+            hcl::HclProfile::NativeV1,
+            hcl::HclEncodingSelection::ProfileDefault,
+            hcl::HclParseLimits::default(),
+        )
+        .unwrap();
+        let projection = hcl::ProjectionRequest::body_with_expression_policy(
+            hcl::ExpressionPolicy::ProjectExpression,
+        );
+        let ConversionResult::Complete(complete) =
+            convert_hcl(&source, projection, &hcl_tfvars_request())
+        else {
+            panic!("hcl.native to hcl.tfvars should complete exactly")
+        };
+        assert_eq!(
+            complete.document.render(),
+            b"region = \"us-east-1\"\ncount = 3\nratio = 1.5\nsmall = 1.5\nderived = 1 + 2\n"
+        );
+        assert_eq!(
+            complete.report.overall_fidelity(),
+            ConversionFidelity::Transformed
+        );
+        assert_eq!(
+            complete.report.source_profile(),
+            &ProfileId::new("hcl.native", 1)
+        );
+        assert_eq!(
+            complete.report.target_profile(),
+            &ProfileId::new("hcl.tfvars", 1)
+        );
+        assert!(matches!(
+            complete.projection_provenance,
+            ConversionProjectionProvenance::Hcl(_)
+        ));
+        assert!(!complete.materialization_provenance.entries().is_empty());
+    }
+
+    #[test]
+    fn hcl_conversion_derived_expressions_fail_atomically() {
+        // A derived expression under the default exact body target is an
+        // atomic projection failure; conversion never implicitly enables the
+        // ProjectExpression strategy (RFC 0014 §8.2).
+        let source = hcl::parse(
+            Arc::<[u8]>::from(b"a = b + 1\n".as_slice()),
+            hcl::HclProfile::NativeV1,
+            hcl::HclEncodingSelection::ProfileDefault,
+            hcl::HclParseLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(source.status(), document::FormationStatus::Complete);
+        assert!(matches!(
+            convert_hcl(&source, hcl::ProjectionRequest::body(), &hcl_request()),
+            ConversionResult::Failed(ConversionFailure::ProjectionFailed { .. })
         ));
     }
 }
