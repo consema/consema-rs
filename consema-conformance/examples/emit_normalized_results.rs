@@ -103,13 +103,14 @@ fn main() {
     let mut consume_dir: Option<PathBuf> = None;
     while let Some(argument) = args.next() {
         match argument.as_str() {
-            "--consume" => match args.next() {
-                Some(path) => consume_dir = Some(PathBuf::from(path)),
-                None => {
+            "--consume" => {
+                if let Some(path) = args.next() {
+                    consume_dir = Some(PathBuf::from(path));
+                } else {
                     eprintln!("--consume requires a directory argument");
                     std::process::exit(2);
                 }
-            },
+            }
             other => {
                 eprintln!("unknown argument {other:?}");
                 std::process::exit(2);
@@ -161,7 +162,10 @@ fn main() {
     // check, mirrored).
     if let Some(consume) = &consume_dir {
         let entries = fs::read_dir(consume).unwrap_or_else(|error| {
-            panic!("cannot read consumed evidence directory {consume:?}: {error}")
+            panic!(
+                "cannot read consumed evidence directory {}: {error}",
+                consume.display()
+            )
         });
         for entry in entries {
             let entry = entry.expect("read_dir entry");
@@ -249,8 +253,8 @@ fn main() {
         }
     }
     println!(
-        "emit_normalized_results: {emitted} cases emitted into {:?}",
-        out_dir
+        "emit_normalized_results: {emitted} cases emitted into {}",
+        out_dir.display()
     );
     if differences.is_empty() && consume_dir.is_some() {
         println!(
@@ -712,9 +716,9 @@ fn toml_datetime_summary(date_time: &consema_toml::TomlDateTime) -> String {
             consema_toml::TomlOffset::Z => parts.push("offset=Z".to_owned()),
             consema_toml::TomlOffset::CustomMinutes(minutes) => {
                 let (sign, magnitude) = if minutes < 0 {
-                    ("-", -(minutes as i32))
+                    ("-", -i32::from(minutes))
                 } else {
-                    ("+", minutes as i32)
+                    ("+", i32::from(minutes))
                 };
                 parts.push(format!(
                     "offset={}{:02}:{:02}",
@@ -953,7 +957,13 @@ fn run_document_case(fields: &[consema_core::ObjectEntry]) -> Result<Facts, Stri
 }
 
 /// One document-face execution state.
+///
+/// The six bools below are independent one-shot run latches (each step
+/// emitter and the projection mark their own execution; any combination can
+/// occur), so a state-machine enum cannot express them — kept as bools
+/// deliberately.
 #[derive(Default)]
+#[allow(clippy::struct_excessive_bools)]
 struct DocState {
     format: String,
     profile_name: String,
@@ -1046,7 +1056,7 @@ fn parse_into_state(
             let root = document.root();
             match root.kind() {
                 SemanticAvailability::Available(kind) => {
-                    state.root_kind = json_value_kind_name(kind).to_owned();
+                    json_value_kind_name(kind).clone_into(&mut state.root_kind);
                 }
                 SemanticAvailability::Unavailable(reason) => {
                     state.root_kind = format!("Unavailable:{}", semantic_unavailable_name(reason));
@@ -1060,7 +1070,7 @@ fn parse_into_state(
             let document = parse_toml(source.as_bytes(), TomlProfile::Toml10V1, limits)?;
             state.formation = formation_name(document.formation_status());
             state.diagnostic_codes = diagnostic_codes(document.diagnostics());
-            state.root_kind = toml_item_kind_name(document.root().kind()).to_owned();
+            toml_item_kind_name(document.root().kind()).clone_into(&mut state.root_kind);
             state.native = toml_native(document.root(), 0);
             state.toml_document = Some(document);
             Ok(())
@@ -1098,7 +1108,7 @@ fn parse_into_state(
             )?;
             state.formation = formation_name(document.formation_status());
             state.diagnostic_codes = diagnostic_codes(document.diagnostics());
-            state.root_kind = "Document".to_owned();
+            "Document".clone_into(&mut state.root_kind);
             state.native = format!(
                 "sections={} entries={}",
                 document.sections().len(),
@@ -1119,7 +1129,7 @@ fn parse_into_state(
             )?;
             state.formation = formation_name(document.formation_status());
             state.diagnostic_codes = diagnostic_codes(document.diagnostics());
-            state.root_kind = "Document".to_owned();
+            "Document".clone_into(&mut state.root_kind);
             state.native = format!(
                 "properties={} comments={}",
                 document.properties().len(),
@@ -1188,9 +1198,7 @@ fn emit_step_facts(
     state: &mut DocState,
     step: Option<&[consema_core::ObjectEntry]>,
 ) {
-    let op = step
-        .map(|fields| object_string(fields, "op").unwrap_or(""))
-        .unwrap_or("");
+    let op = step.map_or("", |fields| object_string(fields, "op").unwrap_or(""));
     match op {
         "query-native" => emit_native_query(facts, state, step),
         "query-syntax" => emit_syntax_query(facts, state, step),
@@ -1408,14 +1416,11 @@ fn properties_native_match(match_: &PropertiesMatch) -> String {
 fn json_native_match(match_: &JsonMatch) -> String {
     match match_ {
         JsonMatch::Value { kind, .. } => {
-            let name = kind.map(json_value_kind_name).unwrap_or("?");
+            let name = kind.map_or("?", json_value_kind_name);
             format!("V:{name}")
         }
         JsonMatch::ObjectMember { ordinal, name, .. } => {
-            let name = name
-                .as_deref()
-                .map(escape)
-                .unwrap_or_else(|| "?".to_owned());
+            let name = name.as_deref().map_or_else(|| "?".to_owned(), escape);
             format!("M:{ordinal}:{name}")
         }
         JsonMatch::ArrayElement { ordinal, .. } => format!("E:{ordinal}"),
@@ -2052,9 +2057,10 @@ fn emit_materialize(
                 return;
             }
         },
-        "value" => match decode_materialize_value(fields) {
-            Some(value) => value,
-            None => {
+        "value" => {
+            if let Some(value) = decode_materialize_value(fields) {
+                value
+            } else {
                 set(facts, "materialize.status", "Failed");
                 set(
                     facts,
@@ -2065,7 +2071,7 @@ fn emit_materialize(
                 set(facts, "materialize.fidelity", "");
                 return;
             }
-        },
+        }
         _ => {
             set(facts, "materialize.status", "Failed");
             set(
@@ -2261,8 +2267,8 @@ fn build_materialization_request(
     if target_profile.is_empty() || style.is_empty() {
         return None;
     }
-    let target_id = target_profile.split('@').next().unwrap_or(&target_profile);
-    let style_id = style.split('@').next().unwrap_or(&style);
+    let target_id = target_profile.split('@').next().unwrap_or(target_profile);
+    let style_id = style.split('@').next().unwrap_or(style);
     let mut request = MaterializationRequest::new(
         ProfileId::new(target_id, 1),
         MaterializationStyleId::new(style_id, 1),
@@ -2514,7 +2520,6 @@ fn ensure_foreign(state: &mut DocState) -> bool {
     match state.format.as_str() {
         "json" => {
             let profile = match state.profile_name.as_str() {
-                "json.strict@1" => JsonProfile::StrictV1,
                 "jsonc.bounded@1" => JsonProfile::JsoncBoundedV1,
                 "json5.standard@1" => JsonProfile::Json5StandardV1,
                 _ => JsonProfile::StrictV1,
@@ -2536,7 +2541,6 @@ fn ensure_foreign(state: &mut DocState) -> bool {
         },
         "yaml" => {
             let profile = match state.profile_name.as_str() {
-                "yaml.1.2-core@1" => YamlProfile::Yaml12CoreV1,
                 "yaml.1.1-compat@1" => YamlProfile::Yaml11CompatV1,
                 _ => YamlProfile::Yaml12CoreV1,
             };
@@ -2550,7 +2554,6 @@ fn ensure_foreign(state: &mut DocState) -> bool {
         }
         "ini" => {
             let profile = match state.profile_name.as_str() {
-                "ini.portable@1" => IniProfile::PortableV1,
                 "ini.windows@1" => IniProfile::WindowsV1,
                 "ini.python-configparser@1" => IniProfile::PythonConfigParserV1,
                 _ => IniProfile::PortableV1,
@@ -2862,9 +2865,7 @@ fn apply_ini_edit_operations(
                 let Some(container) = resolve_ini_target(state, op) else {
                     return false;
                 };
-                let Some(placement) = resolve_ini_placement(state, op) else {
-                    return false;
-                };
+                let placement = resolve_ini_placement(state, op);
                 let name = object_string(op, "name").unwrap_or("");
                 builder.insert_section(container, name, placement);
             }
@@ -2888,9 +2889,7 @@ fn apply_ini_edit_operations(
                 let Some(value) = string_from_desc(op) else {
                     return false;
                 };
-                let Some(placement) = resolve_ini_placement(state, op) else {
-                    return false;
-                };
+                let placement = resolve_ini_placement(state, op);
                 let key = object_string(op, "name").unwrap_or("");
                 builder.insert_entry(container, key, value, placement);
             }
@@ -2955,13 +2954,11 @@ fn apply_properties_edit_operations(
                 let Some(value) = string_from_desc(op) else {
                     return false;
                 };
-                let Some(placement) = resolve_properties_placement(state, op) else {
-                    return false;
-                };
+                let placement = resolve_properties_placement(state, op);
                 let key = object_string(op, "name").unwrap_or("");
                 builder.insert_property(
                     container,
-                    JavaString::from_unicode(&key),
+                    JavaString::from_unicode(key),
                     JavaString::from_unicode(&value),
                     placement,
                 );
@@ -2977,7 +2974,7 @@ fn apply_properties_edit_operations(
                     return false;
                 };
                 let key = object_string(op, "name").unwrap_or("");
-                builder.rename_property(target, JavaString::from_unicode(&key));
+                builder.rename_property(target, JavaString::from_unicode(key));
             }
             _ => return false,
         }
@@ -3100,34 +3097,34 @@ fn resolve_yaml_placement(
 fn resolve_ini_placement(
     _state: &DocState,
     op: &[consema_core::ObjectEntry],
-) -> Option<AssociationPlacement> {
+) -> AssociationPlacement {
     let placement = object_field(op, "placement").and_then(PortableValue::as_object);
     let Some(placement) = placement else {
-        return Some(AssociationPlacement::End);
+        return AssociationPlacement::End;
     };
     match object_string(placement, "at").unwrap_or("") {
-        "start" => return Some(AssociationPlacement::Start),
-        "end" => return Some(AssociationPlacement::End),
+        "start" => return AssociationPlacement::Start,
+        "end" => return AssociationPlacement::End,
         _ => {}
     }
-    Some(AssociationPlacement::End)
+    AssociationPlacement::End
 }
 
 /// Resolves one Properties placement descriptor.
 fn resolve_properties_placement(
     _state: &DocState,
     op: &[consema_core::ObjectEntry],
-) -> Option<AssociationPlacement> {
+) -> AssociationPlacement {
     let placement = object_field(op, "placement").and_then(PortableValue::as_object);
     let Some(placement) = placement else {
-        return Some(AssociationPlacement::End);
+        return AssociationPlacement::End;
     };
     match object_string(placement, "at").unwrap_or("") {
-        "start" => return Some(AssociationPlacement::Start),
-        "end" => return Some(AssociationPlacement::End),
+        "start" => return AssociationPlacement::Start,
+        "end" => return AssociationPlacement::End,
         _ => {}
     }
-    Some(AssociationPlacement::End)
+    AssociationPlacement::End
 }
 
 /// Resolves the anchor of the current YAML container: the mapping entries
@@ -3192,9 +3189,8 @@ fn resolve_json_target(state: &DocState, op: &[consema_core::ObjectEntry]) -> Op
     match kind {
         "root" => Some(root.node_ref()),
         "member" | "member-value" | "member-key" => {
-            let members = match root.object_members() {
-                SemanticAvailability::Available(Some(members)) => members,
-                _ => return None,
+            let SemanticAvailability::Available(Some(members)) = root.object_members() else {
+                return None;
             };
             let member = members.get(ordinal)?;
             match kind {
@@ -3204,9 +3200,8 @@ fn resolve_json_target(state: &DocState, op: &[consema_core::ObjectEntry]) -> Op
             }
         }
         "array-element" | "array-element-value" => {
-            let elements = match root.array_elements() {
-                SemanticAvailability::Available(Some(elements)) => elements,
-                _ => return None,
+            let SemanticAvailability::Available(Some(elements)) = root.array_elements() else {
+                return None;
             };
             let element = elements.get(ordinal)?;
             match kind {
@@ -3444,18 +3439,12 @@ fn run_source_case(fields: &[consema_core::ObjectEntry]) -> Result<Facts, String
     set(
         &mut facts,
         "source.bom",
-        encoding
-            .bom()
-            .map(|bom| bom.encoding().as_str())
-            .unwrap_or(""),
+        encoding.bom().map_or("", |bom| bom.encoding().as_str()),
     );
     set(
         &mut facts,
         "source.declared",
-        encoding
-            .declaration()
-            .map(|encoding| encoding.as_str())
-            .unwrap_or(""),
+        encoding.declaration().map_or("", SourceEncoding::as_str),
     );
     set(&mut facts, "source.digest", snapshot.digest().to_hex());
     set(&mut facts, "source.len", snapshot.len().to_string());
@@ -3486,7 +3475,7 @@ fn build_encoding_request(fields: &[consema_core::ObjectEntry]) -> Result<Encodi
     match object_string(request, "bom_policy").unwrap_or("DetectUnicode") {
         "DetectUnicode" | "" => {}
         "TreatAsContent" => {
-            built = built.with_bom_policy(consema_document::BomPolicy::TreatAsContent)
+            built = built.with_bom_policy(consema_document::BomPolicy::TreatAsContent);
         }
         other => return Err(format!("unknown bom_policy {other:?}")),
     }
@@ -3522,35 +3511,32 @@ fn emit_position_facts(
         let Some(raw_byte) = position.as_integer().and_then(BigInteger::to_usize) else {
             continue;
         };
-        match snapshot.map(|s| s.decoded_position(raw_byte)) {
-            Some(Ok(position)) => {
-                set(
-                    facts,
-                    format!("{key}raw_byte"),
-                    position.raw_byte.to_string(),
-                );
-                set(
-                    facts,
-                    format!("{key}decoded_utf8"),
-                    position.decoded_utf8_byte.to_string(),
-                );
-                set(
-                    facts,
-                    format!("{key}scalars"),
-                    position.unicode_scalar_offset.to_string(),
-                );
-                set(
-                    facts,
-                    format!("{key}utf16"),
-                    position.utf16_code_unit_offset.to_string(),
-                );
-            }
-            _ => {
-                set(facts, format!("{key}raw_byte"), raw_byte.to_string());
-                set(facts, format!("{key}decoded_utf8"), "");
-                set(facts, format!("{key}scalars"), "");
-                set(facts, format!("{key}utf16"), "");
-            }
+        if let Some(Ok(position)) = snapshot.map(|s| s.decoded_position(raw_byte)) {
+            set(
+                facts,
+                format!("{key}raw_byte"),
+                position.raw_byte.to_string(),
+            );
+            set(
+                facts,
+                format!("{key}decoded_utf8"),
+                position.decoded_utf8_byte.to_string(),
+            );
+            set(
+                facts,
+                format!("{key}scalars"),
+                position.unicode_scalar_offset.to_string(),
+            );
+            set(
+                facts,
+                format!("{key}utf16"),
+                position.utf16_code_unit_offset.to_string(),
+            );
+        } else {
+            set(facts, format!("{key}raw_byte"), raw_byte.to_string());
+            set(facts, format!("{key}decoded_utf8"), "");
+            set(facts, format!("{key}scalars"), "");
+            set(facts, format!("{key}utf16"), "");
         }
     }
 }

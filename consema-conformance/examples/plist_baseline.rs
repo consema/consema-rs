@@ -197,7 +197,7 @@ fn decode_hex(text: &str) -> Vec<u8> {
     assert!(bytes.len() % 2 == 0, "hex must have even length");
     bytes
         .chunks(2)
-        .map(|pair| hex_value(pair[0]) << 4 | hex_value(pair[1]))
+        .map(|pair| (hex_value(pair[0]) << 4) | hex_value(pair[1]))
         .collect()
 }
 

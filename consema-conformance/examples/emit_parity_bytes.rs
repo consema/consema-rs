@@ -116,8 +116,8 @@ fn main() {
         emitted += 1;
     }
     println!(
-        "emit_parity_bytes: {emitted} cases emitted into {:?}",
-        out_dir
+        "emit_parity_bytes: {emitted} cases emitted into {}",
+        out_dir.display()
     );
     if !failures.is_empty() {
         eprintln!("failed cases: {failures:?}");

@@ -48,7 +48,7 @@
 use std::env;
 use std::fmt::Write;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use consema_core::{PortableValue, QueryDefinition};
 use consema_document::{ParseLimits, SourceLimits, SourcePatchLimits};
@@ -163,9 +163,9 @@ fn main() {
         }
     }
     println!(
-        "emit_protocol_exchange ({}): {accepted} accept cases and {rejected} reject cases verified into {:?}",
+        "emit_protocol_exchange ({}): {accepted} accept cases and {rejected} reject cases verified into {}",
         if verify { "verify" } else { "emit" },
-        dir
+        dir.display()
     );
     if !failures.is_empty() {
         for failure in &failures {
@@ -178,7 +178,7 @@ fn main() {
 
 /// Emits the Rust encoder's bytes for one accept case and verifies the
 /// record round-trips byte-identically on both transports.
-fn emit_accept(id: &str, record: &str, json_text: &str, dir: &PathBuf) -> Result<(), String> {
+fn emit_accept(id: &str, record: &str, json_text: &str, dir: &Path) -> Result<(), String> {
     let value = decode_json(json_text.as_bytes(), ProtocolLimits::default())
         .map_err(|error| format!("transport decode failed: {error}"))?;
     let record_value =
@@ -198,7 +198,7 @@ fn emit_accept(id: &str, record: &str, json_text: &str, dir: &PathBuf) -> Result
 /// Verifies one accept case in the Go-encode -> Rust-decode direction: the
 /// Go bytes decode under the Rust typed record decoder to a record
 /// equivalent to the case record and re-encode byte-identically.
-fn verify_accept(id: &str, record: &str, json_text: &str, dir: &PathBuf) -> Result<(), String> {
+fn verify_accept(id: &str, record: &str, json_text: &str, dir: &Path) -> Result<(), String> {
     let case_value = decode_json(json_text.as_bytes(), ProtocolLimits::default())
         .map_err(|error| format!("case transport decode failed: {error}"))?;
     let case_record = decode_record(record, &case_value)
@@ -242,7 +242,7 @@ fn emit_reject(
     record: &str,
     json_text: &str,
     expected: &str,
-    dir: &PathBuf,
+    dir: &Path,
 ) -> Result<(), String> {
     let code = rejection_code(record, json_text)?;
     if code != expected {
@@ -367,7 +367,9 @@ fn decode_record(record: &str, value: &PortableValue) -> Result<PortableValue, P
             }),
         "core.query-result@1" => QueryResultMessage::from_value(value).map(|m| m.to_value()),
         "core.registry-manifest@1" => RegistryManifest::from_value(value).map(|m| m.to_value()),
-        "core.source-encoding@1" => SourceEncodingMessage::from_value(value).map(|m| m.to_value()),
+        "core.source-encoding@1" => {
+            SourceEncodingMessage::from_value(value).map(SourceEncodingMessage::to_value)
+        }
         "core.source-patch@2" => {
             SourcePatchMessageV2::from_value(value, SourcePatchLimits::default()).and_then(|m| {
                 m.to_value().map_err(|error| {
@@ -395,13 +397,13 @@ fn decode_record(record: &str, value: &PortableValue) -> Result<PortableValue, P
 }
 
 /// Writes one hex-encoded byte file.
-fn write_hex(dir: &PathBuf, name: &str, bytes: &[u8]) -> Result<(), String> {
+fn write_hex(dir: &Path, name: &str, bytes: &[u8]) -> Result<(), String> {
     fs::write(dir.join(format!("{name}.hex")), format!("{}\n", hex(bytes)))
         .map_err(|error| format!("cannot write {name}.hex: {error}"))
 }
 
 /// Reads and hex-decodes one byte file.
-fn read_hex(dir: &PathBuf, name: &str) -> Result<Vec<u8>, String> {
+fn read_hex(dir: &Path, name: &str) -> Result<Vec<u8>, String> {
     let text = fs::read_to_string(dir.join(format!("{name}.hex")))
         .map_err(|error| format!("missing Go byte file {name}.hex: {error}"))?;
     let text = text.trim();
@@ -421,7 +423,7 @@ fn read_hex(dir: &PathBuf, name: &str) -> Result<Vec<u8>, String> {
 }
 
 /// Reads one recorded rejection code file.
-fn read_error_file(dir: &PathBuf, id: &str) -> Result<String, String> {
+fn read_error_file(dir: &Path, id: &str) -> Result<String, String> {
     fs::read_to_string(dir.join(format!("{id}.error.txt")))
         .map(|text| text.trim().to_owned())
         .map_err(|error| format!("missing rejection file {id}.error.txt: {error}"))

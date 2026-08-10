@@ -183,10 +183,10 @@ fn decimal_to_f64(decimal: &consema_core::Decimal) -> Option<f64> {
     let coefficient = decimal.coefficient().to_i64()?;
     let exponent = decimal.exponent().to_i64()?;
     let mut value = coefficient as f64;
-    if exponent > 0 {
-        value *= 10_f64.powi(exponent.min(308) as i32);
-    } else if exponent < 0 {
-        value /= 10_f64.powi(exponent.unsigned_abs().min(308) as i32);
+    match exponent.cmp(&0) {
+        std::cmp::Ordering::Greater => value *= 10_f64.powi(exponent.min(308) as i32),
+        std::cmp::Ordering::Less => value /= 10_f64.powi(exponent.unsigned_abs().min(308) as i32),
+        std::cmp::Ordering::Equal => {}
     }
     Some(value)
 }
