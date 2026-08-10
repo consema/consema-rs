@@ -7,8 +7,8 @@ license.workspace = true
 description = "Lossless hcl.native@1 and hcl.tfvars@1 implementation for Consema"
 
 [dependencies]
-consema-core = { path = "../consema-core", version = "0.13.0" }
-consema-document = { path = "../consema-document", version = "0.13.0" }
+consema-core = { path = "../consema-core", version = "1.0.0-rc.1" }
+consema-document = { path = "../consema-document", version = "1.0.0-rc.1" }
 unicode-ident.workspace = true
 
 [lints]

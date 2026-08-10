@@ -194,7 +194,7 @@ impl CliOutputMessage {
         if !is_semantic_version(&product_version) {
             return Err(crate::schema::invalid(
                 "$.product_version",
-                "expected MAJOR.MINOR.PATCH without leading zeros",
+                "expected MAJOR.MINOR.PATCH[-prerelease] without leading zeros or build metadata",
             ));
         }
         validate_payload_schema(&payload, command)?;
@@ -318,7 +318,7 @@ impl CliOutputMessage {
         if !is_semantic_version(&product_version) {
             return Err(crate::schema::invalid(
                 "$.product_version",
-                "expected MAJOR.MINOR.PATCH without leading zeros",
+                "expected MAJOR.MINOR.PATCH[-prerelease] without leading zeros or build metadata",
             ));
         }
         validate_payload_schema(fields[4], command)?;
@@ -867,8 +867,21 @@ fn validate_payload_schema(
     Ok(())
 }
 
+/// Reports whether `version` has the SemVer 2.0 core shape required of a
+/// product version (RFC 0015 §3.3, 2026-08-10 revision): `MAJOR.MINOR.PATCH`
+/// with an optional dot-separated `-prerelease` suffix; numeric segments and
+/// numeric prerelease identifiers carry no leading zeros; build metadata
+/// (`+` suffix) is rejected (product_version never carries build metadata or
+/// git hashes).
 fn is_semantic_version(version: &str) -> bool {
-    let mut segments = version.split('.');
+    if version.contains('+') {
+        return false;
+    }
+    let (core, prerelease) = match version.split_once('-') {
+        Some((core, prerelease)) => (core, Some(prerelease)),
+        None => (version, None),
+    };
+    let mut segments = core.split('.');
     let (Some(major), Some(minor), Some(patch), None) = (
         segments.next(),
         segments.next(),
@@ -877,11 +890,42 @@ fn is_semantic_version(version: &str) -> bool {
     ) else {
         return false;
     };
-    [major, minor, patch].iter().all(|segment| {
-        !segment.is_empty()
-            && segment.bytes().all(|byte| byte.is_ascii_digit())
-            && (segment.len() == 1 || !segment.starts_with('0'))
-    })
+    if ![major, minor, patch]
+        .iter()
+        .all(|segment| is_numeric_segment(segment))
+    {
+        return false;
+    }
+    match prerelease {
+        None => true,
+        Some(prerelease) => {
+            !prerelease.is_empty() && prerelease.split('.').all(is_prerelease_identifier)
+        }
+    }
+}
+
+/// Reports whether one numeric segment is a non-empty digit run without a
+/// leading zero (single "0" is allowed).
+fn is_numeric_segment(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment.bytes().all(|byte| byte.is_ascii_digit())
+        && (segment.len() == 1 || !segment.starts_with('0'))
+}
+
+/// Reports whether one SemVer prerelease identifier is well-formed: non-empty
+/// and ASCII alphanumeric or hyphen only; numeric identifiers (all digits)
+/// must not carry leading zeros.
+fn is_prerelease_identifier(identifier: &str) -> bool {
+    if identifier.is_empty() {
+        return false;
+    }
+    let numeric = identifier.bytes().all(|byte| byte.is_ascii_digit());
+    if numeric {
+        return identifier.len() == 1 || !identifier.starts_with('0');
+    }
+    identifier
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
 fn revalidate_plan_entry(
@@ -1566,7 +1610,23 @@ mod tests {
 
     #[test]
     fn envelope_rejects_invalid_product_version_and_redaction() {
-        for version in ["0.12", "0.12.0.1", "0.12.01", "00.1.0", "0.12.a", "0..0"] {
+        // The MAJOR.MINOR.PATCH pins are unchanged; the prerelease-shaped
+        // rejections cover the 2026-08-10 SemVer extension (empty identifier,
+        // numeric identifier leading zero, empty prerelease, build metadata).
+        for version in [
+            "0.12",
+            "0.12.0.1",
+            "0.12.01",
+            "00.1.0",
+            "0.12.a",
+            "0..0",
+            "1.0.0-rc..1",
+            "1.0.0-01",
+            "1.0.0-rc.1.01",
+            "1.0.0-",
+            "1.0.0+build",
+            "1.0.0-rc.1+build",
+        ] {
             let error = CliOutputMessage::new(
                 CliCommand::Inspect,
                 ExitClass::Success,
@@ -1583,6 +1643,27 @@ mod tests {
         let error = Redaction::new(false, 3).unwrap_err();
         assert_eq!(error.path(), "$.redaction");
         assert_eq!(Redaction::new(true, 3).unwrap().count(), 3);
+    }
+
+    #[test]
+    fn envelope_accepts_prerelease_product_versions() {
+        // RFC 0015 §3.3 (2026-08-10 revision): the product-version check is
+        // full SemVer 2.0 core syntax, so prerelease suffixes are accepted.
+        for version in ["1.0.0-rc.1", "1.0.0-beta.2", "1.0.0-0", "0.12.0-alpha.1"] {
+            let message = CliOutputMessage::new(
+                CliCommand::Inspect,
+                ExitClass::Success,
+                version,
+                rfc_inspect_payload(),
+                Vec::new(),
+                Redaction::new(false, 0).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(message.product_version(), version, "version {version}");
+            let decoded = CliOutputMessage::from_value(&message.to_value())
+                .expect("decode of prerelease version");
+            assert_eq!(decoded, message, "round-trip {version}");
+        }
     }
 
     #[test]

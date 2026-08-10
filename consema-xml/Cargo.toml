@@ -7,8 +7,8 @@ license.workspace = true
 description = "Lossless xml.1.0-safe@1 implementation for Consema"
 
 [dependencies]
-consema-core = { path = "../consema-core", version = "0.13.0" }
-consema-document = { path = "../consema-document", version = "0.13.0" }
+consema-core = { path = "../consema-core", version = "1.0.0-rc.1" }
+consema-document = { path = "../consema-document", version = "1.0.0-rc.1" }
 xmlparser.workspace = true
 
 [lints]

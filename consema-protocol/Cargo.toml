@@ -7,11 +7,11 @@ license.workspace = true
 description = "Language-neutral Consema protocol contracts and canonical transports"
 
 [dependencies]
-consema-core = { path = "../consema-core", version = "0.13.0" }
-consema-document = { path = "../consema-document", version = "0.13.0" }
-consema-graph = { path = "../consema-graph", version = "0.13.0" }
-consema-json = { path = "../consema-json", version = "0.13.0" }
-consema-pvce = { path = "../consema-pvce", version = "0.13.0" }
+consema-core = { path = "../consema-core", version = "1.0.0-rc.1" }
+consema-document = { path = "../consema-document", version = "1.0.0-rc.1" }
+consema-graph = { path = "../consema-graph", version = "1.0.0-rc.1" }
+consema-json = { path = "../consema-json", version = "1.0.0-rc.1" }
+consema-pvce = { path = "../consema-pvce", version = "1.0.0-rc.1" }
 
 [lints]
 workspace = true
