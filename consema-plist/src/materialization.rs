@@ -666,6 +666,10 @@ fn decimal_to_f64(decimal: &Decimal) -> Option<f64> {
     let coefficient = decimal.coefficient().to_i64()?;
     let exponent = decimal.exponent().to_i64()?;
     let mut value = coefficient as f64;
+    // The if/else-if chain trips the 1.85-only clippy::comparison_chain
+    // (removed or reconfigured in later clippy); the allow carries
+    // unknown_lints so the attribute stays valid under both toolchains.
+    #[allow(unknown_lints, clippy::comparison_chain)]
     if exponent > 0 {
         value *= 10_f64.powi(exponent.min(308) as i32);
     } else if exponent < 0 {
@@ -683,7 +687,7 @@ fn decode_hex(text: &str) -> Option<Vec<u8>> {
     for pair in text.as_bytes().chunks_exact(2) {
         let high = hex_digit(pair[0]);
         let low = hex_digit(pair[1]);
-        bytes.push(high << 4 | low);
+        bytes.push((high << 4) | low);
     }
     Some(bytes)
 }
@@ -1347,10 +1351,10 @@ fn encode_base64_wrapped(bytes: &[u8], depth: usize) -> String {
         }
         out.push(char::from(ALPHABET[(first >> 2) as usize]));
         out.push(char::from(
-            ALPHABET[((first & 0x03) << 4 | second >> 4) as usize],
+            ALPHABET[(((first & 0x03) << 4) | (second >> 4)) as usize],
         ));
         out.push(if chunk.len() > 1 {
-            char::from(ALPHABET[((second & 0x0F) << 2 | third >> 6) as usize])
+            char::from(ALPHABET[(((second & 0x0F) << 2) | (third >> 6)) as usize])
         } else {
             '='
         });

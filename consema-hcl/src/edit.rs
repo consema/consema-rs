@@ -1083,7 +1083,11 @@ fn item_line_end(index: &PieceIndex, from: usize) -> Result<usize, EditFailure> 
         let Some(piece) = index.piece_starting_at(pos) else {
             return Ok(pos);
         };
-        match index.kinds[piece] {
+        // `piece` is in-bounds by construction (piece_starting_at), but
+        // matching the index expression directly trips the 1.85-only
+        // clippy::match_on_vec_items noise lint; bind the kind first.
+        let kind = index.kinds[piece];
+        match kind {
             HclSyntaxKind::Whitespace
             | HclSyntaxKind::LineComment
             | HclSyntaxKind::InlineComment => pos = index.ends[piece],
@@ -1150,7 +1154,11 @@ fn block_brace_positions(
         if start < block_span.0 {
             continue;
         }
-        match index.kinds[position] {
+        // `position` is in-bounds (enumerated from the parallel starts
+        // vector), but matching the index expression directly trips the
+        // 1.85-only clippy::match_on_vec_items noise lint; bind first.
+        let kind = index.kinds[position];
+        match kind {
             HclSyntaxKind::BraceOpen if open_end.is_none() => open_end = Some(index.ends[position]),
             HclSyntaxKind::BraceClose => close_start = Some(start),
             _ => {}

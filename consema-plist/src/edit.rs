@@ -2366,10 +2366,10 @@ fn encode_base64(bytes: &[u8]) -> String {
         let third = u32::from(chunk.get(2).copied().unwrap_or(0));
         out.push(char::from(ALPHABET[(first >> 2) as usize]));
         out.push(char::from(
-            ALPHABET[((first & 0x03) << 4 | second >> 4) as usize],
+            ALPHABET[(((first & 0x03) << 4) | (second >> 4)) as usize],
         ));
         out.push(if chunk.len() > 1 {
-            char::from(ALPHABET[((second & 0x0F) << 2 | third >> 6) as usize])
+            char::from(ALPHABET[(((second & 0x0F) << 2) | (third >> 6)) as usize])
         } else {
             '='
         });

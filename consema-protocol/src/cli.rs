@@ -848,8 +848,11 @@ fn validate_payload_schema(
     }
     let schema = string(first.value(), "$.payload.schema")?;
     // `contains` cannot express the short-lived schema borrow against the
-    // static schema list, so the equal closure stays explicit.
-    #[allow(clippy::manual_contains)]
+    // static schema list, so the equal closure stays explicit. The allow
+    // carries unknown_lints because clippy::manual_contains does not exist
+    // on the MSRV toolchain (1.85) and -D warnings would reject the unknown
+    // name; newer clippy knows it and applies the allow.
+    #[allow(unknown_lints, clippy::manual_contains)]
     if !command
         .payload_schemas()
         .iter()
