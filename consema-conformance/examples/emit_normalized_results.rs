@@ -20,6 +20,16 @@
 //! here; it contains no Rust internal type names. Error texts never
 //! participate in the comparison.
 //!
+//! Since milestone 0.19.0 G5.2 the comparison is bidirectional (roadmap
+//! §16.6 line 1548; docs/go-implementation-plan.md §2.6): the Go test
+//! driver also emits its evidence files for the same input set
+//! (CONSEMA_DIFFERENTIAL_NORMALIZED_GO_DIR), and this example's consume
+//! mode (`--consume <go-evidence-dir>`) reads them, computes the Rust side
+//! with the same code path as the emit mode, and compares the two fact
+//! sets field by field (the Go test's `compareFacts` semantics, mirrored).
+//! Any divergence is reported as case id + field + both values and exits 1;
+//! both directions run in scripts/go-verify-normalized-differential.ps1.
+//!
 //! Why this example exists (justification): the differential harness needs
 //! the Rust SDK's normalized results for a data-driven set of 40+ document
 //! and source cases. No existing entry point executes arbitrary
@@ -29,10 +39,11 @@
 //! no dependency: the case file is parsed with the same consema-json strict
 //! parser the conformance runner uses.
 //!
-//! Usage: `emit_normalized_results <cases.json> <out-dir>`
-//! Exit code 0 = every case emitted; 1 = a case failed; 2 = usage error.
+//! Usage: `emit_normalized_results <cases.json> <out-dir> [--consume <go-evidence-dir>]`
+//! Exit code 0 = every case emitted and (in consume mode) all equal;
+//! 1 = a case failed or a divergence was found; 2 = usage error.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write;
 use std::fs;
@@ -84,9 +95,27 @@ use consema_yaml::{
 fn main() {
     let mut args = env::args().skip(1);
     let (Some(cases_path), Some(out_dir)) = (args.next(), args.next()) else {
-        eprintln!("usage: emit_normalized_results <cases.json> <out-dir>");
+        eprintln!(
+            "usage: emit_normalized_results <cases.json> <out-dir> [--consume <go-evidence-dir>]"
+        );
         std::process::exit(2);
     };
+    let mut consume_dir: Option<PathBuf> = None;
+    while let Some(argument) = args.next() {
+        match argument.as_str() {
+            "--consume" => match args.next() {
+                Some(path) => consume_dir = Some(PathBuf::from(path)),
+                None => {
+                    eprintln!("--consume requires a directory argument");
+                    std::process::exit(2);
+                }
+            },
+            other => {
+                eprintln!("unknown argument {other:?}");
+                std::process::exit(2);
+            }
+        }
+    }
     let out_dir = PathBuf::from(out_dir);
     fs::create_dir_all(&out_dir).expect("create out-dir");
     let text = fs::read_to_string(&cases_path)
@@ -119,9 +148,43 @@ fn main() {
     let cases = object_field(root_object, "cases")
         .and_then(PortableValue::as_sequence)
         .expect("cases field");
+    let known_ids: BTreeSet<String> = cases
+        .iter()
+        .map(|case| {
+            let fields = case.as_object().expect("case object");
+            object_string(fields, "id").expect("case id").to_owned()
+        })
+        .collect();
+
+    // Consume mode (reverse direction): every file in the consumed
+    // directory must correspond to a known case id (the Go test's drift
+    // check, mirrored).
+    if let Some(consume) = &consume_dir {
+        let entries = fs::read_dir(consume).unwrap_or_else(|error| {
+            panic!("cannot read consumed evidence directory {consume:?}: {error}")
+        });
+        for entry in entries {
+            let entry = entry.expect("read_dir entry");
+            if entry.file_type().expect("entry type").is_dir() {
+                continue;
+            }
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let id = name.strip_suffix(".txt").unwrap_or(&name);
+            if !known_ids.contains(id) {
+                eprintln!(
+                    "consumed evidence file {name:?} does not correspond to any case (case file drift?)"
+                );
+                std::process::exit(1);
+            }
+        }
+    }
 
     let mut failures = Vec::new();
     let mut emitted = 0usize;
+    let mut compared_cases = 0usize;
+    let mut differing_cases = 0usize;
+    let mut differences = Vec::new();
     for case in cases {
         let fields = case.as_object().expect("case object");
         let id = object_field(fields, "id")
@@ -162,11 +225,49 @@ fn main() {
         fs::write(out_dir.join(format!("{id}.txt")), text)
             .unwrap_or_else(|error| panic!("case {id}: cannot write evidence file: {error}"));
         emitted += 1;
+        // Consume mode: compare the Go evidence file field by field with
+        // this run's facts (the Go test's compareFacts semantics).
+        if let Some(consume) = &consume_dir {
+            let go_path = consume.join(format!("{id}.txt"));
+            let go_text = match fs::read_to_string(&go_path) {
+                Ok(text) => text,
+                Err(error) => {
+                    differing_cases += 1;
+                    differences.push(format!(
+                        "case {id}: cannot read the Go evidence file: {error}"
+                    ));
+                    continue;
+                }
+            };
+            let field_differences = compare_facts(&id, &go_text, &facts);
+            if field_differences.is_empty() {
+                compared_cases += 1;
+            } else {
+                differing_cases += 1;
+                differences.extend(field_differences);
+            }
+        }
     }
     println!(
         "emit_normalized_results: {emitted} cases emitted into {:?}",
         out_dir
     );
+    if differences.is_empty() && consume_dir.is_some() {
+        println!(
+            "reverse normalized-result differential: {compared_cases}/{} equal",
+            compared_cases + differing_cases
+        );
+    }
+    if !differences.is_empty() {
+        for difference in &differences {
+            eprintln!("{difference}");
+        }
+        eprintln!(
+            "reverse normalized-result differential: {compared_cases}/{} equal",
+            compared_cases + differing_cases
+        );
+        std::process::exit(1);
+    }
     if !failures.is_empty() {
         eprintln!("failed cases: {failures:?}");
         std::process::exit(1);
@@ -210,6 +311,57 @@ type Facts = Vec<(String, String)>;
 
 fn set(facts: &mut Facts, key: impl Into<String>, value: impl Into<String>) {
     facts.push((key.into(), value.into()));
+}
+
+/// Compares the two fact line sets field by field (the Go test's
+/// `compareFacts` semantics, normalized_test.go). `evidence_text` is the
+/// consumed side's evidence file (the Go side in the reverse direction)
+/// and `own` is this run's computed facts; the messages mirror the Go
+/// forward comparison, so both directions report the same shape: case id +
+/// field + both values. Every key must exist on both sides with an equal
+/// value; a missing or extra key is itself a differential failure.
+fn compare_facts(id: &str, evidence_text: &str, own: &Facts) -> Vec<String> {
+    let mut evidence: BTreeMap<String, String> = BTreeMap::new();
+    for line in evidence_text.lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            return vec![format!(
+                "case {id}: Go side emitted malformed fact line {line:?}"
+            )];
+        };
+        if evidence.insert(key.to_owned(), value.to_owned()).is_some() {
+            return vec![format!(
+                "case {id}: Go side emitted duplicate fact key {key:?}"
+            )];
+        }
+    }
+    let mut own_map: BTreeMap<String, String> = BTreeMap::new();
+    for (key, value) in own {
+        if own_map.insert(key.clone(), value.clone()).is_some() {
+            return vec![format!(
+                "case {id}: Rust side emitted duplicate fact key {key:?}"
+            )];
+        }
+    }
+    let mut failures = Vec::new();
+    for (key, go_value) in &evidence {
+        match own_map.get(key) {
+            None => failures.push(format!(
+                "case {id}: field {key}: Rust side has no such field (Go value {go_value:?})"
+            )),
+            Some(rust_value) if rust_value != go_value => failures.push(format!(
+                "case {id}: field {key} differs\n  Go:   {go_value:?}\n  Rust: {rust_value:?}"
+            )),
+            Some(_) => {}
+        }
+    }
+    for (key, rust_value) in &own_map {
+        if !evidence.contains_key(key) {
+            failures.push(format!(
+                "case {id}: field {key}: Go side has no such field (Rust value {rust_value:?})"
+            ));
+        }
+    }
+    failures
 }
 
 /// JSON string escaping (mirrors the Go runner's `escape`).
