@@ -83,6 +83,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 
 /// Bounded retries when the exclusive temporary-file creation collides.
 const TEMP_CREATE_ATTEMPTS: u8 = 16;
@@ -552,9 +553,28 @@ fn write_atomic_with<B: FsBackend>(
 /// real failure with its own classification; any other inspection failure
 /// (e.g. permission denial) is a refusal-worthy condition and classifies
 /// normally.
+///
+/// macOS system-temp carve-out: the walk stops once it reaches the system
+/// temp root, whose ancestors are exempt. On macOS `std::env::temp_dir()`
+/// returns `/var/folders/...` and `/var → /private/var` is a system symlink
+/// sitting in every temp-dir path, so without the carve-out every write
+/// under the system temp tree would be refused. Components strictly inside
+/// the temp tree (below the temp root) are still inspected, so
+/// user-controlled symlink/junction targets and components — including the
+/// probe tests' symlinks and junctions created under the temp dir — are
+/// refused exactly as before; only the system-owned temp root and its
+/// ancestors are exempt, and paths outside the temp root are still walked
+/// to the filesystem root.
 fn refuse_symlink_components<B: FsBackend>(backend: &B, target: &Path) -> Result<(), WriteError> {
     let mut prefix = target.to_path_buf();
     loop {
+        // R-4 macOS system-temp carve-out: the walk reached the temp root —
+        // every component strictly below it has already been inspected, and
+        // the root and its ancestors are system-owned (macOS `/var →
+        // /private/var`).
+        if is_system_temp_prefix(&prefix) {
+            return Ok(());
+        }
         match backend.symlink_metadata(&prefix) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 return Err(WriteError::SymlinkPolicy { target: prefix });
@@ -568,6 +588,22 @@ fn refuse_symlink_components<B: FsBackend>(backend: &B, target: &Path) -> Result
         }
     }
     Ok(())
+}
+
+/// `true` when `prefix` is the system temp root or one of its ancestors —
+/// the exempt region of the R-4 walk (see [`refuse_symlink_components`]).
+/// Both spellings are compared: the raw `std::env::temp_dir()` path (on
+/// macOS `/var/folders/...`, from `$TMPDIR`) and its canonical form
+/// (`/private/var/folders/...`, after resolving the `/var → /private/var`
+/// system symlink). Resolved once per process.
+fn is_system_temp_prefix(prefix: &Path) -> bool {
+    static TEMP_ROOTS: OnceLock<(PathBuf, PathBuf)> = OnceLock::new();
+    let (raw, canonical) = TEMP_ROOTS.get_or_init(|| {
+        let raw = std::env::temp_dir();
+        let canonical = fs::canonicalize(&raw).unwrap_or_else(|_| raw.clone());
+        (raw, canonical)
+    });
+    raw.starts_with(prefix) || canonical.starts_with(prefix)
 }
 
 /// The steps after the temporary file exists, in the frozen order
