@@ -24,7 +24,7 @@
 //! §16.6 line 1548; docs/go-implementation-plan.md §2.6): the Go test
 //! driver also emits its evidence files for the same input set
 //! (CONSEMA_DIFFERENTIAL_NORMALIZED_GO_DIR), and this example's consume
-//! mode (`--consume <go-evidence-dir>`) reads them, computes the Rust side
+//! mode (`--consume <evidence-dir>`) reads them, computes the Rust side
 //! with the same code path as the emit mode, and compares the two fact
 //! sets field by field (the Go test's `compareFacts` semantics, mirrored).
 //! Any divergence is reported as case id + field + both values and exits 1;
@@ -39,7 +39,7 @@
 //! no dependency: the case file is parsed with the same consema-json strict
 //! parser the conformance runner uses.
 //!
-//! Usage: `emit_normalized_results <cases.json> <out-dir> [--consume <go-evidence-dir>]`
+//! Usage: `emit_normalized_results <cases.json> <out-dir> [--consume <evidence-dir>]`
 //! Exit code 0 = every case emitted and (in consume mode) all equal;
 //! 1 = a case failed or a divergence was found; 2 = usage error.
 
@@ -96,7 +96,7 @@ fn main() {
     let mut args = env::args().skip(1);
     let (Some(cases_path), Some(out_dir)) = (args.next(), args.next()) else {
         eprintln!(
-            "usage: emit_normalized_results <cases.json> <out-dir> [--consume <go-evidence-dir>]"
+            "usage: emit_normalized_results <cases.json> <out-dir> [--consume <evidence-dir>]"
         );
         std::process::exit(2);
     };
