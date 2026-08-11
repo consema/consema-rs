@@ -82,8 +82,8 @@ use consema::document::ContentDigest;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Bounded retries when the exclusive temporary-file creation collides.
 const TEMP_CREATE_ATTEMPTS: u8 = 16;
