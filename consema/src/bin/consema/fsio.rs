@@ -1107,7 +1107,7 @@ mod tests {
         fs::create_dir(&real).expect("real dir");
         fs::write(real.join("app.conf"), b"old").expect("seed real file");
         let link_dir = dir.join("link-dir");
-        std::os::unix::fs::symlink_dir(&real, &link_dir).expect("create directory symlink");
+        std::os::unix::fs::symlink(&real, &link_dir).expect("create directory symlink");
 
         // A symlink as the final component of the write path.
         let link_file = dir.join("link-file");
@@ -1139,7 +1139,7 @@ mod tests {
         let real_file = real.join("app.conf");
         fs::write(&real_file, b"old").expect("seed real file");
         let link_dir = dir.join("link-dir");
-        std::os::unix::fs::symlink_dir(&real, &link_dir).expect("create directory symlink");
+        std::os::unix::fs::symlink(&real, &link_dir).expect("create directory symlink");
         let options = WriteOptions {
             follow_symlinks: true,
         };
