@@ -1,19 +1,27 @@
 # Path-based area labels for .github/workflows/labeler.yml (actions/labeler
-# v7 config: label -> list of globs, any-glob-to-any-file semantics, `!`
-# negation supported). Area labels are derived from paths only; `kind:`
-# labels remain the human/PR-template merge gate (pr-labels.yml).
+# v7 config: label -> list of match objects; combinators are AND-ed inside
+# `all`, OR-ed inside `any`, plain lists default to `any`; `!` negation is
+# supported inside a combinator's glob list). Area labels are derived from
+# paths only; `kind:` labels remain the human/PR-template merge gate
+# (pr-labels.yml).
 
 'area: core':
-  - 'consema*/**'
-  - 'conformance/**'
-  - 'Cargo.toml'
-  - 'Cargo.lock'
-  - '!**/*.md'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'consema*/**'
+          - 'conformance/**'
+          - 'Cargo.toml'
+          - 'Cargo.lock'
+          - '!**/*.md'
 
 'area: ci':
-  - '.github/**'
-  - 'scripts/**'
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - 'scripts/**'
 
 'area: docs':
-  - '**/*.md'
-  - 'docs/**'
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'docs/**'
