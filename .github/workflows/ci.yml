@@ -409,6 +409,30 @@ jobs:
           }
           echo "README version consistent with Cargo.toml: $version"
 
+  # SDK examples gate: consema/examples/sdk_chain.rs is the committed
+  # five-language SDK chain example (parse -> native query -> best-exact
+  # projection -> semantic edit -> canonical materialization -> TOML
+  # conversion; language-neutral contract reference: consema repository
+  # docs/cookbook.md). It must stay compilable. The doc-example gate
+  # (README/crate-doc examples) already runs inside the test job
+  # (`cargo test --workspace` runs doctests by default), so this job only
+  # checks the example target. The example is a pure SDK chain (no
+  # conformance data), so no provision step is needed.
+  examples:
+    name: examples (cargo check sdk_chain)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: cargo check -p consema --example sdk_chain --locked
+        run: cargo check -p consema --example sdk_chain --locked
+
   # Alls-green aggregate gate (tokio/pydantic pattern): `check (all gates
   # green)` is the SINGLE required check for branch protection on this
   # repository; every other job stays non-required. `if: always()` is
@@ -420,7 +444,7 @@ jobs:
   check:
     name: check (all gates green)
     if: always()
-    needs: [lint, test, coverage, msrv, conformance, deny, audit, semver, package, check-version-consistency]
+    needs: [lint, test, coverage, msrv, conformance, deny, audit, semver, package, check-version-consistency, examples]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
