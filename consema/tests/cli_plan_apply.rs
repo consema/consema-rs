@@ -20,6 +20,8 @@ use consema::protocol::{
     BatchPlanMessage, BatchResultFileStatus, BatchResultMessage, CliCommand, CliOutputMessage,
     ExitClass, ProtocolLimits,
 };
+#[cfg(unix)]
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::process::Stdio;
@@ -769,7 +771,6 @@ fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
     );
     let mut stdout = String::new();
     let mut stderr = String::new();
-    use std::io::Read as _;
     child
         .stdout
         .take()
