@@ -13,3 +13,14 @@ unicode-id-start.workspace = true
 
 [lints]
 workspace = true
+
+[package.metadata.cargo-semver-checks.lints]
+# reason: v0.8.0 后 EditFailure/ProjectionFailure 的有意 API 演进——M2-F1
+# 安全修复"Recovered 文档拒绝编辑/投影"新增 RecoveredDocument variant
+# （edit.rs:262、projection.rs:330），引入 commit 738f178（= monorepo
+# 094f5d1，"Harden and gate the Rust implementation (0.13.0)"），G5.5
+# API 稳定性审查已确认可接受。cargo-semver-checks 0.50.0 无逐 variant
+# allowlist（不存在 semver-checks.toml，仅支持 lint 级覆盖），故本 crate 的
+# enum_variant_added 整体豁免；今后本 crate 新增 variant 同样会被豁免，
+# 须在 API 审查中留意。
+enum_variant_added = "allow"
