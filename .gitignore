@@ -2,3 +2,10 @@
 *.pyc
 __pycache__/
 .venv/
+
+# IDE / OS artifacts
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

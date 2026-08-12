@@ -1,5 +1,9 @@
 # Consema Rust workspace（consema-rs）
 
+![CI](https://img.shields.io/github/actions/workflow/status/consema/consema-rs/ci.yml?branch=main)
+![Version](https://img.shields.io/github/v/tag/consema/consema-rs)
+![License](https://img.shields.io/github/license/consema/consema-rs)
+
 Consema 语言中立契约（RFC 0016：portable value、无损文档、类型化查询、投影、
 materialization 与结构编辑）的 **Rust 参考实现**。
 
