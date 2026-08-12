@@ -17,11 +17,11 @@ use consema_protocol::query_failure_code;
 use consema_yaml::{
     EditTransactionBuilder, Fidelity, GraphMaterializationResult, GraphProjectedLocation,
     GraphProjectionLimits, GraphProjectionRequest, MappingPolicy, ProjectionEventKind,
-    ProvenanceRelation, RepresentationPolicy, SharingPolicy, TagPolicy, ValueProjectionRequest,
-    ValueProjectionResult, YamlMatch, YamlNodeKind, YamlProfile, YamlScalarKind, YamlSyntaxKind,
-    edit_failure_code, execute_yaml_query, execute_yaml_syntax_query,
-    graph_projection_failure_code, materialize_graph, materialize_value, parse,
-    value_projection_failure_code,
+    ProvenanceRelation, RepresentationPolicy, SharingPolicy, TagPolicy, ValueProjectionLimits,
+    ValueProjectionRequest, ValueProjectionResult, YamlMatch, YamlNodeKind, YamlProfile,
+    YamlScalarKind, YamlSyntaxKind, edit_failure_code, execute_yaml_query,
+    execute_yaml_syntax_query, graph_projection_failure_code, materialize_graph, materialize_value,
+    parse, value_projection_failure_code,
 };
 
 use super::{ConformanceReport, VectorCase, object_field};
@@ -141,7 +141,9 @@ fn run_case(case: &VectorCase<'_>) -> Result<(), String> {
         "stream.empty" | "stream.multi-document" => stream_facts(case),
         "syntax.styles-and-trivia" => syntax_facts(case),
         "native.arbitrary-duplicate-mapping" => mapping_facts(case),
-        "formation.undefined-alias" => formation_rejection(case),
+        "formation.undefined-alias"
+        | "formation.undefined-anchor-block"
+        | "formation.version-directive-rejection" => formation_rejection(case),
         "graph.shared-cycle" => graph_facts(case),
         "query.mapping-entries" | "query.alias-target" => native_query(case),
         "query.syntax-comments" => syntax_query(case),
@@ -158,7 +160,9 @@ fn run_case(case: &VectorCase<'_>) -> Result<(), String> {
         "edit.structural-insert" => edit_structural(case),
         "edit.anchor-dependency" => edit_anchor_dependency(case),
         "resource.parse-source-bytes" => parse_limit(case),
+        "resource.parse-nesting-depth" => parse_depth_limit(case),
         "resource.graph-provenance" => graph_provenance_limit(case),
+        "projection.alias-amplification" => projection_amplification_limit(case),
         "regression.plain-property-characters" => plain_property_regression(case),
         _ => Err("runner does not recognize published YAML case".to_owned()),
     }
@@ -653,6 +657,43 @@ fn parse_limit(case: &VectorCase<'_>) -> Result<(), String> {
     )
 }
 
+fn parse_depth_limit(case: &VectorCase<'_>) -> Result<(), String> {
+    let error = parse(
+        input_string(case, "source")?.as_bytes(),
+        profile(case)?,
+        ParseLimits {
+            max_nesting_depth: input_usize(case, "max_nesting_depth")?,
+            ..ParseLimits::default()
+        },
+    )
+    .unwrap_err();
+    require(
+        error.diagnostics().first().map(|item| item.code.as_str())
+            == Some(expected_string(case, "code")?),
+        format!("parse depth limit differed: {error:?}"),
+    )
+}
+
+/// The alias-amplification budget (`max_alias_amplification_ratio`, RFC 0007
+/// §9): a zero budget is a hard denial of any value projection before any
+/// node is visited (projection.rs:564-567).
+fn projection_amplification_limit(case: &VectorCase<'_>) -> Result<(), String> {
+    let document = parse_case(case)?;
+    let result = document.project_value(
+        ValueProjectionRequest::best_exact_v1().with_limits(ValueProjectionLimits {
+            max_amplification_ratio: input_usize(case, "max_amplification_ratio")?,
+            ..ValueProjectionLimits::default()
+        }),
+    );
+    let ValueProjectionResult::Failed(failure) = result else {
+        return Err("projection unexpectedly completed".to_owned());
+    };
+    require(
+        value_projection_failure_code(&failure) == expected_string(case, "code")?,
+        format!("projection amplification differed: {failure:?}"),
+    )
+}
+
 fn graph_provenance_limit(case: &VectorCase<'_>) -> Result<(), String> {
     let document = parse_case(case)?;
     let error = document
@@ -912,7 +953,7 @@ mod tests {
     fn published_yaml_v1_suite_is_conformant() {
         let report = run_yaml_v1();
         assert!(report.is_conformant(), "{report:#?}");
-        assert_eq!(report.passed.len(), 27);
+        assert_eq!(report.passed.len(), 31);
     }
 
     #[test]

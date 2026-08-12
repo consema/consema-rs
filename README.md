@@ -41,7 +41,7 @@ MSRV 1.85（workspace `rust-version`；CI msrv job 真实验证）。
 
 ## Conformance
 
-- 18 套语言无关 conformance suite 共 **508/508 cases**，通过 `include_str!` /
+- 18 套语言无关 conformance suite 共 **519/519 cases**，通过 `include_str!` /
   `include_bytes!` 编译进 `consema-conformance`（lib、examples、tests）。
   单独运行：`cargo test -p consema-conformance --locked`。
 - `conformance/` 是从规范仓（consema）vendored 的快照副本（编译期 include

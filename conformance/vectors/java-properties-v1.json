@@ -147,6 +147,21 @@
       "id": "registry.frozen-five-operation-surface", "capability": "java-properties.edit@1",
       "input": {"profiles": ["java-properties.reader@1", "java-properties.latin1@1"]},
       "expected": {"operations": ["java-properties.edit.insert-property@1", "java-properties.edit.remove-property@1", "java-properties.edit.rename-property@1", "java-properties.edit.replace-literal-value@1", "java-properties.edit.replace-semantic-value@1"], "supported": 5}
+    },
+    {
+      "id": "formation.malformed-escape-in-key", "capability": "java-properties.formation@1",
+      "input": {"profile": "java-properties.reader@1", "source": "\\u12G4=value\n"},
+      "expected": {"formation": "Recovered", "properties": 0, "error_lines": 1, "code": "java-properties.parse.malformed-unicode-escape@1"}
+    },
+    {
+      "id": "formation.invalid-encoding-sequence", "capability": "java-properties.formation@1",
+      "input": {"profile": "java-properties.reader@1", "encoding": "Utf8", "source_hex": "6b3d76ff0a"},
+      "expected": {"code": "core.source.invalid-sequence@1"}
+    },
+    {
+      "id": "formation.bom-conflict", "capability": "java-properties.formation@1",
+      "input": {"profile": "java-properties.reader@1", "encoding": "Utf8", "source_hex": "fffe6b003d007600"},
+      "expected": {"code": "core.source.encoding-conflict@1"}
     }
   ]
 }

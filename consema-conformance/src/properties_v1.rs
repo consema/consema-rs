@@ -118,6 +118,9 @@ fn run_case(case: &VectorCase<'_>) -> Result<(), String> {
                 id,
                 "formation.malformed-unicode-recovery-matrix"
                     | "formation.recovery-never-publishes-partial-operation"
+                    | "formation.malformed-escape-in-key"
+                    | "formation.invalid-encoding-sequence"
+                    | "formation.bom-conflict"
             ) =>
         {
             "java-properties.document@1"
@@ -146,6 +149,10 @@ fn run_case(case: &VectorCase<'_>) -> Result<(), String> {
         "formation.reader-explicit-encodings" => formation_reader_encodings(case),
         "formation.latin1-byte-and-bom-content" => formation_latin1(case),
         "formation.recovery-never-publishes-partial-operation" => recovered_is_atomic(case),
+        "formation.malformed-escape-in-key" => formation_malformed_escape_in_key(case),
+        "formation.invalid-encoding-sequence" | "formation.bom-conflict" => {
+            formation_fatal_encoding(case)
+        }
         "query.native-duplicates-and-escape-ownership" => native_query(case),
         "query.logical-and-syntax-order" => logical_syntax_query(case),
         "query.validation-limit-cancellation" => query_failures(case),
@@ -322,6 +329,37 @@ fn formation_recovery_matrix(case: &VectorCase<'_>) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// One malformed `\uXXXX` escape in the KEY position: the logical line is
+/// recovered without a partial property and the error line carries the
+/// family parse code (parser.rs:626-666).
+fn formation_malformed_escape_in_key(case: &VectorCase<'_>) -> Result<(), String> {
+    let document = parse_case(case)?;
+    require(
+        status_name(document.formation_status()) == expected_string(case, "formation")?
+            && document.properties().len() == expected_usize(case, "properties")?
+            && document.error_lines().len() == expected_usize(case, "error_lines")?
+            && document.error_lines().first().map(|line| line.code().as_ref())
+                == Some(expected_string(case, "code")?),
+        "malformed escape in key facts differed",
+    )
+}
+
+/// One fatal encoding failure of the Reader profile: bytes that cannot be
+/// decoded under the explicit encoding (`core.source.invalid-sequence@1`) or
+/// a BOM that contradicts it (`core.source.encoding-conflict@1`) fail the
+/// whole parse before any document forms (parser.rs:24-33).
+fn formation_fatal_encoding(case: &VectorCase<'_>) -> Result<(), String> {
+    let encoding = source_encoding(input_string(case, "encoding")?)?;
+    let bytes = decode_hex(input_string(case, "source_hex")?)?;
+    let failure = properties::parse_reader(bytes, encoding, PropertiesParseLimits::default())
+        .unwrap_err();
+    require(
+        failure.diagnostics().first().map(|item| item.code.as_str())
+            == Some(expected_string(case, "code")?),
+        format!("fatal encoding failure differed: {failure:?}"),
+    )
 }
 
 fn formation_reader_encodings(case: &VectorCase<'_>) -> Result<(), String> {
@@ -1466,7 +1504,7 @@ mod tests {
     fn published_properties_v1_suite_is_conformant() {
         let report = run_properties_v1();
         assert!(report.is_conformant(), "{report:#?}");
-        assert_eq!(report.passed.len(), 22);
+        assert_eq!(report.passed.len(), 25);
     }
 
     #[test]

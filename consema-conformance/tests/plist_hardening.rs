@@ -323,7 +323,7 @@ fn recovered_documents_keep_exhaustive_coverage_and_diagnostics() {
 fn published_plist_vector_suite_is_conformant() {
     let report = consema_conformance::run_plist_v1();
     assert!(report.is_conformant(), "{report:#?}");
-    assert_eq!(report.passed.len(), 45);
+    assert_eq!(report.passed.len(), 49);
 }
 
 fn assert_send_sync<T: Send + Sync>() {}

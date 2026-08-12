@@ -136,6 +136,26 @@
       "id": "regression.plain-property-characters", "capability": "yaml.lossless-syntax@1",
       "input": {"profile": "yaml.1.2-core@1", "source": "---\nk:#foo\n &a !t s\n"},
       "expected": {"canonical": "k:#foo &a !t s"}
+    },
+    {
+      "id": "formation.undefined-anchor-block", "capability": "yaml.formation@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "k: *missing\n"},
+      "expected": {"code": "yaml.parse.syntax@1"}
+    },
+    {
+      "id": "formation.version-directive-rejection", "capability": "yaml.formation@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "%YAML 1.1\n---\nyes\n"},
+      "expected": {"code": "yaml.profile.version-directive@1"}
+    },
+    {
+      "id": "resource.parse-nesting-depth", "capability": "yaml.formation@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "[[x]]", "max_nesting_depth": 1},
+      "expected": {"code": "core.parse.resource-limit@1"}
+    },
+    {
+      "id": "projection.alias-amplification", "capability": "yaml.projection.best-exact-value@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "- &x [one, two]\n- [*x, *x]\n", "max_amplification_ratio": 0},
+      "expected": {"code": "yaml.projection.resource-limit@1"}
     }
   ]
 }

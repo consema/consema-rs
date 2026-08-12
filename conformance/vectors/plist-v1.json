@@ -1638,6 +1638,66 @@
           "b"
         ]
       }
+    },
+    {
+      "id": "plist.limit.container-depth",
+      "capability": "plist.limit@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c6973743030a101a102a10308080a0c0e000000000000010100000000000000040000000000000000000000000000000f",
+        "limits": {
+          "max_container_depth": 2
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "plist.limit.container-depth@1"
+      }
+    },
+    {
+      "id": "plist.limit.object-count",
+      "capability": "plist.limit@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c697374303008080809000000000000010100000000000000020000000000000000000000000000000a",
+        "limits": {
+          "max_object_count": 1
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "plist.limit.object-count@1"
+      }
+    },
+    {
+      "id": "plist.limit.string-code-units",
+      "capability": "plist.limit@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c69737430305361626308000000000000010100000000000000010000000000000000000000000000000c",
+        "limits": {
+          "max_string_code_units": 2
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "plist.limit.string-code-units@1"
+      }
+    },
+    {
+      "id": "plist.limit.data-bytes",
+      "capability": "plist.limit@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c697374303042010208000000000000010100000000000000010000000000000000000000000000000b",
+        "limits": {
+          "max_data_bytes": 1
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "plist.limit.data-bytes@1"
+      }
     }
   ]
 }

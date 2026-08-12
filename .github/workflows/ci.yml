@@ -168,14 +168,14 @@ jobs:
         run: cargo test --workspace --locked
 
   # The repository freezes 18 language-neutral conformance suites with
-  # 508/508 cases (README.md "18 套语言无关 conformance suite 共 508/508
+  # 519/519 cases (README.md "18 套语言无关 conformance suite 共 519/519
   # cases"). The explicit job runs the crate's full test set (lib suites +
   # per-format hardening/fixtures/publication integration tests) and then
   # asserts the frozen counts from the vector files so a vector added or
   # removed without updating the record fails CI. The suites are the vendored
   # snapshot in conformance/ (authority: the consema repository).
   conformance:
-    name: conformance + hardening + fixtures (18 suites / 508 cases)
+    name: conformance + hardening + fixtures (18 suites / 519 cases)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -203,8 +203,8 @@ jobs:
             $suites += 1
             $cases += @($vector.cases).Count
           }
-          if ($suites -ne 18 -or $cases -ne 508) {
-            throw "suite-count mismatch: expected 18 suites / 508 cases, got $suites suites / $cases cases"
+          if ($suites -ne 18 -or $cases -ne 519) {
+            throw "suite-count mismatch: expected 18 suites / 519 cases, got $suites suites / $cases cases"
           }
           Write-Output "suite-count: $suites suites, $cases cases"
 

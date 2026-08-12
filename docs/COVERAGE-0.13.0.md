@@ -88,7 +88,7 @@ coverage.crate consema-yaml regions=85.23 functions=88.21 lines=87.36
 ## Coverage 政策（路线图 §18.3 落地）
 
 1. **Coverage 不替代语义证明。** 本报告的百分比只是回归探测器。质量证据的权威
-   来源是 conformance 508/508 向量、byte-exact round-trip 证明、hardening 测试、
+   来源是 conformance 519/519 向量、byte-exact round-trip 证明、hardening 测试、
    差分 oracle、fuzz（0.13.0 M2/M8）与 API 审查（M4）；任何发布记录都不得把单一
    coverage 百分比当作质量证明引用。本报告取代 CHANGELOG.md:176 的一次性数字，
    也不再制造新的单次数字。

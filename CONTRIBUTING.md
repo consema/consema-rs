@@ -19,7 +19,7 @@ Consema 六仓拆分的 Rust 仓：本仓承载 Rust 参考实现（15 个 crate
 ```text
 cargo build --workspace
 cargo test --workspace
-cargo test -p consema-conformance --locked   # 18 套语言无关 suite / 508 cases
+cargo test -p consema-conformance --locked   # 18 套语言无关 suite / 519 cases
 ```
 
 lint 与 CI 一致：

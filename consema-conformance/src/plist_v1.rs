@@ -111,6 +111,7 @@ fn run_case(case: &PortableValue) -> Result<(), String> {
     match capability {
         "plist.xml-formation@1" => run_xml_formation(case),
         "plist.binary-formation@1" => run_binary_formation(case),
+        "plist.limit@1" => run_limit(case),
         "plist.query@1" => run_query(case),
         "plist.projection@1" => run_projection(case),
         "plist.materialization@1" => run_materialization(case),
@@ -1064,6 +1065,59 @@ fn run_binary_formation_samples(
             ensure(extended == count_is_object)
                 .map_err(|_| "extended_count_is_object mismatch".to_owned())?;
         }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Limit
+// ---------------------------------------------------------------------------
+
+/// Reads the `input.limits` object into a `PlistParseLimits`; every vector
+/// limit name is the `PlistParseLimits` field spelling (RFC 0013 §11).
+fn plist_limits(value: &PortableValue) -> Result<PlistParseLimits, String> {
+    let mut limits = PlistParseLimits::default();
+    if let Some(entries) = input_field(value, "limits").and_then(PortableValue::as_object) {
+        for entry in entries {
+            let name = entry.key();
+            let value = entry
+                .value()
+                .as_integer()
+                .and_then(BigInteger::to_usize)
+                .ok_or_else(|| format!("limit {name} must be a non-negative integer"))?;
+            match name {
+                "max_container_depth" => limits.max_container_depth = value,
+                "max_object_count" => limits.max_object_count = value,
+                "max_string_code_units" => limits.max_string_code_units = value,
+                "max_data_bytes" => limits.max_data_bytes = value,
+                other => return Err(format!("unknown plist limit {other}")),
+            }
+        }
+    }
+    Ok(limits)
+}
+
+/// One `plist.limit@1` case: the parse must fail fatally under the declared
+/// limits and the failure must carry the expected `plist.limit.*@1` code.
+fn run_limit(case: &PortableValue) -> Result<(), String> {
+    let expected = object_value_field(case, "expected").ok_or("missing expected")?;
+    let profile = profile_of(case)?;
+    let bytes = source_bytes(case, profile)?;
+    let failure = parse_plist(
+        bytes,
+        profile,
+        PlistEncodingSelection::ProfileDefault,
+        plist_limits(case)?,
+    )
+    .err()
+    .ok_or("parse must fail fatally under the declared limits")?;
+    if let Some(status) = expected_string_field(expected, "status") {
+        ensure(status == "FatalFormationFailure")
+            .map_err(|_| format!("limit case status must be FatalFormationFailure, got {status}"))?;
+    }
+    if let Some(diagnostic) = expected_string_field(expected, "diagnostic") {
+        ensure(failure.diagnostics().iter().any(|d| d.code == diagnostic))
+            .map_err(|_| format!("diagnostic {diagnostic} not found"))?;
     }
     Ok(())
 }
@@ -2466,7 +2520,7 @@ mod tests {
     fn plist_v1_suite_passes_fully() {
         let report = run_plist_v1();
         assert!(report.is_conformant(), "{report:#?}");
-        assert_eq!(report.passed.len(), 45);
+        assert_eq!(report.passed.len(), 49);
     }
 
     #[test]
