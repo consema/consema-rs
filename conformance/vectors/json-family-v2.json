@@ -1,0 +1,204 @@
+{
+  "suite": "consema.json-family.conformance@2",
+  "semantic_model": "core.semantic-model@4",
+  "cases": [
+    {
+      "id": "json5.parse.full-surface",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "\ufeff{ // lead\nunquoted:'value',\\u0061:.5,hex:+0X10,trail:1.,exp:1.e+2,truth:true,nil:null,inf:-Infinity,nan:+NaN,}"},
+      "expected": {"formation": "Complete", "root_kind": "Object", "member_names": ["unquoted", "a", "hex", "trail", "exp", "truth", "nil", "inf", "nan"], "member_kinds": ["String", "Decimal", "Integer", "Decimal", "Decimal", "Boolean", "Null", "BinaryFloat64", "BinaryFloat64"], "syntax_contains": ["Bom", "LineComment", "Identifier"]}
+    },
+    {
+      "id": "json5.parse.identifiers",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "{$_:1,while:2,true:3,π:4,\\u0061:5,a‌:6,a‍:7}"},
+      "expected": {"formation": "Complete", "root_kind": "Object", "member_names": ["$_", "while", "true", "π", "a", "a‌", "a‍"], "syntax_contains": ["Identifier"]}
+    },
+    {
+      "id": "json5.parse.string-extensions",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "['single','\\x41','\\v','\\0','\\q','line\\\nnext','\\uD83D\\uDE00']"},
+      "expected": {"formation": "Complete", "root_kind": "Array", "element_kinds": ["String", "String", "String", "String", "String", "String", "String"], "element_strings": ["single", "A", "\u000b", "\u0000", "q", "linenext", "😀"]}
+    },
+    {
+      "id": "json5.parse.extended-whitespace-comments",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "\u00a0\u1680// line\u2028[1,/* block */2,]\u3000"},
+      "expected": {"formation": "Complete", "root_kind": "Array", "syntax_contains": ["Whitespace", "LineComment", "BlockComment"]}
+    },
+    {
+      "id": "json5.parse.unescaped-separator-warning",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "'a\u2028b'"},
+      "expected": {"formation": "Complete", "root_kind": "String", "diagnostic_contains": ["json5.string.unescaped-line-separator@1"]}
+    },
+    {
+      "id": "json5.reject.invalid-escaped-identifier",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "{\\u0030bad:1}"},
+      "expected": {"formation": "Recovered", "diagnostic_contains": ["json5.syntax.invalid-identifier@1"]}
+    },
+    {
+      "id": "json5.reject.leading-zero-decimal",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "01"},
+      "expected": {"formation": "Recovered", "diagnostic_contains": ["json.syntax.invalid-number@1"]}
+    },
+    {
+      "id": "json5.reject.empty-hex",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "0x"},
+      "expected": {"formation": "Recovered", "diagnostic_contains": ["json.syntax.invalid-number@1"]}
+    },
+    {
+      "id": "json5.reject.decimal-string-escape",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "'\\1'"},
+      "expected": {"formation": "Recovered", "diagnostic_contains": ["json.syntax.invalid-string-escape@1"]}
+    },
+    {
+      "id": "json5.reject.isolated-surrogate",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "'\\uD800'"},
+      "expected": {"formation": "Recovered", "diagnostic_contains": ["json.syntax.invalid-string-escape@1"]}
+    },
+    {
+      "id": "json5.reject.unterminated-comment",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "1/* open"},
+      "expected": {"formation": "Recovered", "diagnostic_contains": ["json.syntax.unterminated-block-comment@1"]}
+    },
+    {
+      "id": "json.strict.reject-json5-surface",
+      "capability": "json.strict@1",
+      "input": {"action": "parse", "profile": "json.strict@1", "source": "// note\n{\"a\":1,}"},
+      "expected": {"formation": "Recovered", "root_kind": "Object", "diagnostic_contains": ["json.strict.comment-not-allowed@1", "json.strict.trailing-comma@1"]}
+    },
+    {
+      "id": "jsonc.complete-shared-surface",
+      "capability": "jsonc.bounded@1",
+      "input": {"action": "parse", "profile": "jsonc.bounded@1", "source": "// note\n{\"a\":1,}"},
+      "expected": {"formation": "Complete", "root_kind": "Object"}
+    },
+    {
+      "id": "json5.complete-jsonc-surface",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "// note\n{\"a\":1,}"},
+      "expected": {"formation": "Complete", "root_kind": "Object"}
+    },
+    {
+      "id": "json5.number.positive-infinity",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "+Infinity"},
+      "expected": {"formation": "Complete", "root_kind": "BinaryFloat64", "root_bits": "7ff0000000000000"}
+    },
+    {
+      "id": "json5.number.negative-nan",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "-NaN"},
+      "expected": {"formation": "Complete", "root_kind": "BinaryFloat64", "root_bits": "fff8000000000000"}
+    },
+    {
+      "id": "json5.number.huge-hex-exact",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "0xFFFFFFFFFFFFFFFFFFFFFFFF"},
+      "expected": {"formation": "Complete", "root_kind": "Integer", "root_integer": "79228162514264337593543950335"}
+    },
+    {
+      "id": "json5.number.leading-trailing-exact",
+      "capability": "json5.standard@1",
+      "input": {"action": "parse", "profile": "json5.standard@1", "source": "[.5,1.,1.e2]"},
+      "expected": {"formation": "Complete", "root_kind": "Array", "element_kinds": ["Decimal", "Decimal", "Decimal"], "element_decimals": [["5", "-1"], ["1", "0"], ["1", "2"]]}
+    },
+    {
+      "id": "json5.query.syntax-v2-identifier",
+      "capability": "json.lossless-syntax-query@2",
+      "input": {"action": "syntax-query", "source": "{key:1,true:2}", "kind": "Identifier"},
+      "expected": {"texts": ["key", "true"], "v1_rejected": true}
+    },
+    {
+      "id": "json5.query.native-v2-binary",
+      "capability": "json.native-semantic-query@2",
+      "input": {"action": "native-query", "source": "-Infinity"},
+      "expected": {"kind": "BinaryFloat64", "v1_rejected": true}
+    },
+    {
+      "id": "json5.projection.duplicates-nonfinite",
+      "capability": "json5.projection.best-exact-core@1",
+      "input": {"action": "project", "source": "{a:Infinity,a:-NaN}", "target": "json5-best-exact"},
+      "expected": {"complete": true, "kind": "EntryMapping", "binary_bits": ["7ff0000000000000", "fff8000000000000"]}
+    },
+    {
+      "id": "json5.projection.old-target-rejected",
+      "capability": "json.projection.best-exact-core@1",
+      "input": {"action": "project", "source": "{a:1}", "target": "json-best-exact"},
+      "expected": {"complete": false, "code": "core.projection.target-not-applicable@1"}
+    },
+    {
+      "id": "json5.materialize.canonical-specials",
+      "capability": "json5.canonical-compact@1",
+      "input": {"action": "materialize", "profile": "json5.standard@1", "style": "json5.canonical-compact", "values": [{"bits": "7ff0000000000000"}, {"bits": "fff0000000000000"}, {"bits": "7ff8000000000000"}, {"bits": "fff8000000000000"}, {"string": "a\u2028b"}]},
+      "expected": {"output": "[Infinity,-Infinity,NaN,-NaN,\"a\\u2028b\"]"}
+    },
+    {
+      "id": "json5.materialize.reject-finite-binary",
+      "capability": "json5.canonical-compact@1",
+      "input": {"action": "materialize", "profile": "json5.standard@1", "style": "json5.canonical-compact", "values": [{"bits": "0000000000000000"}]},
+      "expected": {"failure": "Unrepresentable"}
+    },
+    {
+      "id": "json5.materialize.reject-profile-style-mismatch",
+      "capability": "json5.canonical-compact@1",
+      "input": {"action": "materialize", "profile": "json5.standard@1", "style": "json.canonical-compact", "values": [{"null": true}]},
+      "expected": {"failure": "UnsupportedStyle"}
+    },
+    {
+      "id": "json5.convert.finite-to-strict",
+      "capability": "core.conversion@1",
+      "input": {"action": "convert", "source_profile": "json5.standard@1", "source": "{service:{port:8080,},}", "target_profile": "json.strict@1", "style": "json.canonical-compact"},
+      "expected": {"output": "{\"service\":{\"port\":8080}}", "fidelity": "Exact"}
+    },
+    {
+      "id": "json5.convert.nonfinite-to-strict-fails",
+      "capability": "core.conversion@1",
+      "input": {"action": "convert", "source_profile": "json5.standard@1", "source": "Infinity", "target_profile": "json.strict@1", "style": "json.canonical-compact"},
+      "expected": {"failure": "Unrepresentable"}
+    },
+    {
+      "id": "json5.convert.strict-to-json5",
+      "capability": "core.conversion@1",
+      "input": {"action": "convert", "source_profile": "json.strict@1", "source": "{\"a\":1}", "target_profile": "json5.standard@1", "style": "json5.canonical-compact"},
+      "expected": {"output": "{\"a\":1}", "fidelity": "Exact"}
+    },
+    {
+      "id": "json5.edit.move-member",
+      "capability": "json.edit.move-member@1",
+      "input": {"action": "move-member", "profile": "json5.standard@1", "source": "{ /*before*/ a:1, /*stay*/ b:2, c:3, }", "target_path": [1], "placement": "start"},
+      "expected": {"output": "{ /*before*/ b:2,a:1, /*stay*/  c:3, }", "patch_equal": true, "proof_valid": true}
+    },
+    {
+      "id": "json5.edit.move-cross-object-rejected",
+      "capability": "json.edit.move-member@1",
+      "input": {"action": "move-member", "profile": "json5.standard@1", "source": "{left:{a:1},right:{b:2}}", "target_path": [0, 0], "placement": "before", "anchor_path": [1, 0]},
+      "expected": {"failure": "TargetNotFound"}
+    },
+    {
+      "id": "json5.edit.preserve-scalars",
+      "capability": "json.edit.replace-scalar-semantic@1",
+      "input": {"action": "edit-scalars", "source": "{hex:+0X0f,point:+.50,string:'a\\x20\\v',nf:+Infinity}", "replacements": [{"ordinal": 0, "integer": "16"}, {"ordinal": 1, "decimal_coefficient": "75", "decimal_exponent": "-2"}, {"ordinal": 2, "string": "a \u000b"}, {"ordinal": 3, "bits": "7ff8000000000000"}]},
+      "expected": {"output": "{hex:+0X10,point:+.75,string:'a\\x20\\v',nf:+NaN}"}
+    },
+    {
+      "id": "protocol.registry.semantic-model-v4",
+      "capability": "core.registry-manifest@1",
+      "input": {"action": "registry-v4"},
+      "expected": {"contract_count": 25, "error_code_count": 92, "v3_error_code_count": 90, "new_code": "json5.syntax.invalid-identifier@1"}
+    },
+    {
+      "id": "json5.security.depth-limit",
+      "capability": "core.parse.limits@1",
+      "input": {"action": "parse-limit", "source": "[[[[0]]]]", "max_depth": 2},
+      "expected": {"fatal": true}
+    }
+  ]
+}

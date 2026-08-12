@@ -1,0 +1,321 @@
+{
+  "suite": "consema.plist.macos-differential@1",
+  "recorded_at": "2026-08-07",
+  "authority": {
+    "specification": "Apple Foundation PropertyListSerialization and plutil (RFC 0013 §13)",
+    "specification_url": "https://developer.apple.com/documentation/foundation/propertylistserialization",
+    "distribution": "macOS with Xcode Command Line Tools",
+    "oracle_platform": "macOS 26 (Tahoe), product version 26.5",
+    "oracle_platform_url": "https://developer.apple.com/xcode/system-requirements",
+    "toolchain": "Xcode 26.6 with Swift 6.3 (6.3.3)",
+    "toolchain_url": "https://developer.apple.com/documentation/xcode-release-notes/xcode-26-release-notes",
+    "note": "runtime pins follow the repository oracle 体例 (conformance/oracles/java-properties-v1/README.md: the manifest is frozen after the adapter is executed on the authoritative runtime). The macOS-leg golden outputs (converted-byte digests) are enforced as plutil-vs-Swift-driver byte identity plus reparse and value equality at runtime; byte-level golden digests are frozen by the first pinned-macOS run and must be updated together with the runtime pins only when the pinned toolchain changes."
+  },
+  "runtime": {
+    "macos.product_version": "26.5",
+    "xcode.version": "26.6",
+    "swift.version": "6.3.3",
+    "windows_build": "10.0.26200.0"
+  },
+  "driver": {
+    "source": "scripts/oracles/PropertyListOracle.swift",
+    "source_sha256": "c421da6a6869dc52f77ec48838339815a6bd2e848de1fbdde5ce80da9d2eec7e",
+    "compile": "swiftc -O -warnings-as-errors scripts/oracles/PropertyListOracle.swift -o <bin>",
+    "invoke_lint": "PropertyListOracle lint <input>",
+    "invoke_convert": "PropertyListOracle convert <xml1|binary1> <input> <output>",
+    "invoke_values": "PropertyListOracle values <input>",
+    "transport": "ASCII TSV; lowercase UTF-8 hex for strings, lowercase hex for bytes and IEEE 754 bit patterns; deterministic value dump (dictionary entries sorted by hex key, arrays in source order)"
+  },
+  "plutil_invocations": [
+    "plutil -lint <input>",
+    "plutil -convert xml1 -o <output> <input>",
+    "plutil -convert binary1 -o <output> <input>",
+    "plutil -p <input>"
+  ],
+  "plistlib": {
+    "role": "secondary structural cross-check only; never the semantic authority (RFC 0013 §13; plan §6.3)",
+    "python": {
+      "python.implementation": "CPython",
+      "python.version": "3.14.6",
+      "python.compiler": "MSC v.1944 64 bit (AMD64)",
+      "os.name": "Windows",
+      "os.release": "11",
+      "os.machine": "AMD64"
+    },
+    "package": {
+      "name": "python-3.14.6-embeddable-amd64.zip",
+      "url": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embeddable-amd64.zip",
+      "sha256": "c3a89aa7ead530bcac4729f3db7d000fbadb6ca7aa0461c2841867172aa0752a"
+    },
+    "adapter": {
+      "embedded_in": "scripts/run-plistlib-oracle.ps1",
+      "embedded_sha256": "79e7df6eae87595e22db6b7f5ed0d26e47d2414a2c9786dd0596c82d5f81f08f",
+      "invoke": "python.exe -I target/oracles/plistlib_oracle.py <input> | --runtime",
+      "transport": "ASCII TSV; lowercase UTF-8 hex for strings, lowercase hex for bytes and IEEE 754 bit patterns; deterministic value dump (dictionary entries sorted by key, arrays in source order)"
+    }
+  },
+  "comparison": {
+    "scope": "parse/convert/value outcomes on the pinned macOS runner only; Apple behavior is the differential authority (RFC 0013 §13)",
+    "cross_oracle": "for every expected-ok conversion direction, plutil and the Swift driver must produce byte-identical output (both invoke the same Foundation writer); converted bytes must re-lint cleanly with plutil and reparse with the driver",
+    "values": "plutil -p of the fixture equals (sorted-line multiset, because Foundation does not guarantee NSDictionary iteration order) plutil -p of every successfully converted file; the Swift driver's deterministic value dump must match exactly across the same files",
+    "plistlib_leg": "secondary structural cross-check only (scripts/run-plistlib-oracle.ps1): profile detection plus a deterministic value dump compared by value-sha256 against the pins below; plistlib is never the semantic authority (RFC 0013 §13)",
+    "consema_counterpart": "the fixture set contains only Complete-under-Consema inputs; Consema Complete maps to lint ok here. Recovered/FatalFormationFailure Consema inputs are not part of this fixture set; where Consema deliberately diverges from Foundation, the divergence is recorded in the exclusion inventory below and a differential disagreement can never be resolved by changing Consema behavior (RFC 0013 §13, plan §6.3)"
+  },
+  "exclusions": {
+    "divergence_inventory": [
+      {
+        "id": "D-1",
+        "name": "UTF-32 BOM and unknown declared encodings",
+        "oracle": "Foundation additionally recognizes UTF-32 BOMs and unknown declared encodings through IANA lookup",
+        "consema": "follows RFC 0012's stricter source contract: UTF-8/UTF-16LE/UTF-16BE only, UTF-16 requires a BOM (RFC 0013 §2.1)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-2",
+        "name": "Duplicate keys: silent last-wins vs preservation",
+        "oracle": "Foundation replaces silently (last wins) through CFDictionarySetValue; plutil -p and the parsed value show only the last occurrence",
+        "consema": "duplicate keys are accepted as ordered native facts with independent association identity; never collapsed (RFC 0013 §4.4, §5.9)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-3",
+        "name": "Strict base64",
+        "oracle": "Foundation silently skips non-alphabet characters and tolerates missing padding",
+        "consema": "standard alphabet, ASCII whitespace between characters only, padding exactly as required; any other character is Recovered (RFC 0013 §4.8)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-4",
+        "name": "Strict version attribute",
+        "oracle": "Foundation ignores element attributes entirely",
+        "consema": "root requires version=\"1.0\" exactly; missing, different, or additional attributes are Recovered (RFC 0013 §4.2)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-5",
+        "name": "Strict DOCTYPE",
+        "oracle": "Foundation skips any DOCTYPE without validating it",
+        "consema": "DOCTYPE must be exactly the Apple plist identifier; other names, identifiers, internal subsets, or external-only DOCTYPEs are Recovered (RFC 0013 §4.1)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-6",
+        "name": "Trailing content rejection",
+        "oracle": "Foundation ignores trailing garbage after </plist> entirely",
+        "consema": "only whitespace, comments, and processing instructions are admitted after </plist>; any other bytes are Recovered (RFC 0013 §4.10)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-7",
+        "name": "Calendar validation",
+        "oracle": "Foundation normalizes out-of-range date fields through the Gregorian calendar",
+        "consema": "calendar fields must be valid (month 1-12, day valid for month and year, hour 0-23, minute and second 0-59); invalid fields are Recovered (RFC 0013 §4.7)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-8",
+        "name": "64-bit integer range",
+        "oracle": "Foundation additionally accepts magnitudes up to 128-bit",
+        "consema": "v1 freezes the signed 64-bit range; wider magnitudes are Recovered (RFC 0013 §4.5, §6). Plan R-1: fixtures must not contain 0x14 16-byte integer inputs (SInt128 non-inclusion), and any plutil output wider than 64 bits is excluded from the fixture set at generation time",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-9",
+        "name": "bplist01 header rejection",
+        "oracle": "Foundation's reader accepts bplist01 and later tolerated bplist0?",
+        "consema": "v1 freezes the exact header bplist00; any other version string is Recovered (RFC 0013 §5.1)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-10",
+        "name": "16-byte integer marker rejection",
+        "oracle": "Foundation reads the 0x14 marker (16-byte integer) of newer format versions",
+        "consema": "0x14 is a v1 exclusion: Recovered with a stable diagnostic (RFC 0013 §5.2)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-11",
+        "name": "null marker rejection",
+        "oracle": "Foundation reads the 0x00 null marker of newer format versions",
+        "consema": "null is a v1 exclusion (the XML representation has no null element, so the profiles could not share that value); Recovered (RFC 0013 §5.2)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-12",
+        "name": "Non-finite date payload rejection",
+        "oracle": "Foundation constructs a CFDate from a non-finite 0x33 payload",
+        "consema": "a non-finite date payload is Recovered; date values must be finite (RFC 0013 §5.5)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-13",
+        "name": "ASCII-string high-bit byte rejection",
+        "oracle": "Foundation maps bytes with the high bit set through kCFStringEncodingASCII's Latin-1-compatible behavior",
+        "consema": "every byte of an ASCII string must be below 0x80; a high-bit byte is Recovered (RFC 0013 §5.6)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-14",
+        "name": "Non-string binary dictionary keys",
+        "oracle": "Foundation accepts any non-container key, and then cannot write such a dictionary to XML",
+        "consema": "dictionary keys must be strings in v1; non-string keys are Recovered at formation so both profiles share exactly one dictionary key contract (RFC 0013 §5.9)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-15",
+        "name": "CR-containing strings",
+        "oracle": "Foundation's plist parser passes raw CR through string content",
+        "consema": "XML 1.0 line-end normalization applies to native text (raw CR and CRLF become LF), per RFC 0012; recorded divergence for fixtures containing CR inside strings (RFC 0013 §4.9)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-16",
+        "name": "Stricter offset-table entry bounds",
+        "oracle": "Foundation checks only off < offsetTableOffset and forces the range check only for the top object",
+        "consema": "every offset-table entry and the top object's offset must lie in [8, offsetTableOffset); fixture generation must not rely on Foundation behavior to infer bounds (RFC 0013 §5.11, plan R-11)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-17",
+        "name": "Apple-writer key sorting",
+        "oracle": "Apple's writer sorts dictionary keys with CFStringCompare",
+        "consema": "canonical materialization preserves input association order; sorting is representation style, not a value fact (RFC 0013 §10.1, §15)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-18",
+        "name": "0x0F fill byte",
+        "oracle": "Foundation's reader tolerates the 0x0F fill byte",
+        "consema": "0x0F is a v1 exclusion: Recovered. Writing must confirm plutil output never contains 0x0F (RFC 0013 §5.2, plan R-3)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-19",
+        "name": "plistlib/Foundation three-way divergences",
+        "oracle": "plistlib diverges from Foundation on the UID upper bound, the 0x0F fill byte, and the extended-size marker",
+        "consema": "RFC freezes Foundation behavior; plistlib is a secondary structural cross-check only and never the semantic authority. Its divergences never enter the differential comparison (RFC 0013 §13, plan R-2)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-20",
+        "name": "Shared object identity XML conversion",
+        "oracle": "converts the shared reference silently, duplicating the shared object in XML",
+        "consema": "shared object identity is a binary-only fact; conversion to XML fails atomically under hard gate 3 (RFC 0013 §7)",
+        "kind": "exclusion (conversion leg: Foundation succeeds, Consema refuses by design)"
+      },
+      {
+        "id": "D-21",
+        "name": "UID XML-inexpressibility",
+        "oracle": "Foundation refuses to write a UID-bearing dictionary as XML (equivalent outcome)",
+        "consema": "UID values are binary-only; conversion to XML fails atomically under hard gate 3 (RFC 0013 §7, §15)",
+        "kind": "exclusion (equivalent outcome: both oracles refuse the conversion)"
+      }
+    ],
+    "shape_level": [
+      "converted-byte shape: the differential compares plutil output against the Swift driver output (same Foundation writer); it never compares against Consema canonical materialization bytes, which are pinned by the conformance vectors (RFC 0013 §10)",
+      "value-dump line order: Foundation NSDictionary hash order is not guaranteed, so the Swift driver sorts dictionary keys before dumping and the plutil -p comparison is sorted-line multiset equality",
+      "real/date text spelling (plan R-4): canonical real spellings (nan/inf vs NaN/Infinity) are measured against pinned plutil -convert xml1 output by the M7 materialization gate, not by this oracle"
+    ],
+    "application_layer": [
+      "NSKeyedArchiver object-graph reconstruction ($objects/$class tables) is out of scope (RFC 0013 §15); fixtures verify UID value preservation only",
+      "old-style ASCII (NeXTSTEP) plists are out of scope (RFC 0013 §15)",
+      "preference domains, defaults(1), and any other application-layer plist consumption are out of scope (RFC 0013 §15)",
+      "the plistlib leg is a structural cross-check only; its three-way divergences from Foundation (D-19) mean it is never the semantic authority"
+    ],
+    "policy": "a differential disagreement cannot be resolved by changing Consema behavior without an RFC, and no untracked allowlist exists (RFC 0013 §13; plan §6.3)"
+  },
+  "skip_path": "when the runner is not macOS, the wrapper exits with code 3 and the manifest records the allowed skip (plan R-15, mirroring conformance/oracles/hcl-go-v1/manifest.json); the suite id remains consema.plist.macos-differential@1. The plistlib secondary runner is not skipped: it runs wherever the pinned CPython exists",
+  "cases": [
+    {
+      "id": "xml-info-plist",
+      "input": "conformance/fixtures/plist/xml/Info.plist",
+      "input_sha256": "bfc61719340a722b5bd77f0e29b941d36159a2da8e9cc1a719c9be97cd450592",
+      "divergence": null,
+      "expected": {
+        "lint": "ok",
+        "detected_format": "xml1",
+        "convert": { "to_xml1": "ok", "to_binary1": "ok" },
+        "values": "ok",
+        "plistlib": { "outcome": "ok", "profile": "plist.xml@1", "value_sha256": "aefb671c363f4772870b92b968350bf3115fda529085aa4e593f4f1c37a8f57d" }
+      }
+    },
+    {
+      "id": "xml-archiver-sample",
+      "input": "conformance/fixtures/plist/xml/com.example.archiver-sample.plist",
+      "input_sha256": "78ef8d1d4fe858ed118b65b04cc46aa03124c7f67dd307ca0c794771617454aa",
+      "divergence": null,
+      "expected": {
+        "lint": "ok",
+        "detected_format": "xml1",
+        "convert": { "to_xml1": "ok", "to_binary1": "ok" },
+        "values": "ok",
+        "plistlib": { "outcome": "ok", "profile": "plist.xml@1", "value_sha256": "cff58f73e0e3e4c83c8e60783fbadf704788534a0dce79c65bbc3aa6b9979ead" }
+      }
+    },
+    {
+      "id": "xml-preferences",
+      "input": "conformance/fixtures/plist/xml/com.example.preferences.plist",
+      "input_sha256": "accc38fd6b871e7701d42336fcab5de4caa7505a53fb1ce33f0b6e7acc2b9c16",
+      "divergence": null,
+      "expected": {
+        "lint": "ok",
+        "detected_format": "xml1",
+        "convert": { "to_xml1": "ok", "to_binary1": "ok" },
+        "values": "ok",
+        "plistlib": { "outcome": "ok", "profile": "plist.xml@1", "value_sha256": "7a86f3f6637e56ddc1b5717ff40969e6edccb37cc0de72a02724285d67519580" }
+      }
+    },
+    {
+      "id": "xml-repeated-keys",
+      "input": "conformance/fixtures/plist/xml/com.example.repeated-keys.plist",
+      "input_sha256": "e2bd21728f388ad694c049cdc75dd253f4c06ebd4eef01475611318b835c9508",
+      "divergence": "D-2",
+      "expected": {
+        "lint": "ok",
+        "detected_format": "xml1",
+        "convert": { "to_xml1": "ok", "to_binary1": "ok" },
+        "values": "ok",
+        "plistlib": { "outcome": "ok", "profile": "plist.xml@1", "value_sha256": "0ea773ab46ea7f45d213a6eccd8ed43703813a2afea24fef86c956a5979113b6" }
+      }
+    },
+    {
+      "id": "binary-preferences",
+      "input": "conformance/fixtures/plist/binary/com.example.preferences.binary.plist",
+      "input_sha256": "8da2eebe2cb895c1ec85474a56076c6d7f4fa20e1383db55d0452f77175aa67c",
+      "divergence": null,
+      "expected": {
+        "lint": "ok",
+        "detected_format": "binary1",
+        "convert": { "to_xml1": "ok", "to_binary1": "ok" },
+        "values": "ok",
+        "plistlib": { "outcome": "ok", "profile": "plist.binary@1", "value_sha256": "bd9f2df1a7edc8ca0485a7d50a56c3efb67001c7621affe697a3c65eafe289cc" }
+      }
+    },
+    {
+      "id": "binary-archiver-sample",
+      "input": "conformance/fixtures/plist/binary/com.example.archiver-sample.binary.plist",
+      "input_sha256": "7c1784e5a5a1b3f65897f1bda92a3237e4a6d94da8644756643f64cc51b907a7",
+      "divergence": "D-21",
+      "expected": {
+        "lint": "ok",
+        "detected_format": "binary1",
+        "convert": { "to_xml1": "error", "to_binary1": "ok" },
+        "values": "ok",
+        "plistlib": { "outcome": "ok", "profile": "plist.binary@1", "value_sha256": "cd4f8cdb57009ca990049a158499a1ff960feebbd9f86b9c10f031d4f77477ca" }
+      }
+    },
+    {
+      "id": "binary-shared-refs",
+      "input": "conformance/fixtures/plist/binary/com.example.shared-refs.binary.plist",
+      "input_sha256": "e877f3d3c4ebf9123f1d9e2906e1db6773d3a5e6a0ca101d4bf5f48e48278d0f",
+      "divergence": "D-20",
+      "expected": {
+        "lint": "ok",
+        "detected_format": "binary1",
+        "convert": { "to_xml1": "ok", "to_binary1": "ok" },
+        "values": "ok",
+        "plistlib": { "outcome": "ok", "profile": "plist.binary@1", "value_sha256": "7613a363906f3d6b80f6e5a35cc045ae4ec31547a646542a2ae8f8c24dae306a" }
+      }
+    }
+  ]
+}

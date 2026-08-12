@@ -1,0 +1,114 @@
+{
+  "suite": "consema.toml.conformance@1",
+  "profile": "toml.1.0@1",
+  "cases": [
+    {
+      "id": "toml.parse.exact-roundtrip",
+      "capability": "toml.document.complete@1",
+      "input": {"fixture": "conformance/fixtures/toml/all-values.toml"},
+      "expected": {"formation": "Complete", "render_equals_source": true}
+    },
+    {
+      "id": "toml.parse.lossless-byte-coverage",
+      "capability": "toml.document.lossless-syntax@1",
+      "input": {"fixture": "conformance/fixtures/toml/trivia-and-strings.toml"},
+      "expected": {"gap_count": 0, "overlap_count": 0}
+    },
+    {
+      "id": "toml.native.dotted-segments",
+      "capability": "toml.native.items@1",
+      "input": {"source": "alpha.beta.gamma = 1\n"},
+      "expected": {"segments": ["alpha", "beta", "gamma"], "leaf_kind": "Integer"}
+    },
+    {
+      "id": "toml.native.table-flavors",
+      "capability": "toml.native.items@1",
+      "input": {"fixture": "conformance/fixtures/toml/application.toml"},
+      "expected": {"service": "DottedTable", "database": "StandardTable", "observability": "ImplicitTable"}
+    },
+    {
+      "id": "toml.native.array-aot-distinct",
+      "capability": "toml.native.items@1",
+      "input": {"fixture": "conformance/fixtures/toml/application.toml"},
+      "expected": {"timeouts": "Array", "upstreams": "ArrayOfTables", "upstream_count": 2}
+    },
+    {
+      "id": "toml.native.float-signed-zero",
+      "capability": "toml.native.items@1",
+      "input": {"source": "positive = 0.0\nnegative = -0.0\n"},
+      "expected": {"positive_bits": "0000000000000000", "negative_bits": "8000000000000000"}
+    },
+    {
+      "id": "toml.query.nested-entry-order",
+      "capability": "core.query.ordered-results@1",
+      "input": {"fixture": "conformance/fixtures/toml/application.toml", "path": ["service"]},
+      "expected": {"names": ["name", "environment", "listen"]}
+    },
+    {
+      "id": "toml.query.aot-element-order",
+      "capability": "core.query.ordered-results@1",
+      "input": {"fixture": "conformance/fixtures/toml/application.toml", "path": ["upstreams"]},
+      "expected": {"ordinals": [0, 1]}
+    },
+    {
+      "id": "toml.projection.all-core-kinds",
+      "capability": "toml.projection.best-exact-core@1",
+      "input": {"fixture": "conformance/fixtures/toml/all-values.toml", "target": "BestExactCore@1"},
+      "expected": {"status": "Success", "fidelity": "Exact", "root": "Object"}
+    },
+    {
+      "id": "toml.projection.provenance",
+      "capability": "toml.projection.best-exact-core@1",
+      "input": {"source": "point = { x = 1, y = 2 }\n"},
+      "expected": {"all_origins_snapshot_bound": true, "object_associations_present": true}
+    },
+    {
+      "id": "toml.projection.reject-leap-second",
+      "capability": "toml.projection.best-exact-core@1",
+      "input": {"source": "time = 23:59:60\n"},
+      "expected": {"status": "Failed", "diagnostic": "toml.projection.unrepresentable-datetime@1", "partial_value": false}
+    },
+    {
+      "id": "toml.edit.literal-minimal",
+      "capability": "toml.edit.scalar-replace@1",
+      "input": {"source": "hex = 0x2A # keep\n", "literal": "0x2B"},
+      "expected": {"source": "hex = 0x2B # keep\n", "source_edit_count": 1}
+    },
+    {
+      "id": "toml.edit.reject-unrepresentable",
+      "capability": "toml.edit.scalar-replace@1",
+      "input": {"source": "float = 1.0\n", "binary64_bits": "7ff8000000000001"},
+      "expected": {"status": "Failed", "failure": "UnsupportedSemanticValue", "source_unchanged": true}
+    },
+    {
+      "id": "toml.parse.reject-invalid",
+      "capability": "toml.document.complete@1",
+      "input": {"fixture": "conformance/fixtures/toml/invalid-duplicate.toml"},
+      "expected": {"status": "FatalFormationFailure", "diagnostic": "toml.parse.syntax@1"}
+    },
+    {
+      "id": "toml.resource.token-limit",
+      "capability": "core.parse.resource-limits@1",
+      "input": {"source": "values = [1, 2, 3]", "max_token_count": 3},
+      "expected": {"status": "FatalFormationFailure", "truncated_success": false}
+    },
+    {
+      "id": "toml.resource.node-depth-limits",
+      "capability": "core.parse.resource-limits@1",
+      "input": {"source": "value = [[[[1]]]]", "max_node_count": 3, "max_nesting_depth": 2},
+      "expected": {"status": "FatalFormationFailure", "truncated_success": false}
+    },
+    {
+      "id": "toml.corpus.cargo-manifest",
+      "capability": "toml.document.complete@1",
+      "input": {"fixture": "Cargo.toml"},
+      "expected": {"formation": "Complete", "render_equals_source": true, "projection": "Complete"}
+    },
+    {
+      "id": "toml.corpus.pyproject",
+      "capability": "toml.document.complete@1",
+      "input": {"fixture": "conformance/fixtures/toml/pyproject.toml"},
+      "expected": {"formation": "Complete", "render_equals_source": true, "projection": "Complete"}
+    }
+  ]
+}

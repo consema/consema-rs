@@ -1,0 +1,190 @@
+{
+  "suite": "consema.java-properties.jdk25-differential@1",
+  "recorded_at": "2026-08-05",
+  "authority": {
+    "specification": "Java SE 25 java.util.Properties",
+    "specification_url": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/Properties.html",
+    "distribution": "Microsoft Build of OpenJDK",
+    "package": "microsoft-jdk-25.0.4-windows-x64.zip",
+    "package_url": "https://aka.ms/download-jdk/microsoft-jdk-25.0.4-windows-x64.zip",
+    "package_sha256": "54ba13f3ef80887fa74708b2a32daaae6262517ba68433d850bb4b426343172b"
+  },
+  "runtime": {
+    "java.runtime.name": "OpenJDK Runtime Environment",
+    "java.runtime.version": "25.0.4+7-LTS",
+    "java.vendor": "Microsoft",
+    "java.vm.name": "OpenJDK 64-Bit Server VM",
+    "os.name": "Windows 11",
+    "os.version": "10.0",
+    "os.arch": "amd64",
+    "windows_build": "10.0.26200.0"
+  },
+  "adapter": {
+    "source": "scripts/oracles/PropertiesOracle.java",
+    "source_sha256": "71cf3030b74ef264ad8e15f5633e653d70f3ec96b0bbd6944c9a6c4ffd4a94c6",
+    "compile": "javac -Xlint:all -Werror -d <work> scripts/oracles/PropertiesOracle.java",
+    "invoke": "java -cp <work> PropertiesOracle <reader|latin1> <bytes|hex> <input>",
+    "transport": "ASCII TSV; lowercase big-endian UTF-16 code-unit hex",
+    "input_sha256_basis": "input_sha256 = SHA-256 of the consumed input bytes: file bytes for .properties inputs, decoded bytes for .hex inputs (after hex decode)",
+    "ordering": "Java String natural order"
+  },
+  "comparison": {
+    "nonduplicate": "compare every key/value code-unit pair to exact EntryMapping projection",
+    "duplicate": "compare the JDK table to explicit LastWinsJdkTable projection and separately require native duplicate preservation",
+    "invalid": "compare exception classification and require no Consema value publication"
+  },
+  "exclusions": [
+    "Properties.store output order and timestamp",
+    "Properties defaults chains",
+    "XML Properties",
+    "ResourceBundle locale fallback",
+    "filesystem or classpath lookup",
+    "Java Hashtable iteration order"
+  ],
+  "cases": [
+    {
+      "id": "reader-basics",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-basics.properties",
+      "input_sha256": "3ca1a8f988f69ee8a0e448719106f6389b3362b09240dda8c93a03e0cdca61f9",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["0061006c007000680061", "006f006e0065"],
+          ["0063006f006c006f006e", "00740077006f"],
+          ["0065006d007000740079", ""],
+          ["0069006d0070006c0069006300690074", ""],
+          ["00770068006900740065", "00740068007200650065"]
+        ]
+      }
+    },
+    {
+      "id": "reader-continuation",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-continuation.properties",
+      "input_sha256": "8395d0077233e3b343673fbe14832caeb7341c4883f3203cf54b37faf8049df9",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["006400650073006300720069007000740069006f006e", "0043006f006e00730065006d0061002000720065006100640073002c002000700072006f006a0065006300740073002c00200061006e0064002000650064006900740073002e"],
+          ["006500760065006e", "0065006e00640073002d0077006900740068002d006200610063006b0073006c006100730068005c"]
+        ]
+      }
+    },
+    {
+      "id": "reader-duplicates",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-duplicates.properties",
+      "input_sha256": "65ef6b2793097e73ec3670c31dea70e21e18480f385d4b7528308483466b5f03",
+      "expected": {
+        "outcome": "complete",
+        "projection": "last-wins-jdk-table",
+        "entries": [
+          ["006b00650079", "006c006100730074"],
+          ["006f0074006800650072", "0073007400610062006c0065"]
+        ]
+      }
+    },
+    {
+      "id": "reader-escapes",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-escapes.properties",
+      "input_sha256": "61738f5f4b63943a56eb00f7b904052d63017bc2a53068261370cef99adbe4dd",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["00650073006300610070006500640020006b00650079003a003d", "0074006100620009006c0069006e0065000a006e006500780074000c0065006e0064"],
+          ["006e006f006e007200650063007500720073006900760065", "005c00750030003000340031"],
+          ["0075006e006b006e006f0077006e", "0071"]
+        ]
+      }
+    },
+    {
+      "id": "reader-final-continuation",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-final-continuation.properties",
+      "input_sha256": "e50b1c05900ac94404f335288896445daba71270e137505babfe581c9ecc297f",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["00760061006c00750065", "0074007200610069006c0069006e0067"]
+        ]
+      }
+    },
+    {
+      "id": "reader-java-utf16",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-java-utf16.properties",
+      "input_sha256": "43637ef50fe4c36359eb3c2fccfadbe4016223fdd343818250347fb1c25bbdcf",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["0072006f0063006b00650074", "d83dde80"],
+          ["0075006e007000610069007200650064002e0068006900670068", "d800"],
+          ["0075006e007000610069007200650064002e006c006f0077", "dc00"]
+        ]
+      }
+    },
+    {
+      "id": "reader-malformed-hex",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-malformed-hex.properties",
+      "input_sha256": "e824f1eb0be9d352bb5450ec385f09916c0c9934c1bb4f4da0559f828a03708c",
+      "expected": {"outcome": "failed", "exception": "java.lang.IllegalArgumentException"}
+    },
+    {
+      "id": "reader-malformed-short",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-malformed-short.properties",
+      "input_sha256": "10f89e47f8883fbf93d0919cadcd95e7c8c4c24536a61dc669663e7eb96e4eb1",
+      "expected": {"outcome": "failed", "exception": "java.lang.IllegalArgumentException"}
+    },
+    {
+      "id": "reader-multiple-u",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/oracles/java-properties-v1/reader-multiple-u.properties",
+      "input_sha256": "1c0a7e70c6a123f7fcc341ddaf77da5b8d9fc43e9b7bf3477dbc1f802c745b76",
+      "expected": {"outcome": "failed", "exception": "java.lang.IllegalArgumentException"}
+    },
+    {
+      "id": "reader-messages",
+      "profile": "reader",
+      "storage": "bytes",
+      "input": "conformance/fixtures/properties/messages.properties",
+      "input_sha256": "b64ae9a83e63f49c8b113aba0da74f8c57454a67cccf0c7f482903add061c6e0",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["006100700070002e007400690074006c0065", "0043006f006e00730065006d006100200043006f006e00660069006700750072006100740069006f006e002000530074007500640069006f"],
+          ["007300740061007400750073002e00720065006100640079", "5c317eea"],
+          ["007300740061007400750073002e00730061007600650064", "005300610076006500640020006100740020007b0030002c00740069006d0065002c00730068006f00720074007d"],
+          ["00770065006c0063006f006d0065", "00570065006c0063006f006d0065002c0020007b0030007d0021"]
+        ]
+      }
+    },
+    {
+      "id": "latin1-resource",
+      "profile": "latin1",
+      "storage": "hex",
+      "input": "conformance/fixtures/properties/latin1-resource.properties.hex",
+      "input_sha256": "ef1e30e87ddc10fc25352c4b8f1c69ca683a9b5f45f409313a2eb622b0edb9ca",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["0061007500740068006f0072", "006e006100ef00760065"],
+          ["00630075007200720065006e00630079", "00a3"],
+          ["007400690074006c0065", "00630061006600e9"]
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,241 @@
+{
+  "suite": "consema.operations.conformance@1",
+  "semantic_model": "core.semantic-model@3",
+  "cases": [
+    {
+      "id": "operations.v1.registry-v3",
+      "capability": "core.registry-manifest@1",
+      "input": {},
+      "expected": {"contract_count": 25, "error_code_count": 90, "v1_contract_count": 16, "v1_error_code_count": 55, "v2_contract_count": 18, "v2_error_code_count": 62}
+    },
+    {
+      "id": "operations.v1.protocol-v3-dual-transport",
+      "capability": "core.protocol-message@1",
+      "input": {},
+      "expected": {"new_payload_count": 7, "json_equal": true, "pvce_equal": true}
+    },
+    {
+      "id": "operations.v1.operation-registry",
+      "capability": "core.format-operation-registry@1",
+      "input": {},
+      "expected": {"json_operation_count": 8, "toml_operation_count": 7, "required_json": "json.edit.move-member@1", "required_toml": "toml.edit.insert-entry@1"}
+    },
+    {
+      "id": "operations.v1.materialize-json-compact",
+      "capability": "core.materialization-result@1",
+      "input": {"source": "{\"n\":null,\"b\":true,\"i\":123,\"d\":1.25,\"s\":\"x\",\"a\":[1],\"o\":{\"k\":\"v\"}}", "style": "json.canonical-compact", "newline": "None"},
+      "expected": {"output": "{\"n\":null,\"b\":true,\"i\":123,\"d\":125e-2,\"s\":\"x\",\"a\":[1],\"o\":{\"k\":\"v\"}}", "fidelity": "Exact", "minimum_provenance_entries": 1}
+    },
+    {
+      "id": "operations.v1.materialize-json-pretty-crlf",
+      "capability": "core.materialization-result@1",
+      "input": {"source": "{\"a\":1}", "style": "json.canonical-pretty", "newline": "CrLf"},
+      "expected": {"output": "{\r\n  \"a\": 1\r\n}\r\n", "fidelity": "Exact"}
+    },
+    {
+      "id": "operations.v1.materialize-json-entry-mapping-duplicates",
+      "capability": "core.materialization-result@1",
+      "input": {"source": "{\"a\":1,\"a\":2}", "projection": "BestExactCore", "style": "json.canonical-compact", "newline": "None"},
+      "expected": {"output": "{\"a\":1,\"a\":2}", "fidelity": "Exact"}
+    },
+    {
+      "id": "operations.v1.materialize-json-nonstring-key-rejected",
+      "capability": "core.materialization-result@1",
+      "input": {"key_integer": "1"},
+      "expected": {"code": "core.materialization.unrepresentable@1", "has_document": false}
+    },
+    {
+      "id": "operations.v1.materialize-json-float-rejected",
+      "capability": "core.materialization-result@1",
+      "input": {"binary64_bits": "3ff0000000000000"},
+      "expected": {"code": "core.materialization.unrepresentable@1", "has_document": false}
+    },
+    {
+      "id": "operations.v1.materialize-json-output-limit",
+      "capability": "core.materialization-result@1",
+      "input": {"source": "{\"long\":\"value\"}", "max_output_bytes": 4},
+      "expected": {"code": "core.materialization.resource-limit@1", "has_document": false}
+    },
+    {
+      "id": "operations.v1.materialize-toml-native",
+      "capability": "core.materialization-result@1",
+      "input": {"source": "name = \"api\"\nport = 8080\nratio = 1.5\nenabled = true\ndate = 1979-05-27\ntime = 07:32:00.123456789\nlocal = 1979-05-27T07:32:00\nwhen = 1979-05-27T07:32:00Z\nports = [80, 443]\nmeta = { owner = \"ops\" }\n", "newline": "Lf"},
+      "expected": {"fidelity": "Exact", "minimum_provenance_entries": 1, "reprojects_equal": true}
+    },
+    {
+      "id": "operations.v1.materialize-toml-explicit-mapping",
+      "capability": "core.materialization-result@1",
+      "input": {"source": "{\"a\":1}", "projection": "EntryMapping", "mapping_policy": "UniqueStringEntriesToObject"},
+      "expected": {"output": "\"a\" = 1\n", "fidelity": "Transformed", "event_code": "core.materialization.mapping-transformed@1"}
+    },
+    {
+      "id": "operations.v1.materialize-toml-implicit-mapping-rejected",
+      "capability": "core.materialization-result@1",
+      "input": {"source": "{\"a\":1}", "projection": "EntryMapping", "mapping_policy": "RequireObject"},
+      "expected": {"code": "core.materialization.unrepresentable@1", "has_document": false}
+    },
+    {
+      "id": "operations.v1.materialize-toml-null-rejected",
+      "capability": "core.materialization-result@1",
+      "input": {"value_kind": "Null"},
+      "expected": {"code": "core.materialization.unrepresentable@1", "has_document": false}
+    },
+    {
+      "id": "operations.v1.materialize-toml-output-limit",
+      "capability": "core.materialization-result@1",
+      "input": {"source": "name = \"api\"\n", "max_output_bytes": 4},
+      "expected": {"code": "core.materialization.resource-limit@1", "has_document": false}
+    },
+    {
+      "id": "operations.v1.materialization-depth-limit",
+      "capability": "core.materialization-request@1",
+      "input": {"source": "[[[1]]]", "max_depth": 1},
+      "expected": {"code": "core.materialization.resource-limit@1", "has_document": false}
+    },
+    {
+      "id": "operations.v1.convert-json-to-toml-exact",
+      "capability": "core.conversion-report@1",
+      "input": {"source": "{\"service\":{\"port\":8080,\"enabled\":true}}"},
+      "expected": {"output": "\"service\" = { \"port\" = 8080, \"enabled\" = true }\n", "overall_fidelity": "Exact"}
+    },
+    {
+      "id": "operations.v1.convert-toml-to-json-exact",
+      "capability": "core.conversion-report@1",
+      "input": {"source": "name = \"api\"\nports = [80, 443]\n"},
+      "expected": {"output": "{\"name\":\"api\",\"ports\":[80,443]}", "overall_fidelity": "Exact"}
+    },
+    {
+      "id": "operations.v1.convert-duplicate-json-to-toml-fails",
+      "capability": "core.conversion-report@1",
+      "input": {"source": "{\"a\":1,\"a\":2}"},
+      "expected": {"code": "core.conversion.materialization-failed@1", "has_document": false}
+    },
+    {
+      "id": "operations.v1.convert-transformed-report",
+      "capability": "core.conversion-report@1",
+      "input": {"source": "{\"a\":1}", "projection": "EntryMapping", "mapping_policy": "UniqueStringEntriesToObject"},
+      "expected": {"overall_fidelity": "Transformed", "projection_event": "json.projection.structure-reencoded@1", "materialization_event": "core.materialization.mapping-transformed@1"}
+    },
+    {
+      "id": "operations.v1.json-object-insert",
+      "capability": "json.edit.insert-member@1",
+      "input": {"source": "{ /*lead*/ \"a\":1, /*keep*/ \"a\":2, \"z\":3, }", "name": "x", "before_ordinal": 1},
+      "expected": {"output": "{ /*lead*/ \"a\":1, /*keep*/ \"x\":[true],\"a\":2, \"z\":3, }"}
+    },
+    {
+      "id": "operations.v1.json-object-remove-duplicate",
+      "capability": "json.edit.remove-member@1",
+      "input": {"source": "{ /*lead*/ \"a\":1, /*keep*/ \"a\":2, \"z\":3, }", "target_ordinal": 0},
+      "expected": {"output": "{ /*lead*/  /*keep*/ \"a\":2, \"z\":3, }", "patch_replays": true, "proof_verifies": true}
+    },
+    {
+      "id": "operations.v1.json-array-remove",
+      "capability": "json.edit.remove-array-element@1",
+      "input": {"source": "[1, /*keep*/ 2, 3,]", "target_ordinal": 1},
+      "expected": {"output": "[1, /*keep*/  3,]"}
+    },
+    {
+      "id": "operations.v1.json-conflict-atomic",
+      "capability": "json.edit.remove-member@1",
+      "input": {"source": "{\"a\":1,\"b\":2}", "target_ordinal": 0},
+      "expected": {"code": "core.edit.conflicting-edits@1", "base_unchanged": true}
+    },
+    {
+      "id": "operations.v1.json-dry-run-proof-patch",
+      "capability": "core.edit-plan@1",
+      "input": {"source": "{\"a\":1}", "source_id": "config.json", "name": "secret-name", "value": "secret-value"},
+      "expected": {"output": "{\"a\":1,\"secret-name\":\"secret-value\"}", "same_replacements": true, "same_target_digest": true, "safe_summary": true, "redacted_debug": true, "patch_replays": true, "proof_verifies": true}
+    },
+    {
+      "id": "operations.v1.json-structural-matrix",
+      "capability": "json.edit.insert-member@1",
+      "input": {"cases": [
+        {"operation": "insert-member-end", "source": "{}", "name": "a", "expected": "{\"a\":true}"},
+        {"operation": "remove-member", "source": "{\"a\":1}", "target_ordinal": 0, "expected": "{}"},
+        {"operation": "rename-member", "source": "{\"a\":1,\"a\":2}", "target_ordinal": 1, "name": "b", "expected": "{\"a\":1,\"b\":2}"},
+        {"operation": "insert-array-start", "source": "[]", "expected": "[1]"},
+        {"operation": "insert-array-after", "source": "[1,2]", "anchor_ordinal": 1, "expected": "[1,2,\"x\"]"}
+      ]},
+      "expected": {"completed": 5}
+    },
+    {
+      "id": "operations.v1.json-conflict-matrix",
+      "capability": "core.edit.conflicting-edits@1",
+      "input": {"cases": [
+        {"mode": "wrong-snapshot", "source": "2", "foreign": "1", "code": "core.edit.wrong-snapshot@1"},
+        {"mode": "same-boundary", "source": "{\"a\":1}", "code": "core.edit.conflicting-edits@1"},
+        {"mode": "removed-anchor", "source": "{\"a\":1,\"b\":2}", "code": "core.edit.conflicting-edits@1"},
+        {"mode": "ancestor-descendant", "source": "{\"a\":1}", "code": "core.edit.conflicting-edits@1"}
+      ]},
+      "expected": {"failed_atomically": 4}
+    },
+    {
+      "id": "operations.v1.toml-root-insert",
+      "capability": "toml.edit.insert-entry@1",
+      "input": {"source": "root = 1\n\n[service]\nport = 80\n", "key": "enabled"},
+      "expected": {"output": "root = 1\n\n\"enabled\" = true\n[service]\nport = 80\n"}
+    },
+    {
+      "id": "operations.v1.toml-inline-rename",
+      "capability": "toml.edit.rename-entry@1",
+      "input": {"source": "point = { a = 1, b = 2 }\n", "table": "point", "target_ordinal": 1, "key": "beta"},
+      "expected": {"output": "point = { a = 1, \"beta\" = 2 }\n"}
+    },
+    {
+      "id": "operations.v1.toml-array-remove",
+      "capability": "toml.edit.remove-array-element@1",
+      "input": {"source": "items = [1, # keep\n 2, 3,]\n", "array": "items", "target_ordinal": 1},
+      "expected": {"output": "items = [1, # keep\n  3,]\n"}
+    },
+    {
+      "id": "operations.v1.toml-conflict-atomic",
+      "capability": "toml.edit.insert-entry@1",
+      "input": {"source": "a = 1\nb = 2\n", "key": "a"},
+      "expected": {"code": "core.edit.duplicate-key@1", "base_unchanged": true}
+    },
+    {
+      "id": "operations.v1.toml-dry-run-proof-patch",
+      "capability": "core.edit-plan@1",
+      "input": {"source": "value = 1\n", "source_id": "config.toml", "key": "secret-key", "value": "secret-value"},
+      "expected": {"output": "value = 1\n\"secret-key\" = \"secret-value\"", "same_replacements": true, "same_target_digest": true, "safe_summary": true, "redacted_debug": true, "patch_replays": true, "proof_verifies": true}
+    },
+    {
+      "id": "operations.v1.toml-structural-matrix",
+      "capability": "toml.edit.insert-entry@1",
+      "input": {"cases": [
+        {"operation": "insert-standard-table", "source": "[service]\nport = 80\n", "table": "service", "key": "host", "expected": "[service]\nport = 80\n\"host\" = \"localhost\""},
+        {"operation": "insert-inline", "source": "point = { a = 1, b = 2 }\n", "table": "point", "before_ordinal": 1, "key": "axis", "expected": "point = { a = 1, \"axis\" = [true],b = 2 }\n"},
+        {"operation": "remove-inline", "source": "point = { a = 1, b = 2 }\n", "table": "point", "target_ordinal": 0, "expected": "point = {  b = 2 }\n"},
+        {"operation": "insert-array-start", "source": "items = [ ]\n", "array": "items", "expected": "items = [1 ]\n"}
+      ]},
+      "expected": {"completed": 4}
+    },
+    {
+      "id": "operations.v1.toml-conflict-matrix",
+      "capability": "core.edit.conflicting-edits@1",
+      "input": {"cases": [
+        {"mode": "duplicate-target", "source": "a = 1\n", "code": "core.edit.conflicting-edits@1"},
+        {"mode": "removed-anchor", "source": "a = 1\nb = 2\n", "code": "core.edit.conflicting-edits@1"},
+        {"mode": "ancestor-descendant", "source": "a = 1\n", "code": "core.edit.conflicting-edits@1"},
+        {"mode": "unsupported-table-remove", "source": "[service]\nport = 80\n", "code": "core.edit.operation-unsupported@1"}
+      ]},
+      "expected": {"failed_atomically": 4}
+    },
+    {
+      "id": "operations.v1.materialization-security-matrix",
+      "capability": "core.materialization-request@1",
+      "input": {"cases": [
+        {"mode": "node-limit", "source": "[1]", "limit": 1, "code": "core.materialization.resource-limit@1"},
+        {"mode": "provenance-limit", "source": "{\"a\":1}", "limit": 0, "code": "core.materialization.resource-limit@1"},
+        {"mode": "escaping", "source": "{\"text\":\"quote\\\" slash\\\\ line\\n\"}", "expected": "{\"text\":\"quote\\\" slash\\\\ line\\n\"}"}
+      ]},
+      "expected": {"completed": 3}
+    },
+    {
+      "id": "operations.v1.untouched-proof-tamper",
+      "capability": "core.edit-plan@1",
+      "input": {"source": "{\"a\":1}", "tampered_target": "{\"a\":3}"},
+      "expected": {"tamper_detected": true}
+    }
+  ]
+}

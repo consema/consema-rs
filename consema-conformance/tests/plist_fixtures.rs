@@ -14,19 +14,19 @@ use std::sync::Arc;
 const XML_FIXTURES: &[(&str, &[u8])] = &[
     (
         "com.example.preferences.plist",
-        include_bytes!("../../../conformance/fixtures/plist/xml/com.example.preferences.plist"),
+        include_bytes!("../../conformance/fixtures/plist/xml/com.example.preferences.plist"),
     ),
     (
         "com.example.repeated-keys.plist",
-        include_bytes!("../../../conformance/fixtures/plist/xml/com.example.repeated-keys.plist"),
+        include_bytes!("../../conformance/fixtures/plist/xml/com.example.repeated-keys.plist"),
     ),
     (
         "Info.plist",
-        include_bytes!("../../../conformance/fixtures/plist/xml/Info.plist"),
+        include_bytes!("../../conformance/fixtures/plist/xml/Info.plist"),
     ),
     (
         "com.example.archiver-sample.plist",
-        include_bytes!("../../../conformance/fixtures/plist/xml/com.example.archiver-sample.plist"),
+        include_bytes!("../../conformance/fixtures/plist/xml/com.example.archiver-sample.plist"),
     ),
 ];
 
@@ -34,19 +34,19 @@ const BINARY_FIXTURES: &[(&str, &[u8])] = &[
     (
         "com.example.preferences.binary.plist",
         include_bytes!(
-            "../../../conformance/fixtures/plist/binary/com.example.preferences.binary.plist"
+            "../../conformance/fixtures/plist/binary/com.example.preferences.binary.plist"
         ),
     ),
     (
         "com.example.archiver-sample.binary.plist",
         include_bytes!(
-            "../../../conformance/fixtures/plist/binary/com.example.archiver-sample.binary.plist"
+            "../../conformance/fixtures/plist/binary/com.example.archiver-sample.binary.plist"
         ),
     ),
     (
         "com.example.shared-refs.binary.plist",
         include_bytes!(
-            "../../../conformance/fixtures/plist/binary/com.example.shared-refs.binary.plist"
+            "../../conformance/fixtures/plist/binary/com.example.shared-refs.binary.plist"
         ),
     ),
 ];

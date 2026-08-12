@@ -37,7 +37,7 @@ use std::sync::Arc;
 const SUITE: &str = "consema.hcl.conformance@1";
 
 /// Embedded shared HCL suite bytes.
-pub const HCL_V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/hcl-v1.json");
+pub const HCL_V1_VECTORS_JSON: &str = include_str!("../../conformance/vectors/hcl-v1.json");
 
 /// Runs the embedded `consema.hcl.conformance@1` suite.
 #[must_use]

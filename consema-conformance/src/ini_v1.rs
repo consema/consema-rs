@@ -22,7 +22,7 @@ use super::{ConformanceReport, VectorCase, object_field};
 const SUITE: &str = "consema.ini.conformance@1";
 
 /// Embedded language-neutral INI family suite bytes.
-pub const INI_V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/ini-v1.json");
+pub const INI_V1_VECTORS_JSON: &str = include_str!("../../conformance/vectors/ini-v1.json");
 
 /// Runs the embedded `consema.ini.conformance@1` suite.
 #[must_use]

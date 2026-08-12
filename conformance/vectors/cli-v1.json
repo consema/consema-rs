@@ -1,0 +1,603 @@
+{
+  "suite": "consema.cli.conformance@1",
+  "semantic_model": "core.semantic-model@7",
+  "profiles": [],
+  "cases": [
+    {
+      "id": "cli.envelope.rfc-canonical-bytes",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "pvce_hex": "505643450141980407200706736368656d61201211636f72652e636c692d6f75747075744031200807636f6d6d616e64200807696e7370656374200b0a657869745f636c6173732008077375636365737320100f70726f647563745f76657273696f6e200706302e31322e302008077061796c6f616441ee020a200706736368656d61200e0d636c692e696e73706563744031200504706174682009086170702e636f6e66200605627974657341770220050473697a65100301012b200706646967657374415f02200a09616c676f726974686d20070673686132353620040368657820414032633236623436623638666663363866663939623435336331643330343133343133343232643730363438336266613066393861356538383632363665376165200403626f6d000020080773796d6c696e6b01002008076d61726b657273400d01200a095b73656374696f6e5d200b0a63616e6469646174657340560141530220080770726f66696c654124022003026964200d0c696e692e706f727461626c6520080776657273696f6e1003010101200706726561736f6e2017166c656164696e67205b73656374696f6e5d206c696e65200a09616d626967756f75730100201211616d626967756974795f726561736f6e7340010020060570617273650000200c0b646961676e6f7374696373400100200a09726564616374696f6e411a0220090872656461637465640100200605636f756e7410020000",
+        "command": "inspect",
+        "exit_class": "success",
+        "product_version": "0.12.0",
+        "payload_schema": "cli.inspect@1",
+        "redacted": false,
+        "count": 0,
+        "diagnostics_count": 0
+      }
+    },
+    {
+      "id": "cli.envelope.dual-transport-equivalence",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"conformance\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.conformance@1\"}},{\"key\":\"suite\",\"value\":{\"type\":\"String\",\"value\":\"consema.cli.conformance@1\"}},{\"key\":\"passed\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"cli.envelope@1\"},{\"type\":\"String\",\"value\":\"cli.exit-code@1\"},{\"type\":\"String\",\"value\":\"cli.redaction@1\"}]}},{\"key\":\"failed\",\"value\":{\"type\":\"Sequence\",\"items\":[]}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "pvce_hex": "505643450141bd0207200706736368656d61201211636f72652e636c692d6f75747075744031200807636f6d6d616e64200c0b636f6e666f726d616e6365200b0a657869745f636c6173732008077375636365737320100f70726f647563745f76657273696f6e200706302e31322e302008077061796c6f6164418f0104200706736368656d61201211636c692e636f6e666f726d616e636540312006057375697465201a19636f6e73656d612e636c692e636f6e666f726d616e63654031200706706173736564403603200f0e636c692e656e76656c6f7065403120100f636c692e657869742d636f6465403120100f636c692e726564616374696f6e40312007066661696c6564400100200c0b646961676e6f7374696373400100200a09726564616374696f6e411a0220090872656461637465640100200605636f756e7410020000",
+        "command": "conformance",
+        "exit_class": "success",
+        "product_version": "0.12.0",
+        "payload_schema": "cli.conformance@1",
+        "redacted": false,
+        "count": 0,
+        "diagnostics_count": 0
+      }
+    },
+    {
+      "id": "cli.envelope.closed-exit-class-set",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"conformance\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"usage\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.conformance@1\"}},{\"key\":\"suite\",\"value\":{\"type\":\"String\",\"value\":\"consema.cli.conformance@1\"}},{\"key\":\"passed\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"failed\",\"value\":{\"type\":\"Sequence\",\"items\":[]}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "pvce_hex": "505643450141850207200706736368656d61201211636f72652e636c692d6f75747075744031200807636f6d6d616e64200c0b636f6e666f726d616e6365200b0a657869745f636c617373200605757361676520100f70726f647563745f76657273696f6e200706302e31322e302008077061796c6f6164415a04200706736368656d61201211636c692e636f6e666f726d616e636540312006057375697465201a19636f6e73656d612e636c692e636f6e666f726d616e636540312007067061737365644001002007066661696c6564400100200c0b646961676e6f7374696373400100200a09726564616374696f6e411a0220090872656461637465640100200605636f756e7410020000",
+        "command": "conformance",
+        "exit_class": "usage",
+        "redacted": false,
+        "count": 0,
+        "diagnostics_count": 0
+      }
+    },
+    {
+      "id": "cli.envelope.conformance-failure-semantics",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"conformance\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"internal\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.conformance@1\"}},{\"key\":\"suite\",\"value\":{\"type\":\"String\",\"value\":\"consema.cli.conformance@1\"}},{\"key\":\"passed\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"failed\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"cli.envelope@1\"}},{\"key\":\"message\",\"value\":{\"type\":\"String\",\"value\":\"injected failure\"}}]}]}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.diagnostic@1\"}},{\"key\":\"code\",\"value\":{\"type\":\"String\",\"value\":\"cli.internal.unclassified@1\"}},{\"key\":\"category\",\"value\":{\"type\":\"String\",\"value\":\"Semantic\"}},{\"key\":\"severity\",\"value\":{\"type\":\"String\",\"value\":\"Error\"}},{\"key\":\"primary\",\"value\":{\"type\":\"Null\"}},{\"key\":\"related\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"arguments\",\"value\":{\"type\":\"Object\",\"entries\":[]}},{\"key\":\"notes\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"fixes\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"occurrence\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "pvce_hex": "505643450141fe0307200706736368656d61201211636f72652e636c692d6f75747075744031200807636f6d6d616e64200c0b636f6e666f726d616e6365200b0a657869745f636c617373200908696e7465726e616c20100f70726f647563745f76657273696f6e200706302e31322e302008077061796c6f616441900104200706736368656d61201211636c692e636f6e666f726d616e636540312006057375697465201a19636f6e73656d612e636c692e636f6e666f726d616e636540312007067061737365644001002007066661696c65644037014134022003026964200f0e636c692e656e76656c6f706540312008076d657373616765201110696e6a6563746564206661696c757265200c0b646961676e6f737469637340bf010141bb010a200706736368656d61201211636f72652e646961676e6f737469634031200504636f6465201c1b636c692e696e7465726e616c2e756e636c6173736966696564403120090863617465676f727920090853656d616e74696320090873657665726974792006054572726f722008077072696d617279000020080772656c61746564400100200a09617267756d656e74734101002006056e6f7465734001002006056669786573400100200b0a6f6363757272656e636510020000200a09726564616374696f6e411a0220090872656461637465640100200605636f756e7410020000",
+        "command": "conformance",
+        "exit_class": "internal",
+        "payload_schema": "cli.conformance@1",
+        "redacted": false,
+        "count": 0,
+        "diagnostics_count": 1,
+        "diagnostic_code": "cli.internal.unclassified@1"
+      }
+    },
+    {
+      "id": "cli.envelope.reject-redaction-invariant",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1"
+      }
+    },
+    {
+      "id": "cli.envelope.reject-product-version-shape",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0.1\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1",
+        "error_path": "$.product_version"
+      }
+    },
+    {
+      "id": "cli.envelope.reject-command-payload-mismatch",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"query\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.schema-mismatch@1",
+        "error_path": "$.payload.schema"
+      }
+    },
+    {
+      "id": "cli.envelope.reject-whitespace",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{ \"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.non-canonical-json@1"
+      }
+    },
+    {
+      "id": "cli.envelope.reject-reordered-fields",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.schema-mismatch@1"
+      }
+    },
+    {
+      "id": "cli.envelope.reject-unknown-field",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}},{\"key\":\"extra\",\"value\":{\"type\":\"Null\"}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.unknown-field@1"
+      }
+    },
+    {
+      "id": "cli.envelope.reject-rfc-typo",
+      "capability": "cli.envelope@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-json@1"
+      }
+    },
+    {
+      "id": "cli.exit-code.class-table",
+      "capability": "cli.exit-code@1",
+      "input": {
+        "names": [
+          "success",
+          "usage",
+          "data",
+          "limit",
+          "precondition",
+          "internal"
+        ],
+        "codes": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "expected": {}
+    },
+    {
+      "id": "cli.exit-code.usage-family",
+      "capability": "cli.exit-code@1",
+      "input": {
+        "codes": [
+          "cli.usage.invalid-argument@1",
+          "cli.usage.invalid-format@1",
+          "cli.usage.missing-plan@1",
+          "cli.usage.missing-required@1",
+          "cli.usage.redaction-pattern@1",
+          "cli.usage.unknown-argument@1",
+          "cli.usage.unknown-command@1"
+        ]
+      },
+      "expected": {
+        "classes": [
+          "usage",
+          "usage",
+          "usage",
+          "usage",
+          "usage",
+          "usage",
+          "usage"
+        ]
+      }
+    },
+    {
+      "id": "cli.exit-code.data-family",
+      "capability": "cli.exit-code@1",
+      "input": {
+        "codes": [
+          "cli.data.invalid-request@1",
+          "cli.data.io@1",
+          "cli.detection.ambiguous@1",
+          "core.source.invalid-utf8@1",
+          "core.source.code-page-required@1",
+          "core.protocol.invalid-json@1",
+          "core.protocol.schema-mismatch@1",
+          "core.query.invalid-argument@1"
+        ]
+      },
+      "expected": {
+        "classes": [
+          "data",
+          "data",
+          "data",
+          "data",
+          "data",
+          "data",
+          "data",
+          "data"
+        ]
+      }
+    },
+    {
+      "id": "cli.exit-code.limit-family",
+      "capability": "cli.exit-code@1",
+      "input": {
+        "codes": [
+          "cli.limit.batch-count@1",
+          "cli.limit.file-size@1",
+          "cli.limit.manifest-size@1",
+          "core.protocol.resource-limit@1",
+          "core.parse.resource-limit@1",
+          "core.query.resource-limit@1",
+          "ini.parse.resource-limit@1",
+          "xml.parse.resource-limit@1"
+        ]
+      },
+      "expected": {
+        "classes": [
+          "limit",
+          "limit",
+          "limit",
+          "limit",
+          "limit",
+          "limit",
+          "limit",
+          "limit"
+        ]
+      }
+    },
+    {
+      "id": "cli.exit-code.precondition-family",
+      "capability": "cli.exit-code@1",
+      "input": {
+        "codes": [
+          "core.source.patch-base-mismatch@1",
+          "core.source.patch-original-mismatch@1",
+          "core.source.patch-target-mismatch@1",
+          "core.edit.precondition-failed@1",
+          "cli.write.io@1",
+          "cli.write.permission@1",
+          "cli.write.read-only@1",
+          "cli.write.symlink-policy@1",
+          "cli.write.target-is-directory@1",
+          "cli.interrupted.signal@1"
+        ]
+      },
+      "expected": {
+        "classes": [
+          "precondition",
+          "precondition",
+          "precondition",
+          "precondition",
+          "precondition",
+          "precondition",
+          "precondition",
+          "precondition",
+          "precondition",
+          "precondition"
+        ]
+      }
+    },
+    {
+      "id": "cli.exit-code.internal-and-unlisted",
+      "capability": "cli.exit-code@1",
+      "input": {
+        "codes": [
+          "cli.internal.unclassified@1",
+          "ini.parse.malformed-line@1",
+          "json.parse.invalid-json@1",
+          "yaml.parse.syntax@1",
+          "example.unknown-code@1",
+          ""
+        ]
+      },
+      "expected": {
+        "classes": [
+          "internal",
+          "data",
+          "data",
+          "data",
+          "data",
+          "data"
+        ]
+      }
+    },
+    {
+      "id": "cli.batch-plan.rfc-normative-record",
+      "capability": "cli.batch-plan@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}"
+      },
+      "expected": {
+        "product_version": "0.12.0",
+        "statuses": [
+          "planned"
+        ],
+        "source_digest_hex": "03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9",
+        "target_digest_hex": "77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6"
+      }
+    },
+    {
+      "id": "cli.batch-plan.mixed-statuses-record",
+      "capability": "cli.batch-plan@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"broken.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"failed\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Null\"}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"operations\",\"value\":{\"type\":\"Null\"}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Null\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"ini.parse.malformed-section@1\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}}]}]}}]}}"
+      },
+      "expected": {
+        "product_version": "0.12.0",
+        "statuses": [
+          "planned",
+          "failed"
+        ],
+        "failure_code": "ini.parse.malformed-section@1"
+      }
+    },
+    {
+      "id": "cli.batch-plan.dual-transport",
+      "capability": "cli.batch-plan@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}"
+      },
+      "expected": {
+        "pvce_hex": "505643450141a40904200706736368656d61201211636f72652e62617463682d706c616e403120100f70726f647563745f76657273696f6e200706302e31322e30200807636f6d6d616e64200504706c616e20060566696c657340cf080141cb0808200504706174682009086170702e636f6e66200706737461747573200807706c616e6e656420080770726f66696c654124022003026964200d0c696e692e706f727461626c6520080776657273696f6e1003010101200e0d736f757263655f646967657374415f02200a09616c676f726974686d20070673686132353620040368657820414030333930333838356266343136653066366161386362303334636330626366333030396564306365333961363135633362643534333761616336396132616639200b0a6f7065726174696f6e73406101415e02200a096f7065726174696f6e4130022003026964201918696e692e656469742e7365742d656e7472792d76616c756520080776657273696f6e100301010120080773756d6d6172794113012005046e616d6520090870617373776f7264200d0c736f757263655f706174636841e10506200706736368656d61201413636f72652e736f757263652d70617463684032200c0b626173655f646967657374415f02200a09616c676f726974686d20070673686132353620040368657820414030333930333838356266343136653066366161386362303334636330626366333030396564306365333961363135633362643534333761616336396132616639200e0d7461726765745f646967657374415f02200a09616c676f726974686d20070673686132353620040368657820414037376237656132333062656165303739393732653432323363363861303731356166636237653336633362646134633433396534336134613232363330626436200908656e636f64696e6741c0020620100f70726f66696c655f64656661756c74414703200706736368656d61201716636f72652e736f757263652d656e636f64696e6740312005046b696e642005045574663820121177696e646f77735f636f64655f706167650000200b0a626f6d5f706f6c696379200e0d446574656374556e69636f6465200403626f6d0000200c0b6465636c61726174696f6e000020100f63616c6c65725f6f76657272696465414703200706736368656d61201716636f72652e736f757263652d656e636f64696e6740312005046b696e642005045574663820121177696e646f77735f636f64655f70616765000020090873656c6563746564414703200706736368656d61201716636f72652e736f757263652d656e636f64696e6740312005046b696e642005045574663820121177696e646f77735f636f64655f706167650000200d0c7265706c6163656d656e7473407401417106200a096f6c645f737461727410030101102008076f6c645f656e6410030101132009086f726967696e616c2104036f6c64200c0b7265706c6163656d656e742104036e657720100f7265646163745f6f726967696e616c01002013127265646163745f7265706c6163656d656e7401002009086d65746164617461410100200d0c6661696c7572655f636f64650000200c0b646961676e6f73746963730000"
+      }
+    },
+    {
+      "id": "cli.batch-plan.reject-source-digest-mismatch",
+      "capability": "cli.batch-plan@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"0\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1",
+        "error_path": "$.files[0].source_digest"
+      }
+    },
+    {
+      "id": "cli.batch-plan.reject-planned-without-patch",
+      "capability": "cli.batch-plan@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Null\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.wrong-type@1"
+      }
+    },
+    {
+      "id": "cli.batch-plan.reject-command-fixed",
+      "capability": "cli.batch-plan@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"apply\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1",
+        "error_path": "$.command"
+      }
+    },
+    {
+      "id": "cli.batch-plan.reject-failed-without-diagnostics",
+      "capability": "cli.batch-plan@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"broken.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"failed\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Null\"}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"operations\",\"value\":{\"type\":\"Null\"}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Null\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"ini.parse.malformed-section@1\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.wrong-type@1"
+      }
+    },
+    {
+      "id": "cli.batch-plan.reject-failed-with-planning-facts",
+      "capability": "cli.batch-plan@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"broken.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"failed\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"operations\",\"value\":{\"type\":\"Null\"}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Null\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"ini.parse.malformed-section@1\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1"
+      }
+    },
+    {
+      "id": "cli.batch-result.rfc-normative-entry",
+      "capability": "cli.batch-result@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-result@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"apply\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"completed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}}]}]}}]}}"
+      },
+      "expected": {
+        "product_version": "0.12.0",
+        "statuses": [
+          "completed"
+        ],
+        "target_digest_hex": "77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6",
+        "redacted": true
+      }
+    },
+    {
+      "id": "cli.batch-result.all-statuses-roundtrip",
+      "capability": "cli.batch-result@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-result@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"apply\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"completed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"broken.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"failed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-original-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"stale.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"skipped-stale\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-base-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"pending.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"pending\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}}]}}"
+      },
+      "expected": {
+        "product_version": "0.12.0",
+        "statuses": [
+          "completed",
+          "failed",
+          "skipped-stale",
+          "pending"
+        ],
+        "failure_code": "core.source.patch-original-mismatch@1",
+        "target_digest_hex": "77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6"
+      }
+    },
+    {
+      "id": "cli.batch-result.dual-transport",
+      "capability": "cli.batch-result@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-result@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"apply\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"completed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}}]}]}}]}}"
+      },
+      "expected": {
+        "pvce_hex": "505643450141930204200706736368656d61201413636f72652e62617463682d726573756c74403120100f70726f647563745f76657273696f6e200706302e31322e30200807636f6d6d616e642006056170706c7920060566696c657340bb010141b70105200504706174682009086170702e636f6e66200706737461747573200a09636f6d706c65746564200d0c6661696c7572655f636f64650000200e0d7461726765745f646967657374415f02200a09616c676f726974686d2007067368613235362004036865782041403737623765613233306265616530373939373265343232336336386130373135616663623765333663336264613463343339653433613461323236333062643620090872656461637465640200"
+      }
+    },
+    {
+      "id": "cli.batch-result.reject-completed-without-digest",
+      "capability": "cli.batch-result@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-result@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"apply\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"completed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"broken.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"failed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-original-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"stale.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"skipped-stale\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-base-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"pending.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"pending\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1"
+      }
+    },
+    {
+      "id": "cli.batch-result.reject-failed-without-code",
+      "capability": "cli.batch-result@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-result@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"apply\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"completed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"broken.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"failed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"stale.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"skipped-stale\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-base-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"pending.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"pending\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1"
+      }
+    },
+    {
+      "id": "cli.batch-result.reject-pending-with-facts",
+      "capability": "cli.batch-result@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-result@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"apply\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"completed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"broken.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"failed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-original-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"stale.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"skipped-stale\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-base-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"pending.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"pending\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"cli.write.io@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1"
+      }
+    },
+    {
+      "id": "cli.batch-result.reject-unknown-status",
+      "capability": "cli.batch-result@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-result@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"apply\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"committed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"broken.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"failed\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-original-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"stale.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"skipped-stale\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"String\",\"value\":\"core.source.patch-base-mismatch@1\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"pending.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"pending\"}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Null\"}},{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}}]}}"
+      },
+      "expected": {
+        "error_code": "core.protocol.invalid-value@1"
+      }
+    },
+    {
+      "id": "cli.batch-result.recovery-three-way-rule",
+      "capability": "cli.batch-result@1",
+      "input": {
+        "branches": [
+          {
+            "disk": "source",
+            "outcome": "redo"
+          },
+          {
+            "disk": "target",
+            "outcome": "skip"
+          },
+          {
+            "disk": "other",
+            "outcome": "stale"
+          }
+        ],
+        "illegal_branch": {
+          "disk": "partially-applied",
+          "outcome": "undo"
+        }
+      },
+      "expected": {}
+    },
+    {
+      "id": "cli.redaction.redaction-facts-embedding",
+      "capability": "cli.redaction@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"data\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.diagnostic@1\"}},{\"key\":\"code\",\"value\":{\"type\":\"String\",\"value\":\"cli.data.io@1\"}},{\"key\":\"category\",\"value\":{\"type\":\"String\",\"value\":\"Encoding\"}},{\"key\":\"severity\",\"value\":{\"type\":\"String\",\"value\":\"Error\"}},{\"key\":\"primary\",\"value\":{\"type\":\"Null\"}},{\"key\":\"related\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"arguments\",\"value\":{\"type\":\"Object\",\"entries\":[]}},{\"key\":\"notes\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"fixes\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"occurrence\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":true}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}}]}}"
+      },
+      "expected": {
+        "redacted": true,
+        "count": 1,
+        "diagnostics_count": 1,
+        "diagnostic_code": "cli.data.io@1"
+      }
+    },
+    {
+      "id": "cli.redaction.record-invariant-matrix",
+      "capability": "cli.redaction@1",
+      "input": {
+        "samples": [
+          {
+            "redacted": false,
+            "count": 0,
+            "valid": true
+          },
+          {
+            "redacted": true,
+            "count": 1,
+            "valid": true
+          },
+          {
+            "redacted": true,
+            "count": 3,
+            "valid": true
+          },
+          {
+            "redacted": true,
+            "count": 0,
+            "valid": false
+          },
+          {
+            "redacted": false,
+            "count": 3,
+            "valid": false
+          }
+        ]
+      },
+      "expected": {}
+    },
+    {
+      "id": "cli.redaction.placeholder-value-passthrough",
+      "capability": "cli.redaction@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"4\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"json.strict@1\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"$REDACTED$\"}]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}"
+      },
+      "expected": {
+        "placeholder": "$REDACTED$",
+        "redacted": false,
+        "count": 0,
+        "diagnostics_count": 0
+      }
+    },
+    {
+      "id": "cli.redaction.plan-bytes-never-redacted",
+      "capability": "cli.redaction@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}"
+      },
+      "expected": {
+        "original_hex": "6f6c64",
+        "replacement_hex": "6e6577"
+      }
+    },
+    {
+      "id": "cli.limit.protocol-budget",
+      "capability": "cli.limit@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.cli-output@1\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"inspect\"}},{\"key\":\"exit_class\",\"value\":{\"type\":\"String\",\"value\":\"success\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"payload\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"cli.inspect@1\"}},{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"bytes\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"size\",\"value\":{\"type\":\"Integer\",\"value\":\"43\"}},{\"key\":\"digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}}]}}]}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"symlink\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"markers\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"[section]\"}]}},{\"key\":\"candidates\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"reason\",\"value\":{\"type\":\"String\",\"value\":\"leading [section] line\"}}]}]}},{\"key\":\"ambiguous\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"ambiguity_reasons\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"parse\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Sequence\",\"items\":[]}},{\"key\":\"redaction\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"redacted\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"count\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}]}}]}}",
+        "max_bytes": 64
+      },
+      "expected": {}
+    },
+    {
+      "id": "cli.limit.manifest-size-budget",
+      "capability": "cli.limit@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}",
+        "max_bytes": 64
+      },
+      "expected": {}
+    },
+    {
+      "id": "cli.limit.patch-replacement-budget",
+      "capability": "cli.limit@1",
+      "input": {
+        "json": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.batch-plan@1\"}},{\"key\":\"product_version\",\"value\":{\"type\":\"String\",\"value\":\"0.12.0\"}},{\"key\":\"command\",\"value\":{\"type\":\"String\",\"value\":\"plan\"}},{\"key\":\"files\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"path\",\"value\":{\"type\":\"String\",\"value\":\"app.conf\"}},{\"key\":\"status\",\"value\":{\"type\":\"String\",\"value\":\"planned\"}},{\"key\":\"profile\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.portable\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"source_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"operations\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"operation\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"id\",\"value\":{\"type\":\"String\",\"value\":\"ini.edit.set-entry-value\"}},{\"key\":\"version\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}},{\"key\":\"summary\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"name\",\"value\":{\"type\":\"String\",\"value\":\"password\"}}]}}]}]}},{\"key\":\"source_patch\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-patch@2\"}},{\"key\":\"base_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"03903885bf416e0f6aa8cb034cc0bcf3009ed0ce39a615c3bd5437aac69a2af9\"}}]}},{\"key\":\"target_digest\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"algorithm\",\"value\":{\"type\":\"String\",\"value\":\"sha256\"}},{\"key\":\"hex\",\"value\":{\"type\":\"String\",\"value\":\"77b7ea230beae079972e4223c68a0715afcb7e36c3bda4c439e43a4a22630bd6\"}}]}},{\"key\":\"encoding\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"profile_default\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"bom_policy\",\"value\":{\"type\":\"String\",\"value\":\"DetectUnicode\"}},{\"key\":\"bom\",\"value\":{\"type\":\"Null\"}},{\"key\":\"declaration\",\"value\":{\"type\":\"Null\"}},{\"key\":\"caller_override\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}},{\"key\":\"selected\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"schema\",\"value\":{\"type\":\"String\",\"value\":\"core.source-encoding@1\"}},{\"key\":\"kind\",\"value\":{\"type\":\"String\",\"value\":\"Utf8\"}},{\"key\":\"windows_code_page\",\"value\":{\"type\":\"Null\"}}]}}]}},{\"key\":\"replacements\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"old_start\",\"value\":{\"type\":\"Integer\",\"value\":\"16\"}},{\"key\":\"old_end\",\"value\":{\"type\":\"Integer\",\"value\":\"19\"}},{\"key\":\"original\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6f6c64\"}},{\"key\":\"replacement\",\"value\":{\"type\":\"Bytes\",\"hex\":\"6e6577\"}},{\"key\":\"redact_original\",\"value\":{\"type\":\"Boolean\",\"value\":false}},{\"key\":\"redact_replacement\",\"value\":{\"type\":\"Boolean\",\"value\":false}}]}]}},{\"key\":\"metadata\",\"value\":{\"type\":\"Object\",\"entries\":[]}}]}},{\"key\":\"failure_code\",\"value\":{\"type\":\"Null\"}},{\"key\":\"diagnostics\",\"value\":{\"type\":\"Null\"}}]}]}}]}}"
+      },
+      "expected": {}
+    }
+  ]
+}

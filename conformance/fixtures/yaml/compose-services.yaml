@@ -1,0 +1,28 @@
+name: local-observability
+
+services:
+  api:
+    image: example.invalid/api:1.0.0
+    command: [serve, "--listen=0.0.0.0:8080"]
+    environment:
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://database/app
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+  database:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  default:
+    name: local-observability

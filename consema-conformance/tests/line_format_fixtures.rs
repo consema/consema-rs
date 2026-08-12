@@ -49,7 +49,7 @@ const INI_FIXTURES: &[IniFixture] = &[
     IniFixture {
         name: "desktop-settings",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/ini/desktop-settings.ini"
+            "../../conformance/fixtures/ini/desktop-settings.ini"
         )),
         profile: IniProfile::PortableV1,
         encoding: IniEncoding::Default,
@@ -59,7 +59,7 @@ const INI_FIXTURES: &[IniFixture] = &[
     IniFixture {
         name: "dotnet-service",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/ini/dotnet-service.ini"
+            "../../conformance/fixtures/ini/dotnet-service.ini"
         )),
         profile: IniProfile::WindowsV1,
         encoding: IniEncoding::Default,
@@ -69,7 +69,7 @@ const INI_FIXTURES: &[IniFixture] = &[
     IniFixture {
         name: "python-tool",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/ini/python-tool.ini"
+            "../../conformance/fixtures/ini/python-tool.ini"
         )),
         profile: IniProfile::PythonConfigParserV1,
         encoding: IniEncoding::Default,
@@ -79,7 +79,7 @@ const INI_FIXTURES: &[IniFixture] = &[
     IniFixture {
         name: "legacy-mixed-newline",
         source: FixtureSource::Hex(include_str!(
-            "../../../conformance/fixtures/ini/legacy-mixed-newline.ini.hex"
+            "../../conformance/fixtures/ini/legacy-mixed-newline.ini.hex"
         )),
         profile: IniProfile::PortableV1,
         encoding: IniEncoding::Default,
@@ -89,7 +89,7 @@ const INI_FIXTURES: &[IniFixture] = &[
     IniFixture {
         name: "windows-cp1252",
         source: FixtureSource::Hex(include_str!(
-            "../../../conformance/fixtures/ini/windows-cp1252.ini.hex"
+            "../../conformance/fixtures/ini/windows-cp1252.ini.hex"
         )),
         profile: IniProfile::WindowsV1,
         encoding: IniEncoding::Windows1252,
@@ -116,7 +116,7 @@ const PROPERTIES_FIXTURES: &[PropertiesFixture] = &[
     PropertiesFixture {
         name: "logging",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/logging.properties"
+            "../../conformance/fixtures/properties/logging.properties"
         )),
         encoding: PropertiesEncoding::ReaderUtf8,
         properties: 7,
@@ -125,7 +125,7 @@ const PROPERTIES_FIXTURES: &[PropertiesFixture] = &[
     PropertiesFixture {
         name: "messages",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/messages.properties"
+            "../../conformance/fixtures/properties/messages.properties"
         )),
         encoding: PropertiesEncoding::ReaderUtf8,
         properties: 4,
@@ -134,7 +134,7 @@ const PROPERTIES_FIXTURES: &[PropertiesFixture] = &[
     PropertiesFixture {
         name: "build-tool",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/build-tool.properties"
+            "../../conformance/fixtures/properties/build-tool.properties"
         )),
         encoding: PropertiesEncoding::ReaderUtf8,
         properties: 6,
@@ -143,7 +143,7 @@ const PROPERTIES_FIXTURES: &[PropertiesFixture] = &[
     PropertiesFixture {
         name: "windows-paths",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/windows-paths.properties"
+            "../../conformance/fixtures/properties/windows-paths.properties"
         )),
         encoding: PropertiesEncoding::ReaderUtf8,
         properties: 4,
@@ -152,7 +152,7 @@ const PROPERTIES_FIXTURES: &[PropertiesFixture] = &[
     PropertiesFixture {
         name: "continuation-heavy",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/continuation-heavy.properties"
+            "../../conformance/fixtures/properties/continuation-heavy.properties"
         )),
         encoding: PropertiesEncoding::ReaderUtf8,
         properties: 3,
@@ -161,7 +161,7 @@ const PROPERTIES_FIXTURES: &[PropertiesFixture] = &[
     PropertiesFixture {
         name: "latin1-resource",
         source: FixtureSource::Hex(include_str!(
-            "../../../conformance/fixtures/properties/latin1-resource.properties.hex"
+            "../../conformance/fixtures/properties/latin1-resource.properties.hex"
         )),
         encoding: PropertiesEncoding::Latin1,
         properties: 3,
@@ -170,7 +170,7 @@ const PROPERTIES_FIXTURES: &[PropertiesFixture] = &[
     PropertiesFixture {
         name: "utf16-edge",
         source: FixtureSource::Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/utf16-edge.properties"
+            "../../conformance/fixtures/properties/utf16-edge.properties"
         )),
         encoding: PropertiesEncoding::ReaderUtf8,
         properties: 3,

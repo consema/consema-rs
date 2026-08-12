@@ -1,0 +1,141 @@
+{
+  "suite": "consema.portable-graph.conformance@1",
+  "cases": [
+    {
+      "id": "pgce.empty-vector",
+      "capability": "core.pgce.full@1",
+      "input": {"graph": {"roots": [], "nodes": []}},
+      "expected": {"hex": "50474345010000"}
+    },
+    {
+      "id": "pgce.scalar-vector",
+      "capability": "core.pgce.full@1",
+      "input": {
+        "graph": {
+          "roots": [0],
+          "nodes": [
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"}
+          ]
+        }
+      },
+      "expected": {"hex": "504743450101010020157461673a79616d6c2e6f72672c323030323a7374720178"}
+    },
+    {
+      "id": "graph.isomorphic-builder-numbering",
+      "capability": "core.portable-graph.strict-equality@1",
+      "input": {
+        "left": {
+          "roots": [0],
+          "nodes": [
+            {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [1, 1]},
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"}
+          ]
+        },
+        "right": {
+          "roots": [1],
+          "nodes": [
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"},
+            {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [0, 0]}
+          ]
+        }
+      },
+      "expected": {"strict_equal": true, "strict_hash_equal": true, "pgce_equal": true}
+    },
+    {
+      "id": "graph.sharing-is-not-duplication",
+      "capability": "core.portable-graph.strict-equality@1",
+      "input": {
+        "left": {
+          "roots": [0],
+          "nodes": [
+            {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [1, 1]},
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"}
+          ]
+        },
+        "right": {
+          "roots": [0],
+          "nodes": [
+            {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [1, 2]},
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"},
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"}
+          ]
+        }
+      },
+      "expected": {"strict_equal": false, "pgce_equal": false}
+    },
+    {
+      "id": "pgce.cycle-roundtrip",
+      "capability": "core.pgce.full@1",
+      "input": {
+        "graph": {
+          "roots": [0],
+          "nodes": [
+            {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [0]}
+          ]
+        }
+      },
+      "expected": {"strict_equal": true, "byte_stable": true}
+    },
+    {
+      "id": "pgce.reject-nonminimal-varint",
+      "capability": "core.pgce.full@1",
+      "input": {"hex": "5047434581000000"},
+      "expected": {"failure": "NonMinimalVarint", "partial_graph": false}
+    },
+    {
+      "id": "pgce.reject-noncanonical-node-order",
+      "capability": "core.pgce.full@1",
+      "input": {"hex": "504743450101020120157461673a79616d6c2e6f72672c323030323a737472017840157461673a79616d6c2e6f72672c323030323a7365710100"},
+      "expected": {"failure": "NonCanonicalNodeOrder", "partial_graph": false}
+    },
+    {
+      "id": "query.reachable-canonical-order",
+      "capability": "core.portable-graph-query@1",
+      "input": {
+        "graph": {
+          "roots": [0, 2],
+          "nodes": [
+            {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [1]},
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "shared"},
+            {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [1]}
+          ]
+        },
+        "pipeline": ["graph.reachable-nodes@1"]
+      },
+      "expected": {"builder_node_ids": [0, 1, 2], "count": 3}
+    },
+    {
+      "id": "query.distinct-shared-identity",
+      "capability": "core.portable-graph-query@1",
+      "input": {
+        "graph": {
+          "roots": [0],
+          "nodes": [
+            {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [1, 1]},
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "shared"}
+          ]
+        },
+        "pipeline": [
+          "graph.try-sequence-elements@1",
+          "graph.sequence-element-node@1",
+          "core.distinct-by-identity@1"
+        ]
+      },
+      "expected": {"builder_node_ids": [1], "count": 1}
+    },
+    {
+      "id": "resource.pgce-stream-limit",
+      "capability": "core.pgce.full@1",
+      "input": {
+        "graph": {
+          "roots": [0],
+          "nodes": [
+            {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"}
+          ]
+        },
+        "max_stream_bytes": 7
+      },
+      "expected": {"failure": "ResourceLimit", "limit": "stream-bytes", "partial_bytes": false}
+    }
+  ]
+}

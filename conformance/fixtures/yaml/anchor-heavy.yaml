@@ -1,0 +1,17 @@
+defaults: &defaults
+  retries: 3
+  timeout: 5s
+  labels: &labels
+    tier: worker
+    managed-by: consema
+
+workers:
+  - name: ingest
+    settings: *defaults
+    labels: *labels
+  - name: export
+    settings: *defaults
+    labels: *labels
+
+platforms: &platforms [linux, windows, macos]
+release-platforms: *platforms

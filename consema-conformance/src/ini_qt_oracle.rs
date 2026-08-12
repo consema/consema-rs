@@ -16,13 +16,13 @@ const ADAPTER_SHA256: &str = "68e46532e86a930f72c32e7ff42c05fe2e2b33720273eaffca
 
 /// Embedded Qt 6.10 QSettings portable-subset differential manifest.
 pub const INI_QT_ORACLE_JSON: &str =
-    include_str!("../../../conformance/oracles/qt-ini-v1/manifest.json");
+    include_str!("../../conformance/oracles/qt-ini-v1/manifest.json");
 
-const BASIC: &[u8] = include_bytes!("../../../conformance/oracles/qt-ini-v1/basic.ini");
-const COMMENTS: &[u8] = include_bytes!("../../../conformance/oracles/qt-ini-v1/comments.ini");
+const BASIC: &[u8] = include_bytes!("../../conformance/oracles/qt-ini-v1/basic.ini");
+const COMMENTS: &[u8] = include_bytes!("../../conformance/oracles/qt-ini-v1/comments.ini");
 const MULTI_SECTION: &[u8] =
-    include_bytes!("../../../conformance/oracles/qt-ini-v1/multi-section.ini");
-const ORDERING: &[u8] = include_bytes!("../../../conformance/oracles/qt-ini-v1/ordering.ini");
+    include_bytes!("../../conformance/oracles/qt-ini-v1/multi-section.ini");
+const ORDERING: &[u8] = include_bytes!("../../conformance/oracles/qt-ini-v1/ordering.ini");
 
 /// Runs the embedded Qt 6.10 QSettings portable-subset differential manifest.
 #[must_use]

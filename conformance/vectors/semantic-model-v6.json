@@ -1,0 +1,219 @@
+{
+  "suite": "consema.semantic-model-v6.conformance@1",
+  "semantic_model": "core.semantic-model@6",
+  "cases": [
+    {
+      "id": "registry.v6-manifest",
+      "capability": "core.registry-manifest@1",
+      "input": {},
+      "expected": {"semantic_model": "core.semantic-model@6", "contract_count": 38, "error_code_count": 166}
+    },
+    {
+      "id": "registry.v1-v5-frozen",
+      "capability": "core.registry-manifest@1",
+      "input": {
+        "previous_vectors": [
+          {"name": "semantic-model-v5", "sha256": "6bb841e1e8e9d0bc0b414da35b1872b75fd09aa04515238cb7c447968e948216"},
+          {"name": "protocol-v2", "sha256": "c5a93327ce609af818be7622e726eb6408e7d8399034d2210077212f36f91498"},
+          {"name": "source-v1", "sha256": "cf849561be7b5612c2bbeeb9d16171476e5c3408747c67fc0a0f756246f6a1d8"}
+        ]
+      },
+      "expected": {"contract_counts": [16, 18, 25, 25, 30], "error_code_counts": [55, 62, 90, 92, 132]}
+    },
+    {
+      "id": "registry.v6-additive-contracts",
+      "capability": "core.registry-manifest@1",
+      "input": {},
+      "expected": {"contracts": [
+        "core.ini-query-result@1",
+        "core.java-properties-query-result@1",
+        "core.java-utf16-string@1",
+        "core.materialization-request@2",
+        "core.materialization-result@2",
+        "core.source-encoding@1",
+        "core.source-patch@2",
+        "core.source-snapshot@2"
+      ]}
+    },
+    {
+      "id": "registry.v6-error-codes",
+      "capability": "core.error-code-registry@1",
+      "input": {},
+      "expected": {"error_code_count": 166, "new_codes": [
+        "core.source.code-page-required@1",
+        "core.source.unsupported-code-page@1",
+        "ini.edit.canonical-fallback@1",
+        "ini.edit.case-collision@1",
+        "ini.edit.invalid-name@1",
+        "ini.edit.invalid-placement@1",
+        "ini.formation.case-collision@1",
+        "ini.formation.duplicate-entry@1",
+        "ini.formation.duplicate-section@1",
+        "ini.materialization.round-trip-mismatch@1",
+        "ini.parse.invalid-character@1",
+        "ini.parse.invalid-continuation@1",
+        "ini.parse.malformed-line@1",
+        "ini.parse.malformed-section@1",
+        "ini.parse.missing-delimiter@1",
+        "ini.parse.missing-section@1",
+        "ini.profile.encoding@1",
+        "ini.profile.mismatch@1",
+        "ini.projection.collision@1",
+        "ini.projection.duplicate-collapsed@1",
+        "ini.projection.incomplete-document@1",
+        "ini.query.invalid-name-mode@1",
+        "java-properties.edit.canonical-fallback@1",
+        "java-properties.edit.invalid-placement@1",
+        "java-properties.java-string.invalid-wire@1",
+        "java-properties.java-string.non-canonical-wire@1",
+        "java-properties.materialization.round-trip-mismatch@1",
+        "java-properties.parse.malformed-unicode-escape@1",
+        "java-properties.profile.mismatch@1",
+        "java-properties.projection.duplicate-collapsed@1",
+        "java-properties.projection.incomplete-document@1",
+        "java-properties.projection.unpaired-surrogate@1",
+        "java-properties.query.invalid-code-unit-filter@1",
+        "java-properties.source.profile-encoding@1"
+      ]}
+    },
+    {
+      "id": "source-encoding.mandatory-code-pages",
+      "capability": "core.source-encoding@1",
+      "input": {"code_pages": [874, 932, 936, 949, 950, 1250, 1251, 1252, 1253, 1254, 1255, 1256, 1257, 1258, 65001]},
+      "expected": {"accepted_count": 15}
+    },
+    {
+      "id": "source-encoding.reject-unsupported",
+      "capability": "core.source-encoding@1",
+      "input": {"code_page": 1259},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "source.bom-policy-distinct",
+      "capability": "core.source-snapshot@2",
+      "input": {"hex": "efbbbf78"},
+      "expected": {"detect_text": "﻿x", "content_text": "ï»¿x"}
+    },
+    {
+      "id": "source.snapshot-v2-code-page-boundaries",
+      "capability": "core.source-snapshot@2",
+      "input": {"code_page": 932, "hex": "82a041"},
+      "expected": {"text": "あA", "raw_boundaries": [0, 2, 3], "invalid_raw_boundary": 1}
+    },
+    {
+      "id": "source.snapshot-v2-reject-digest",
+      "capability": "core.source-snapshot@2",
+      "input": {"code_page": 1252, "hex": "8041"},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "source.patch-v2-atomic-apply",
+      "capability": "core.source-patch@2",
+      "input": {"code_page": 1252, "base_hex": "6b3d31", "start": 2, "end": 3, "replacement_hex": "32"},
+      "expected": {"target_hex": "6b3d32", "wrong_base_code": "core.source.patch-base-mismatch@1"}
+    },
+    {
+      "id": "materialization.request-v2-roundtrip",
+      "capability": "core.materialization-request@2",
+      "input": {"code_page": 1252, "profile": "ini.windows", "style": "ini.windows-canonical"},
+      "expected": {"encoding_kind": "WindowsCodePage"}
+    },
+    {
+      "id": "materialization.result-v2-version-closure",
+      "capability": "core.materialization-result@2",
+      "input": {"code_page": 1252, "hex": "6b3d80"},
+      "expected": {"mixed_version_code": "core.protocol.schema-mismatch@1"}
+    },
+    {
+      "id": "java-utf16.edge-matrix",
+      "capability": "core.java-utf16-string@1",
+      "input": {"cases": [
+        {"units": [], "status": "WellFormedUnicode"},
+        {"units": ["0000", "0041", "FFFF"], "status": "WellFormedUnicode"},
+        {"units": ["D83D", "DE00"], "status": "WellFormedUnicode"},
+        {"units": ["DC00"], "status": "UnpairedSurrogate"},
+        {"units": ["D800"], "status": "UnpairedSurrogate"},
+        {"units": ["D800", "D801", "DC00"], "status": "UnpairedSurrogate"},
+        {"units": ["D800", "DC00", "DC01"], "status": "UnpairedSurrogate"}
+      ]},
+      "expected": {"accepted_count": 7}
+    },
+    {
+      "id": "java-utf16.reject-noncanonical-unit",
+      "capability": "core.java-utf16-string@1",
+      "input": {"unit": "00af", "bytes_hex": "00af", "status": "WellFormedUnicode"},
+      "expected": {"code": "core.protocol.invalid-value@1", "path": "$.code_units[0]"}
+    },
+    {
+      "id": "java-utf16.reject-byte-mismatch",
+      "capability": "core.java-utf16-string@1",
+      "input": {"unit": "0041", "bytes_hex": "0042", "status": "WellFormedUnicode"},
+      "expected": {"code": "core.protocol.invalid-value@1", "path": "$.code_units[0]"}
+    },
+    {
+      "id": "ini-query.all-roles",
+      "capability": "core.ini-query-result@1",
+      "input": {"source_id": "sha256:ini", "roles": ["IniDocument", "IniPhysicalLine", "IniLogicalLine", "IniSection", "IniDefaultSection", "IniEntry", "IniErrorLine", "IniSyntaxPiece"]},
+      "expected": {"role_count": 8}
+    },
+    {
+      "id": "properties-query.all-roles",
+      "capability": "core.java-properties-query-result@1",
+      "input": {"source_id": "sha256:properties", "roles": ["PropertiesDocument", "PropertiesNaturalLine", "PropertiesLogicalLine", "PropertiesProperty", "PropertiesComment", "PropertiesEscape", "PropertiesErrorLine", "PropertiesSyntaxPiece"]},
+      "expected": {"role_count": 8}
+    },
+    {
+      "id": "line-query.reject-domain-role",
+      "capability": "core.ini-query-result@1",
+      "input": {"role": "IniSyntaxPiece"},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "line-query.reject-ordinal-and-count",
+      "capability": "core.java-properties-query-result@1",
+      "input": {"role": "PropertiesProperty", "ordinals": [1, 1], "produced": 2},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "line-query.reject-process-local",
+      "capability": "core.ini-query-result@1",
+      "input": {},
+      "expected": {"code": "core.protocol.process-local-handle@1"}
+    },
+    {
+      "id": "protocol.v1-v5-reject-v6-contracts",
+      "capability": "core.protocol-message@1",
+      "input": {},
+      "expected": {"rejected_pairs": 8, "code": "core.protocol.unknown-contract@1"}
+    },
+    {
+      "id": "protocol.exact-version-dispatch",
+      "capability": "core.protocol-message@1",
+      "input": {},
+      "expected": {"code": "core.protocol.wrong-type@1"}
+    },
+    {
+      "id": "protocol.v6-nested-error-code",
+      "capability": "core.protocol-message@1",
+      "input": {"failure_code": "ini.profile.encoding@1"},
+      "expected": {"v5_code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.new-contract-canonical-bytes",
+      "capability": "core.protocol-message@1",
+      "input": {},
+      "expected": {
+        "source_encoding_json_hex": "7b22736368656d61223a22636f72652e706f727461626c652d76616c75652d6a736f6e4031222c2276616c7565223a7b2274797065223a224f626a656374222c22656e7472696573223a5b7b226b6579223a22736368656d61222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a22636f72652e70726f746f636f6c2d6d6573736167654031227d7d2c7b226b6579223a22636f6e74726163745f6964222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a22636f72652e736f757263652d656e636f64696e67227d7d2c7b226b6579223a22636f6e74726163745f76657273696f6e222c2276616c7565223a7b2274797065223a22496e7465676572222c2276616c7565223a2231227d7d2c7b226b6579223a227061796c6f6164222c2276616c7565223a7b2274797065223a224f626a656374222c22656e7472696573223a5b7b226b6579223a22736368656d61222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a22636f72652e736f757263652d656e636f64696e674031227d7d2c7b226b6579223a226b696e64222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a2257696e646f7773436f646550616765227d7d2c7b226b6579223a2277696e646f77735f636f64655f70616765222c2276616c7565223a7b2274797065223a22496e7465676572222c2276616c7565223a2231323532227d7d5d7d7d5d7d7d",
+        "source_encoding_pvce_hex": "505643450141c30104200706736368656d61201817636f72652e70726f746f636f6c2d6d6573736167654031200c0b636f6e74726163745f6964201514636f72652e736f757263652d656e636f64696e67201110636f6e74726163745f76657273696f6e10030101012008077061796c6f6164415603200706736368656d61201716636f72652e736f757263652d656e636f64696e6740312005046b696e6420100f57696e646f7773436f64655061676520121177696e646f77735f636f64655f706167651004010204e4",
+        "java_utf16_json_hex": "7b22736368656d61223a22636f72652e706f727461626c652d76616c75652d6a736f6e4031222c2276616c7565223a7b2274797065223a224f626a656374222c22656e7472696573223a5b7b226b6579223a22736368656d61222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a22636f72652e70726f746f636f6c2d6d6573736167654031227d7d2c7b226b6579223a22636f6e74726163745f6964222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a22636f72652e6a6176612d75746631362d737472696e67227d7d2c7b226b6579223a22636f6e74726163745f76657273696f6e222c2276616c7565223a7b2274797065223a22496e7465676572222c2276616c7565223a2231227d7d2c7b226b6579223a227061796c6f6164222c2276616c7565223a7b2274797065223a224f626a656374222c22656e7472696573223a5b7b226b6579223a22736368656d61222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a22636f72652e6a6176612d75746631362d737472696e674031227d7d2c7b226b6579223a22656e636f64696e67222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a22555446313642452f31227d7d2c7b226b6579223a22636f64655f756e697473222c2276616c7565223a7b2274797065223a2253657175656e6365222c226974656d73223a5b7b2274797065223a22537472696e67222c2276616c7565223a2230303030227d2c7b2274797065223a22537472696e67222c2276616c7565223a2244383344227d2c7b2274797065223a22537472696e67222c2276616c7565223a2244453030227d2c7b2274797065223a22537472696e67222c2276616c7565223a2244383030227d5d7d7d2c7b226b6579223a226279746573222c2276616c7565223a7b2274797065223a224279746573222c22686578223a2230303030643833646465303064383030227d7d2c7b226b6579223a22756e69636f64655f737461747573222c2276616c7565223a7b2274797065223a22537472696e67222c2276616c7565223a22556e706169726564537572726f67617465227d7d5d7d7d5d7d7d",
+        "java_utf16_pvce_hex": "505643450141900204200706736368656d61201817636f72652e70726f746f636f6c2d6d6573736167654031200c0b636f6e74726163745f6964201716636f72652e6a6176612d75746631362d737472696e67201110636f6e74726163745f76657273696f6e10030101012008077061796c6f616441a00105200706736368656d61201918636f72652e6a6176612d75746631362d737472696e674031200908656e636f64696e67200a09555446313642452f31200b0a636f64655f756e697473401d042005043030303020050444383344200504444530302005044438303020060562797465732109080000d83dde00d800200f0e756e69636f64655f737461747573201211556e706169726564537572726f67617465"
+      }
+    },
+    {
+      "id": "protocol.new-payload-schema-and-limits",
+      "capability": "core.java-utf16-string@1",
+      "input": {"max_units": 0},
+      "expected": {"unknown_field_code": "core.protocol.unknown-field@1", "limit_code": "core.protocol.resource-limit@1"}
+    }
+  ]
+}

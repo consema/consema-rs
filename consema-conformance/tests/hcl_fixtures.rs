@@ -15,27 +15,27 @@ use std::sync::Arc;
 const NATIVE_FIXTURES: &[(&str, &[u8])] = &[
     (
         "tf/main.tf",
-        include_bytes!("../../../conformance/fixtures/hcl/tf/main.tf"),
+        include_bytes!("../../conformance/fixtures/hcl/tf/main.tf"),
     ),
     (
         "tf/network.tf",
-        include_bytes!("../../../conformance/fixtures/hcl/tf/network.tf"),
+        include_bytes!("../../conformance/fixtures/hcl/tf/network.tf"),
     ),
     (
         "tf/variables.tf",
-        include_bytes!("../../../conformance/fixtures/hcl/tf/variables.tf"),
+        include_bytes!("../../conformance/fixtures/hcl/tf/variables.tf"),
     ),
     (
         "tf/packer.pkr.hcl",
-        include_bytes!("../../../conformance/fixtures/hcl/tf/packer.pkr.hcl"),
+        include_bytes!("../../conformance/fixtures/hcl/tf/packer.pkr.hcl"),
     ),
     (
         "tf/nomad.hcl",
-        include_bytes!("../../../conformance/fixtures/hcl/tf/nomad.hcl"),
+        include_bytes!("../../conformance/fixtures/hcl/tf/nomad.hcl"),
     ),
     (
         "tf/vault.hcl",
-        include_bytes!("../../../conformance/fixtures/hcl/tf/vault.hcl"),
+        include_bytes!("../../conformance/fixtures/hcl/tf/vault.hcl"),
     ),
 ];
 
@@ -43,11 +43,11 @@ const NATIVE_FIXTURES: &[(&str, &[u8])] = &[
 const TFVARS_FIXTURES: &[(&str, &[u8])] = &[
     (
         "tfvars/terraform.tfvars",
-        include_bytes!("../../../conformance/fixtures/hcl/tfvars/terraform.tfvars"),
+        include_bytes!("../../conformance/fixtures/hcl/tfvars/terraform.tfvars"),
     ),
     (
         "tfvars/prod.tfvars",
-        include_bytes!("../../../conformance/fixtures/hcl/tfvars/prod.tfvars"),
+        include_bytes!("../../conformance/fixtures/hcl/tfvars/prod.tfvars"),
     ),
 ];
 

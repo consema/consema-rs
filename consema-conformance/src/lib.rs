@@ -84,7 +84,7 @@ pub use xml_v1::{XML_V1_VECTORS_JSON, run_xml_v1, run_xml_v1_json};
 pub use yaml_v1::{YAML_V1_VECTORS_JSON, run_yaml_v1, run_yaml_v1_json};
 
 /// Embedded language-neutral suite bytes.
-pub const V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/v1.json");
+pub const V1_VECTORS_JSON: &str = include_str!("../../conformance/vectors/v1.json");
 
 /// Complete conformance run result.
 #[derive(Clone, Debug, Eq, PartialEq)]

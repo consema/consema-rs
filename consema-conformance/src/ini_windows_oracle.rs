@@ -12,16 +12,15 @@ const ADAPTER_SHA256: &str = "74527cfca16d5197d82d30a9b8dc2805d9ff0a8d5b99e05da8
 
 /// Embedded Windows wide INI API differential manifest.
 pub const INI_WINDOWS_ORACLE_JSON: &str =
-    include_str!("../../../conformance/oracles/windows-ini-v1/manifest.json");
+    include_str!("../../conformance/oracles/windows-ini-v1/manifest.json");
 
-const BASIC_HEX: &str = include_str!("../../../conformance/oracles/windows-ini-v1/basic.ini.hex");
+const BASIC_HEX: &str = include_str!("../../conformance/oracles/windows-ini-v1/basic.ini.hex");
 const CASEFOLD_HEX: &str =
-    include_str!("../../../conformance/oracles/windows-ini-v1/casefold.ini.hex");
-const QUOTES_HEX: &str = include_str!("../../../conformance/oracles/windows-ini-v1/quotes.ini.hex");
+    include_str!("../../conformance/oracles/windows-ini-v1/casefold.ini.hex");
+const QUOTES_HEX: &str = include_str!("../../conformance/oracles/windows-ini-v1/quotes.ini.hex");
 const SECTIONS_HEX: &str =
-    include_str!("../../../conformance/oracles/windows-ini-v1/sections.ini.hex");
-const UNICODE_HEX: &str =
-    include_str!("../../../conformance/oracles/windows-ini-v1/unicode.ini.hex");
+    include_str!("../../conformance/oracles/windows-ini-v1/sections.ini.hex");
+const UNICODE_HEX: &str = include_str!("../../conformance/oracles/windows-ini-v1/unicode.ini.hex");
 
 /// Runs the embedded Windows wide INI API differential manifest.
 #[must_use]

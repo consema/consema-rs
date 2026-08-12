@@ -64,142 +64,138 @@ fn fixture_source(id: &str) -> FixtureSource {
     use FixtureSource::{Bytes, Hex};
     match id {
         "json5.package-json5" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/json5/package-json5-v2.2.3.json5"
+            "../../conformance/fixtures/json5/package-json5-v2.2.3.json5"
         )),
         "json5.application-json5" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/real-world/application.json5"
+            "../../conformance/fixtures/real-world/application.json5"
         )),
         "json.package-json" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/real-world/package.json"
+            "../../conformance/fixtures/real-world/package.json"
         )),
         "json.tsconfig-jsonc" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/real-world/tsconfig.jsonc"
+            "../../conformance/fixtures/real-world/tsconfig.jsonc"
         )),
         "json.vscode-settings-jsonc" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/real-world/vscode-settings.jsonc"
+            "../../conformance/fixtures/real-world/vscode-settings.jsonc"
         )),
         "toml.all-values" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/toml/all-values.toml"
+            "../../conformance/fixtures/toml/all-values.toml"
         )),
         "toml.application" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/toml/application.toml"
+            "../../conformance/fixtures/toml/application.toml"
         )),
         "toml.invalid-duplicate" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/toml/invalid-duplicate.toml"
+            "../../conformance/fixtures/toml/invalid-duplicate.toml"
         )),
         "toml.pyproject" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/toml/pyproject.toml"
+            "../../conformance/fixtures/toml/pyproject.toml"
         )),
         "toml.trivia-and-strings" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/toml/trivia-and-strings.toml"
+            "../../conformance/fixtures/toml/trivia-and-strings.toml"
         )),
         "yaml.anchor-heavy" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/yaml/anchor-heavy.yaml"
+            "../../conformance/fixtures/yaml/anchor-heavy.yaml"
         )),
         "yaml.compose-services" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/yaml/compose-services.yaml"
+            "../../conformance/fixtures/yaml/compose-services.yaml"
         )),
         "yaml.github-actions-ci" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/yaml/github-actions-ci.yaml"
+            "../../conformance/fixtures/yaml/github-actions-ci.yaml"
         )),
         "yaml.kubernetes-workload" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/yaml/kubernetes-workload.yaml"
+            "../../conformance/fixtures/yaml/kubernetes-workload.yaml"
         )),
         "ini.desktop-settings" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/ini/desktop-settings.ini"
+            "../../conformance/fixtures/ini/desktop-settings.ini"
         )),
         "ini.dotnet-service" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/ini/dotnet-service.ini"
+            "../../conformance/fixtures/ini/dotnet-service.ini"
         )),
         "ini.python-tool" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/ini/python-tool.ini"
+            "../../conformance/fixtures/ini/python-tool.ini"
         )),
         "ini.legacy-mixed-newline" => Hex(include_str!(
-            "../../../conformance/fixtures/ini/legacy-mixed-newline.ini.hex"
+            "../../conformance/fixtures/ini/legacy-mixed-newline.ini.hex"
         )),
         "ini.windows-cp1252" => Hex(include_str!(
-            "../../../conformance/fixtures/ini/windows-cp1252.ini.hex"
+            "../../conformance/fixtures/ini/windows-cp1252.ini.hex"
         )),
         "properties.logging" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/logging.properties"
+            "../../conformance/fixtures/properties/logging.properties"
         )),
         "properties.messages" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/messages.properties"
+            "../../conformance/fixtures/properties/messages.properties"
         )),
         "properties.build-tool" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/build-tool.properties"
+            "../../conformance/fixtures/properties/build-tool.properties"
         )),
         "properties.windows-paths" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/windows-paths.properties"
+            "../../conformance/fixtures/properties/windows-paths.properties"
         )),
         "properties.continuation-heavy" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/continuation-heavy.properties"
+            "../../conformance/fixtures/properties/continuation-heavy.properties"
         )),
         "properties.utf16-edge" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/properties/utf16-edge.properties"
+            "../../conformance/fixtures/properties/utf16-edge.properties"
         )),
         "properties.latin1-resource" => Hex(include_str!(
-            "../../../conformance/fixtures/properties/latin1-resource.properties.hex"
+            "../../conformance/fixtures/properties/latin1-resource.properties.hex"
         )),
         "xml.app-server-config" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/xml/app-server-config.xml"
+            "../../conformance/fixtures/xml/app-server-config.xml"
         )),
-        "xml.logback" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/xml/logback.xml"
-        )),
+        "xml.logback" => Bytes(include_bytes!("../../conformance/fixtures/xml/logback.xml")),
         "xml.maven-pom" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/xml/maven-pom.xml"
+            "../../conformance/fixtures/xml/maven-pom.xml"
         )),
         "xml.namespaced-service" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/xml/namespaced-service.xml"
+            "../../conformance/fixtures/xml/namespaced-service.xml"
         )),
         "xml.spring-application" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/xml/spring-application.xml"
+            "../../conformance/fixtures/xml/spring-application.xml"
         )),
         "plist.xml.Info" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/plist/xml/Info.plist"
+            "../../conformance/fixtures/plist/xml/Info.plist"
         )),
         "plist.xml.archiver-sample" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/plist/xml/com.example.archiver-sample.plist"
+            "../../conformance/fixtures/plist/xml/com.example.archiver-sample.plist"
         )),
         "plist.xml.preferences" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/plist/xml/com.example.preferences.plist"
+            "../../conformance/fixtures/plist/xml/com.example.preferences.plist"
         )),
         "plist.xml.repeated-keys" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/plist/xml/com.example.repeated-keys.plist"
+            "../../conformance/fixtures/plist/xml/com.example.repeated-keys.plist"
         )),
         "plist.binary.archiver-sample" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/plist/binary/com.example.archiver-sample.binary.plist"
+            "../../conformance/fixtures/plist/binary/com.example.archiver-sample.binary.plist"
         )),
         "plist.binary.preferences" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/plist/binary/com.example.preferences.binary.plist"
+            "../../conformance/fixtures/plist/binary/com.example.preferences.binary.plist"
         )),
         "plist.binary.shared-refs" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/plist/binary/com.example.shared-refs.binary.plist"
+            "../../conformance/fixtures/plist/binary/com.example.shared-refs.binary.plist"
         )),
-        "hcl.main-tf" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/hcl/tf/main.tf"
-        )),
+        "hcl.main-tf" => Bytes(include_bytes!("../../conformance/fixtures/hcl/tf/main.tf")),
         "hcl.network-tf" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/hcl/tf/network.tf"
+            "../../conformance/fixtures/hcl/tf/network.tf"
         )),
         "hcl.nomad-hcl" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/hcl/tf/nomad.hcl"
+            "../../conformance/fixtures/hcl/tf/nomad.hcl"
         )),
         "hcl.packer-pkr" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/hcl/tf/packer.pkr.hcl"
+            "../../conformance/fixtures/hcl/tf/packer.pkr.hcl"
         )),
         "hcl.variables-tf" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/hcl/tf/variables.tf"
+            "../../conformance/fixtures/hcl/tf/variables.tf"
         )),
         "hcl.vault-hcl" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/hcl/tf/vault.hcl"
+            "../../conformance/fixtures/hcl/tf/vault.hcl"
         )),
         "hcl.prod-tfvars" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/hcl/tfvars/prod.tfvars"
+            "../../conformance/fixtures/hcl/tfvars/prod.tfvars"
         )),
         "hcl.terraform-tfvars" => Bytes(include_bytes!(
-            "../../../conformance/fixtures/hcl/tfvars/terraform.tfvars"
+            "../../conformance/fixtures/hcl/tfvars/terraform.tfvars"
         )),
         other => panic!("corpus fixture table is stale: unknown fixture id {other:?}"),
     }
@@ -436,7 +432,7 @@ fn replay_regressions(root: &JsonValue<'_>) {
 }
 
 fn load_corpus() -> (consema_json::Document, usize) {
-    let json = include_str!("../../../conformance/corpora/mutation-v1.json");
+    let json = include_str!("../../conformance/corpora/mutation-v1.json");
     // The corpus is our own generated artifact (6 MB, ~175k cases); parse it
     // with explicit generous limits, never the production defaults.
     let limits = ParseLimits {

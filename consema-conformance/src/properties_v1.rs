@@ -23,7 +23,7 @@ const SUITE: &str = "consema.java-properties.conformance@1";
 
 /// Embedded language-neutral Java Properties family suite bytes.
 pub const PROPERTIES_V1_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/java-properties-v1.json");
+    include_str!("../../conformance/vectors/java-properties-v1.json");
 
 /// Runs the embedded `consema.java-properties.conformance@1` suite.
 #[must_use]

@@ -25,7 +25,7 @@ const SUITE: &str = "consema.xml-1-0-safe.conformance@1";
 
 /// Embedded shared XML suite bytes.
 pub const XML_V1_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/xml-1-0-safe-v1.json");
+    include_str!("../../conformance/vectors/xml-1-0-safe-v1.json");
 
 /// Runs the embedded `consema.xml-1-0-safe.conformance@1` suite.
 #[must_use]

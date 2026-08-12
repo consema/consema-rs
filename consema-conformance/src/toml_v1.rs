@@ -16,16 +16,16 @@ use consema_toml::{
 };
 
 /// Embedded language-neutral TOML suite bytes.
-pub const TOML_V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/toml-v1.json");
+pub const TOML_V1_VECTORS_JSON: &str = include_str!("../../conformance/vectors/toml-v1.json");
 
-const ALL_VALUES: &[u8] = include_bytes!("../../../conformance/fixtures/toml/all-values.toml");
-const APPLICATION: &[u8] = include_bytes!("../../../conformance/fixtures/toml/application.toml");
+const ALL_VALUES: &[u8] = include_bytes!("../../conformance/fixtures/toml/all-values.toml");
+const APPLICATION: &[u8] = include_bytes!("../../conformance/fixtures/toml/application.toml");
 const TRIVIA_AND_STRINGS: &[u8] =
-    include_bytes!("../../../conformance/fixtures/toml/trivia-and-strings.toml");
+    include_bytes!("../../conformance/fixtures/toml/trivia-and-strings.toml");
 const INVALID_DUPLICATE: &[u8] =
-    include_bytes!("../../../conformance/fixtures/toml/invalid-duplicate.toml");
-const CARGO_MANIFEST: &[u8] = include_bytes!("../../../Cargo.toml");
-const PYPROJECT: &[u8] = include_bytes!("../../../conformance/fixtures/toml/pyproject.toml");
+    include_bytes!("../../conformance/fixtures/toml/invalid-duplicate.toml");
+const CARGO_MANIFEST: &[u8] = include_bytes!("../../Cargo.toml");
+const PYPROJECT: &[u8] = include_bytes!("../../conformance/fixtures/toml/pyproject.toml");
 
 /// Parses and runs every embedded `consema.toml.conformance@1` case.
 #[must_use]

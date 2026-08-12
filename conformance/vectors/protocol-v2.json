@@ -1,0 +1,72 @@
+{
+  "suite": "consema.protocol.conformance@2",
+  "semantic_model": "core.semantic-model@2",
+  "cases": [
+    {
+      "id": "protocol.v2.registry-manifest",
+      "capability": "core.registry-manifest@1",
+      "input": {},
+      "expected": {"semantic_model": "core.semantic-model@2", "contract_count": 18, "error_code_count": 62, "recognizes_source_snapshot": true, "is_current": true}
+    },
+    {
+      "id": "protocol.v2.registry-v1-frozen",
+      "capability": "core.registry-manifest@1",
+      "input": {},
+      "expected": {"semantic_model": "core.semantic-model@1", "contract_count": 16, "error_code_count": 55, "recognizes_source_snapshot": false, "is_current": false}
+    },
+    {
+      "id": "protocol.v2.error-code-manifest",
+      "capability": "core.error-code-registry@1",
+      "input": {},
+      "expected": {"error_code_count": 62, "required_code": "core.source.patch-base-mismatch@1"}
+    },
+    {
+      "id": "protocol.v2.snapshot-dual-transport",
+      "capability": "core.source-snapshot@1",
+      "input": {"raw_hex": "616263", "encoding": "utf-8"},
+      "expected": {"json_equal": true, "pvce_equal": true, "digest": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"}
+    },
+    {
+      "id": "protocol.v2.patch-dual-transport",
+      "capability": "core.source-patch@1",
+      "input": {"base_hex": "6f6c64", "encoding": "utf-8", "replacements": [{"old_start": 0, "old_end": 3, "original_hex": "6f6c64", "replacement_hex": "6e6577"}]},
+      "expected": {"json_equal": true, "pvce_equal": true, "target_hex": "6e6577"}
+    },
+    {
+      "id": "protocol.v2.reject-source-under-v1",
+      "capability": "core.protocol-message@1",
+      "input": {"raw_hex": "61", "encoding": "utf-8"},
+      "expected": {"code": "core.protocol.unknown-contract@1"}
+    },
+    {
+      "id": "protocol.v2.reject-forged-digest",
+      "capability": "core.source-snapshot@1",
+      "input": {"raw_hex": "616263", "encoding": "utf-8"},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.v2.reject-forged-encoding",
+      "capability": "core.source-snapshot@1",
+      "input": {"raw_hex": "616263", "encoding": "utf-8", "forged_selected": "Latin1"},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.v2.snapshot-resource-limit",
+      "capability": "core.source-snapshot@1",
+      "input": {"raw_hex": "6162", "encoding": "utf-8", "max_raw_bytes": 1},
+      "expected": {"code": "core.protocol.resource-limit@1"}
+    },
+    {
+      "id": "protocol.v2.patch-resource-limit",
+      "capability": "core.source-patch@1",
+      "input": {"base_hex": "616263", "encoding": "utf-8", "max_replacements": 0, "replacements": [{"old_start": 1, "old_end": 2, "original_hex": "62", "replacement_hex": "42"}]},
+      "expected": {"code": "core.protocol.resource-limit@1"}
+    },
+    {
+      "id": "protocol.v2.patch-stale-after-wire",
+      "capability": "core.source-patch@1",
+      "input": {"base_hex": "616263", "stale_hex": "616264", "encoding": "utf-8", "replacements": [{"old_start": 1, "old_end": 2, "original_hex": "62", "replacement_hex": "42"}]},
+      "expected": {"code": "core.source.patch-base-mismatch@1"}
+    }
+  ]
+}

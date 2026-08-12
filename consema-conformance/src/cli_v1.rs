@@ -25,7 +25,7 @@ use std::collections::HashSet;
 const SUITE: &str = "consema.cli.conformance@1";
 
 /// Embedded shared CLI suite bytes.
-pub const CLI_V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/cli-v1.json");
+pub const CLI_V1_VECTORS_JSON: &str = include_str!("../../conformance/vectors/cli-v1.json");
 
 /// Runs the embedded `consema.cli.conformance@1` suite.
 #[must_use]

@@ -29,11 +29,11 @@ const SUITE: &str = "consema.semantic-model-v6.conformance@1";
 
 /// Embedded language-neutral semantic-model v6 suite bytes.
 pub const SEMANTIC_MODEL_V6_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/semantic-model-v6.json");
+    include_str!("../../conformance/vectors/semantic-model-v6.json");
 
-const V5_VECTORS: &str = include_str!("../../../conformance/vectors/semantic-model-v5.json");
-const PROTOCOL_V2_VECTORS: &str = include_str!("../../../conformance/vectors/protocol-v2.json");
-const SOURCE_V1_VECTORS: &str = include_str!("../../../conformance/vectors/source-v1.json");
+const V5_VECTORS: &str = include_str!("../../conformance/vectors/semantic-model-v5.json");
+const PROTOCOL_V2_VECTORS: &str = include_str!("../../conformance/vectors/protocol-v2.json");
+const SOURCE_V1_VECTORS: &str = include_str!("../../conformance/vectors/source-v1.json");
 
 /// Runs the embedded semantic-model v6 suite.
 #[must_use]

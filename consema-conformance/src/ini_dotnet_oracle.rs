@@ -17,21 +17,21 @@ const ADAPTER_SHA256: &str = "c0303847b0ec79097802135b07f243e5d7f39923d580328068
 
 /// Embedded .NET 10 IniConfigurationProvider differential manifest.
 pub const INI_DOTNET_ORACLE_JSON: &str =
-    include_str!("../../../conformance/oracles/dotnet-ini-v1/manifest.json");
+    include_str!("../../conformance/oracles/dotnet-ini-v1/manifest.json");
 
-const BASIC: &[u8] = include_bytes!("../../../conformance/oracles/dotnet-ini-v1/basic.ini");
+const BASIC: &[u8] = include_bytes!("../../conformance/oracles/dotnet-ini-v1/basic.ini");
 const CASEFOLD_DUPLICATE: &[u8] =
-    include_bytes!("../../../conformance/oracles/dotnet-ini-v1/casefold-duplicate.ini");
+    include_bytes!("../../conformance/oracles/dotnet-ini-v1/casefold-duplicate.ini");
 const COMMENTS_WHITESPACE: &[u8] =
-    include_bytes!("../../../conformance/oracles/dotnet-ini-v1/comments-whitespace.ini");
+    include_bytes!("../../conformance/oracles/dotnet-ini-v1/comments-whitespace.ini");
 const MALFORMED_LINE: &[u8] =
-    include_bytes!("../../../conformance/oracles/dotnet-ini-v1/malformed-line.ini");
+    include_bytes!("../../conformance/oracles/dotnet-ini-v1/malformed-line.ini");
 const QUOTED_VALUE: &[u8] =
-    include_bytes!("../../../conformance/oracles/dotnet-ini-v1/quoted-value.ini");
+    include_bytes!("../../conformance/oracles/dotnet-ini-v1/quoted-value.ini");
 const SECTION_CASEFOLD_DUPLICATE: &[u8] =
-    include_bytes!("../../../conformance/oracles/dotnet-ini-v1/section-casefold-duplicate.ini");
+    include_bytes!("../../conformance/oracles/dotnet-ini-v1/section-casefold-duplicate.ini");
 const SECTION_PATH: &[u8] =
-    include_bytes!("../../../conformance/oracles/dotnet-ini-v1/section-path.ini");
+    include_bytes!("../../conformance/oracles/dotnet-ini-v1/section-path.ini");
 
 /// Runs the embedded .NET 10 IniConfigurationProvider differential manifest.
 #[must_use]

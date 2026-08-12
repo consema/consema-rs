@@ -15,26 +15,25 @@ const ADAPTER_SHA256: &str = "2050a3317965006097e553574b95d19475440d44d7d9fbf73f
 
 /// Embedded CPython 3.14 ConfigParser differential manifest.
 pub const INI_PYTHON_ORACLE_JSON: &str =
-    include_str!("../../../conformance/oracles/python-configparser-v1/manifest.json");
+    include_str!("../../conformance/oracles/python-configparser-v1/manifest.json");
 
-const BASIC: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/basic.ini");
+const BASIC: &[u8] = include_bytes!("../../conformance/oracles/python-configparser-v1/basic.ini");
 const CASEFOLD_COLLISION: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/casefold-collision.ini");
+    include_bytes!("../../conformance/oracles/python-configparser-v1/casefold-collision.ini");
 const CONTINUATION: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/continuation.ini");
+    include_bytes!("../../conformance/oracles/python-configparser-v1/continuation.ini");
 const DEFAULT_OVERRIDE: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/default-override.ini");
+    include_bytes!("../../conformance/oracles/python-configparser-v1/default-override.ini");
 const DEFAULTS_AND_RAW: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/defaults-and-raw.ini");
+    include_bytes!("../../conformance/oracles/python-configparser-v1/defaults-and-raw.ini");
 const DUPLICATE_OPTION: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/duplicate-option.ini");
+    include_bytes!("../../conformance/oracles/python-configparser-v1/duplicate-option.ini");
 const DUPLICATE_SECTION: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/duplicate-section.ini");
+    include_bytes!("../../conformance/oracles/python-configparser-v1/duplicate-section.ini");
 const MISSING_SECTION: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/missing-section.ini");
+    include_bytes!("../../conformance/oracles/python-configparser-v1/missing-section.ini");
 const UNICODE_OPTIONXFORM: &[u8] =
-    include_bytes!("../../../conformance/oracles/python-configparser-v1/unicode-optionxform.ini");
+    include_bytes!("../../conformance/oracles/python-configparser-v1/unicode-optionxform.ini");
 
 #[derive(Debug, Eq, PartialEq)]
 struct SectionView {

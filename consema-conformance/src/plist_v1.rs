@@ -32,7 +32,7 @@ use std::sync::Arc;
 const SUITE: &str = "consema.plist.conformance@1";
 
 /// Embedded shared plist suite bytes.
-pub const PLIST_V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/plist-v1.json");
+pub const PLIST_V1_VECTORS_JSON: &str = include_str!("../../conformance/vectors/plist-v1.json");
 
 /// Runs the embedded `consema.plist.conformance@1` suite.
 #[must_use]

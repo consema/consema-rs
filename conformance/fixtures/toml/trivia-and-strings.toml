@@ -1,0 +1,14 @@
+# Leading comment must survive.
+basic = "quote: \"; slash: \\; tab: \t"
+literal = 'C:\Users\name'
+multiline = """
+The quick brown fox \
+  jumps over the lazy dog."""
+literal_multiline = '''
+first line
+second line'''
+array = [
+  1, # first
+  2, # second
+]
+

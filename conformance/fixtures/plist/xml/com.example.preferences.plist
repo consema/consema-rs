@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>ui</key>
+        <dict>
+            <key>language</key>
+            <string>en-US</string>
+            <key>font-size</key>
+            <real>12.5</real>
+            <key>dark-mode</key>
+            <true/>
+            <key>toolbar</key>
+            <array>
+                <string>New</string>
+                <string>Open</string>
+                <string>Save</string>
+            </array>
+        </dict>
+        <key>accounts</key>
+        <array>
+            <dict>
+                <key>name</key>
+                <string>demo</string>
+                <key>flags</key>
+                <integer>-2147483648</integer>
+            </dict>
+        </array>
+        <key>retry-count</key>
+        <integer>42</integer>
+        <key>negative-balance</key>
+        <integer>-7</integer>
+        <key>updated</key>
+        <date>2024-02-29T12:34:56Z</date>
+        <key>session-token</key>
+        <data>AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKiss
+        LS4vMDEyMzQ1Njc4OTo7PD0+Pw==</data>
+        <key>welcome-message</key>
+        <string>Hello &amp; welcome &lt;to&gt; Consema 中文</string>
+    </dict>
+</plist>

@@ -1,0 +1,185 @@
+{
+  "suite": "consema.conformance@1",
+  "cases": [
+    {
+      "id": "value.integer-arbitrary-precision",
+      "capability": "core.value.strict-equality@1",
+      "input": {"decimal": "340282366920938463463374607431768211457"},
+      "expected": {"decimal": "340282366920938463463374607431768211457"}
+    },
+    {
+      "id": "value.decimal-normalization",
+      "capability": "core.value.strict-equality@1",
+      "input": {"left": "1.00", "right": "10e-1"},
+      "expected": {"strict_equal": true, "strict_hash_equal": true}
+    },
+    {
+      "id": "value.float-signed-zero",
+      "capability": "core.value.strict-equality@1",
+      "input": {"positive_bits": "0000000000000000", "negative_bits": "8000000000000000"},
+      "expected": {"strict_equal": false}
+    },
+    {
+      "id": "pvce.null-vector",
+      "capability": "core.pvce.full@1",
+      "input": {"value": "Null"},
+      "expected": {"hex": "50564345010000"}
+    },
+    {
+      "id": "pvce.negative-integer-vector",
+      "capability": "core.pvce.full@1",
+      "input": {"integer": "-256"},
+      "expected": {"hex": "5056434501100402020100"}
+    },
+    {
+      "id": "pvce.reject-nonminimal-varint",
+      "capability": "core.pvce.full@1",
+      "input": {"hex": "5056434581000000"},
+      "expected": {"status": "Failed", "failure": "NonCanonicalVarint"}
+    },
+    {
+      "id": "parse.strict-exact-roundtrip",
+      "capability": "core.document.exact-roundtrip@1",
+      "input": {"profile": "json.strict@1", "source": " {\n  \"a\" : [1, 2]\n} "},
+      "expected": {"formation": "Complete", "render_equals_source": true}
+    },
+    {
+      "id": "parse.jsonc-comments-trailing-comma",
+      "capability": "core.document.exact-roundtrip@1",
+      "input": {"profile": "jsonc.bounded@1", "source": "{/*x*/\"a\":1,}"},
+      "expected": {"formation": "Complete", "render_equals_source": true}
+    },
+    {
+      "id": "parse.recovery-missing-close",
+      "capability": "json.document.recovery@1",
+      "input": {"profile": "json.strict@1", "source": "{\"a\":1"},
+      "expected": {"formation": "Recovered", "diagnostic": "json.syntax.missing-object-close@1"}
+    },
+    {
+      "id": "parse.duplicate-members",
+      "capability": "json.native.duplicate-members@1",
+      "input": {"profile": "json.strict@1", "source": "{\"a\":1,\"a\":2}"},
+      "expected": {"member_names": ["a", "a"], "distinct_member_identity": true, "diagnostic": "json.object.duplicate-member@1"}
+    },
+    {
+      "id": "parse.lossless-byte-coverage",
+      "capability": "json.document.lossless-syntax@1",
+      "input": {"profile": "jsonc.bounded@1", "source": " \n// c\n[1,] "},
+      "expected": {"gap_count": 0, "overlap_count": 0, "covered_bytes": 12}
+    },
+    {
+      "id": "query.reject-role-mismatch",
+      "capability": "core.query.ordered-results@1",
+      "input": {"domain": "core.portable-value-query@1", "pipeline": ["core.object-entry-value@1"]},
+      "expected": {"status": "FailedBeforeFirstMatch", "failure": "InvalidOperatorComposition"}
+    },
+    {
+      "id": "query.json-duplicate-order",
+      "capability": "core.query.ordered-results@1",
+      "input": {"source": "{\"a\":1,\"a\":2,\"b\":3}", "member_name": "a"},
+      "expected": {"ordinals": [0, 1], "count": 2, "terminal": "Completed"}
+    },
+    {
+      "id": "query.protocol-roundtrip",
+      "capability": "core.query.protocol@1",
+      "input": {"domain": "core.portable-value-query@1", "operator": "core.try-sequence-elements@1", "selection": "First"},
+      "expected": {"roundtrip_equal": true, "unknown_field": "Reject"}
+    },
+    {
+      "id": "projection.best-exact-duplicate-mapping",
+      "capability": "json.projection.best-exact-core@1",
+      "input": {"source": "{\"a\":1,\"a\":2}", "target": "BestExactCore@1"},
+      "expected": {"kind": "EntryMapping", "fidelity": "Transformed", "association_origins": 2}
+    },
+    {
+      "id": "projection.object-reject-duplicates",
+      "capability": "json.projection.project-as-object@1",
+      "input": {"source": "{\"a\":1,\"a\":2}", "target": "ProjectAsObject@1", "duplicates": "Reject"},
+      "expected": {"status": "Failed", "partial_value": false}
+    },
+    {
+      "id": "projection.object-last-wins",
+      "capability": "json.projection.project-as-object@1",
+      "input": {"source": "{\"a\":1,\"a\":2}", "target": "ProjectAsObject@1", "duplicates": "LastWins"},
+      "expected": {"status": "Success", "fidelity": "Lossy", "events": ["DuplicateCollapsed"]}
+    },
+    {
+      "id": "edit.scalar-minimal",
+      "capability": "json.edit.scalar-replace@1",
+      "input": {"profile": "jsonc.bounded@1", "source": "{ /* lead */ \"a\" : 1 // tail\n}", "new_value": {"integer": "200"}, "policy": "PreserveCompatible"},
+      "expected": {"source": "{ /* lead */ \"a\" : 200 // tail\n}", "source_edit_count": 1}
+    },
+    {
+      "id": "edit.preserve-decimal-scale",
+      "capability": "json.edit.scalar-replace@1",
+      "input": {"profile": "json.strict@1", "source": "{\"a\": 1.00}", "new_value": {"decimal": "2.5"}, "policy": "PreserveCompatible"},
+      "expected": {"source": "{\"a\": 2.50}", "source_edit_count": 1}
+    },
+    {
+      "id": "edit.preserve-exponent-style",
+      "capability": "json.edit.scalar-replace@1",
+      "input": {"profile": "json.strict@1", "source": "{\"a\": 1E+02}", "new_value": {"integer": "2"}, "policy": "PreserveCompatible"},
+      "expected": {"source": "{\"a\": 2E+0}", "source_edit_count": 1}
+    },
+    {
+      "id": "edit.canonical-for-profile",
+      "capability": "json.edit.scalar-replace@1",
+      "input": {"profile": "json.strict@1", "source": "{\"a\": 1.00}", "new_value": {"decimal": "2.5"}, "policy": "CanonicalForProfile"},
+      "expected": {"source": "{\"a\": 25e-1}", "source_edit_count": 1}
+    },
+    {
+      "id": "edit.preserve-else-canonical",
+      "capability": "json.edit.scalar-replace@1",
+      "input": {"profile": "json.strict@1", "source": "{\"a\": 1.000}", "new_value": {"decimal": "0.0001"}, "policy": "PreserveElseCanonical"},
+      "expected": {"source": "{\"a\": 1e-4}", "source_edit_count": 1, "fallback_diagnostics": 1}
+    },
+    {
+      "id": "edit.preserve-incompatible-rejected",
+      "capability": "json.edit.scalar-replace@1",
+      "input": {"profile": "json.strict@1", "source": "{\"a\": 1.000}", "new_value": {"decimal": "0.0001"}, "policy": "PreserveCompatible"},
+      "expected": {"status": "Failed", "failure": "RepresentationIncompatible"}
+    },
+    {
+      "id": "query.root-result-limit",
+      "capability": "core.query.ordered-results@1",
+      "input": {"domain": "core.portable-value-query@1", "pipeline": [], "max_results": 0},
+      "expected": {"status": "Failed", "failure": "ResourceLimitExceeded"}
+    },
+    {
+      "id": "query.cursor-failure-terminal",
+      "capability": "core.query.ordered-results@1",
+      "input": {"domain": "core.portable-value-query@1", "pipeline": ["core.try-sequence-elements@1"], "elements": [{"integer": "1"}, {"integer": "2"}, {"integer": "3"}, {"integer": "4"}, {"integer": "5"}], "max_results": 3},
+      "expected": {"yielded_before_failure": 3, "terminal": "Failed"}
+    },
+    {
+      "id": "projection.object-key-provenance",
+      "capability": "json.projection.project-as-object@1",
+      "input": {"source": "{\"a\":1,\"b\":2}", "target": "ProjectAsObject@1", "duplicates": "Reject"},
+      "expected": {"key_association_origins": 2, "entry_association_origins": 2}
+    },
+    {
+      "id": "pvce.object-vector",
+      "capability": "core.pvce.full@1",
+      "input": {"object": {"a": {"integer": "1"}}},
+      "expected": {"hex": "5056434501410a01200201611003010101"}
+    },
+    {
+      "id": "pvce.encode-blob-limit",
+      "capability": "core.pvce.full@1",
+      "input": {"value": {"string": "12345"}, "max_blob_bytes": 4},
+      "expected": {"status": "Failed", "failure": "ResourceLimit"}
+    },
+    {
+      "id": "edit.wrong-snapshot",
+      "capability": "json.edit.scalar-replace@1",
+      "input": {"first": "1", "second": "2", "literal": "3"},
+      "expected": {"status": "Failed", "failure": "WrongSnapshot", "second_unchanged": true}
+    },
+    {
+      "id": "resource.parse-token-limit",
+      "capability": "core.parse.resource-limits@1",
+      "input": {"source": "[1,2]", "max_token_count": 2},
+      "expected": {"status": "FatalFormationFailure", "truncated_success": false}
+    }
+  ]
+}

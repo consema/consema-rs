@@ -29,7 +29,7 @@ use super::{ConformanceReport, VectorCase, object_field};
 const SUITE: &str = "consema.yaml.conformance@1";
 
 /// Embedded language-neutral YAML family suite bytes.
-pub const YAML_V1_VECTORS_JSON: &str = include_str!("../../../conformance/vectors/yaml-v1.json");
+pub const YAML_V1_VECTORS_JSON: &str = include_str!("../../conformance/vectors/yaml-v1.json");
 
 /// Runs the embedded `consema.yaml.conformance@1` suite.
 #[must_use]

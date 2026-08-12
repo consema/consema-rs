@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>name</key>
+        <string>multi-alias</string>
+        <key>alias</key>
+        <string>first-alias</string>
+        <key>alias</key>
+        <string>second-alias</string>
+        <key>alias</key>
+        <dict>
+            <key>target</key>
+            <string>third-alias</string>
+        </dict>
+        <key>tags</key>
+        <array>
+            <string>a</string>
+            <string>b</string>
+        </array>
+    </dict>
+</plist>

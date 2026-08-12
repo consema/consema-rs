@@ -1,0 +1,120 @@
+{
+  "suite": "consema.syntax-query.conformance@1",
+  "semantic_model": "core.semantic-model@2",
+  "cases": [
+    {
+      "id": "syntax.json.kind-text-order",
+      "capability": "json.lossless-syntax-query@1",
+      "input": {"profile": "jsonc.bounded@1", "source": "// note\n{\"a\":1,\"b\":2}", "combine": "StructureOrderMerge", "selection": "All", "filters": [{"operator": "kind-is", "argument": "LineComment"}, {"operator": "text-equals", "argument": ","}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "LineComment", "text": "// note", "ordinal": 0, "role": "JsonSyntaxPiece"}, {"kind": "Comma", "text": ",", "ordinal": 6, "role": "JsonSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.json.kind-string",
+      "capability": "json.lossless-syntax-query@1",
+      "input": {"profile": "json.strict@1", "source": "{\"a\":\"b\"}", "combine": "Single", "selection": "All", "filters": [{"operator": "kind-is", "argument": "String"}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "String", "text": "\"a\"", "ordinal": 1, "role": "JsonSyntaxPiece"}, {"kind": "String", "text": "\"b\"", "ordinal": 3, "role": "JsonSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.json.text-equals",
+      "capability": "json.lossless-syntax-query@1",
+      "input": {"profile": "json.strict@1", "source": "[1,2,1]", "combine": "Single", "selection": "All", "filters": [{"operator": "text-equals", "argument": "1"}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "Number", "text": "1", "ordinal": 1, "role": "JsonSyntaxPiece"}, {"kind": "Number", "text": "1", "ordinal": 5, "role": "JsonSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.json.selection-first",
+      "capability": "json.lossless-syntax-query@1",
+      "input": {"profile": "json.strict@1", "source": "[1,2,1]", "combine": "Single", "selection": "First", "filters": [{"operator": "kind-is", "argument": "Number"}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "Number", "text": "1", "ordinal": 1, "role": "JsonSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.json.selection-last",
+      "capability": "json.lossless-syntax-query@1",
+      "input": {"profile": "json.strict@1", "source": "[1,2,1]", "combine": "Single", "selection": "Last", "filters": [{"operator": "kind-is", "argument": "Number"}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "Number", "text": "1", "ordinal": 5, "role": "JsonSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.json.result-limit",
+      "capability": "json.lossless-syntax-query@1",
+      "input": {"profile": "json.strict@1", "source": "[1]", "combine": "Single", "selection": "All", "max_results": 0, "filters": []},
+      "expected": {"code": "core.query.resource-limit@1"}
+    },
+    {
+      "id": "syntax.json.cancelled",
+      "capability": "json.lossless-syntax-query@1",
+      "input": {"profile": "json.strict@1", "source": "[1]", "combine": "Single", "selection": "All", "cancelled": true, "filters": []},
+      "expected": {"code": "core.query.cancelled@1"}
+    },
+    {
+      "id": "syntax.json.reject-invalid-kind",
+      "capability": "json.lossless-syntax-query@1",
+      "input": {"profile": "json.strict@1", "source": "[1]", "combine": "Single", "selection": "All", "filters": [{"operator": "kind-is", "argument": "number"}]},
+      "expected": {"code": "core.query.invalid-argument@1"}
+    },
+    {
+      "id": "syntax.toml.kind-text-order",
+      "capability": "toml.lossless-syntax-query@1",
+      "input": {"profile": "toml.1.0@1", "source": "a = 1 # note\nb = 2\n", "combine": "StructureOrderMerge", "selection": "All", "filters": [{"operator": "kind-is", "argument": "Newline"}, {"operator": "text-equals", "argument": "# note"}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "Comment", "text": "# note", "ordinal": 6, "role": "TomlSyntaxPiece"}, {"kind": "Newline", "text": "\n", "ordinal": 7, "role": "TomlSyntaxPiece"}, {"kind": "Newline", "text": "\n", "ordinal": 13, "role": "TomlSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.toml.kind-bare",
+      "capability": "toml.lossless-syntax-query@1",
+      "input": {"profile": "toml.1.0@1", "source": "a = 1 # note\nb = 2\n", "combine": "Single", "selection": "All", "filters": [{"operator": "kind-is", "argument": "Bare"}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "Bare", "text": "a", "ordinal": 0, "role": "TomlSyntaxPiece"}, {"kind": "Bare", "text": "1", "ordinal": 4, "role": "TomlSyntaxPiece"}, {"kind": "Bare", "text": "b", "ordinal": 8, "role": "TomlSyntaxPiece"}, {"kind": "Bare", "text": "2", "ordinal": 12, "role": "TomlSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.toml.text-equals",
+      "capability": "toml.lossless-syntax-query@1",
+      "input": {"profile": "toml.1.0@1", "source": "a=1\nb=2\n", "combine": "Single", "selection": "All", "filters": [{"operator": "text-equals", "argument": "="}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "Equals", "text": "=", "ordinal": 1, "role": "TomlSyntaxPiece"}, {"kind": "Equals", "text": "=", "ordinal": 5, "role": "TomlSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.toml.selection-first",
+      "capability": "toml.lossless-syntax-query@1",
+      "input": {"profile": "toml.1.0@1", "source": "a=1\nb=2\n", "combine": "Single", "selection": "First", "filters": [{"operator": "kind-is", "argument": "Newline"}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "Newline", "text": "\n", "ordinal": 3, "role": "TomlSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.toml.selection-last",
+      "capability": "toml.lossless-syntax-query@1",
+      "input": {"profile": "toml.1.0@1", "source": "a=1\nb=2\n", "combine": "Single", "selection": "Last", "filters": [{"operator": "kind-is", "argument": "Newline"}]},
+      "expected": {"terminal": "Completed", "matches": [{"kind": "Newline", "text": "\n", "ordinal": 7, "role": "TomlSyntaxPiece"}]}
+    },
+    {
+      "id": "syntax.toml.result-limit",
+      "capability": "toml.lossless-syntax-query@1",
+      "input": {"profile": "toml.1.0@1", "source": "a=1\n", "combine": "Single", "selection": "All", "max_results": 0, "filters": []},
+      "expected": {"code": "core.query.resource-limit@1"}
+    },
+    {
+      "id": "syntax.toml.cancelled",
+      "capability": "toml.lossless-syntax-query@1",
+      "input": {"profile": "toml.1.0@1", "source": "a=1\n", "combine": "Single", "selection": "All", "cancelled": true, "filters": []},
+      "expected": {"code": "core.query.cancelled@1"}
+    },
+    {
+      "id": "syntax.toml.reject-invalid-kind",
+      "capability": "toml.lossless-syntax-query@1",
+      "input": {"profile": "toml.1.0@1", "source": "a=1\n", "combine": "Single", "selection": "All", "filters": [{"operator": "kind-is", "argument": "newline"}]},
+      "expected": {"code": "core.query.invalid-argument@1"}
+    },
+    {
+      "id": "syntax.cursor.completed",
+      "capability": "core.query.cursor-terminal@1",
+      "input": {"mode": "Completed", "values": [1, 2]},
+      "expected": {"yielded": 2, "terminal": "Completed"}
+    },
+    {
+      "id": "syntax.cursor.cancelled",
+      "capability": "core.query.cursor-terminal@1",
+      "input": {"mode": "Cancelled", "values": [1, 2]},
+      "expected": {"yielded": 1, "terminal": "Cancelled"}
+    },
+    {
+      "id": "syntax.cursor.failed",
+      "capability": "core.query.cursor-terminal@1",
+      "input": {"mode": "Failed", "values": [1, 2]},
+      "expected": {"yielded": 2, "terminal": "Failed"}
+    }
+  ]
+}

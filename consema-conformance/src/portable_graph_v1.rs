@@ -22,7 +22,7 @@ const SUITE: &str = "consema.portable-graph.conformance@1";
 
 /// Embedded language-neutral PortableGraph suite bytes.
 pub const PORTABLE_GRAPH_V1_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/portable-graph-v1.json");
+    include_str!("../../conformance/vectors/portable-graph-v1.json");
 
 /// Runs the embedded `consema.portable-graph.conformance@1` suite.
 #[must_use]

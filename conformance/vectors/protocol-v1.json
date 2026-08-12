@@ -1,0 +1,166 @@
+{
+  "suite": "consema.protocol.conformance@1",
+  "semantic_model": "core.semantic-model@1",
+  "cases": [
+    {
+      "id": "protocol.json.null-vector",
+      "contract": "core.portable-value-json@1",
+      "expected": {"utf8": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Null\"}}"}
+    },
+    {
+      "id": "protocol.json.all-kinds-roundtrip",
+      "contract": "core.portable-value-json@1",
+      "expected": {"strict_equal": true}
+    },
+    {
+      "id": "protocol.json.reject-whitespace",
+      "contract": "core.portable-value-json@1",
+      "expected": {"code": "core.protocol.non-canonical-json@1"}
+    },
+    {
+      "id": "protocol.json.reject-alternate-escape",
+      "contract": "core.portable-value-json@1",
+      "expected": {"code": "core.protocol.non-canonical-json@1"}
+    },
+    {
+      "id": "protocol.json.reject-unknown-field",
+      "contract": "core.portable-value-json@1",
+      "expected": {"code": "core.protocol.unknown-field@1"}
+    },
+    {
+      "id": "protocol.pvce.roundtrip-equivalent",
+      "contract": "core.pvce.full@1",
+      "expected": {"strict_equal": true}
+    },
+    {
+      "id": "protocol.resource.depth-limit",
+      "contract": "core.portable-value-json@1",
+      "expected": {"code": "core.protocol.resource-limit@1", "partial_value": false}
+    },
+    {
+      "id": "protocol.envelope.dual-transport",
+      "contract": "core.protocol-message@1",
+      "expected": {"json_equal": true, "pvce_equal": true}
+    },
+    {
+      "id": "protocol.envelope.all-payloads-dual-transport",
+      "contract": "core.protocol-message@1",
+      "expected": {"payload_contracts": 15, "registry_exact": true, "json_equal": true, "pvce_equal": true}
+    },
+    {
+      "id": "protocol.envelope.reject-unknown-contract",
+      "contract": "core.protocol-message@1",
+      "expected": {"code": "core.protocol.unknown-contract@1"}
+    },
+    {
+      "id": "protocol.envelope.reject-schema-mismatch",
+      "contract": "core.protocol-message@1",
+      "expected": {"code": "core.protocol.schema-mismatch@1"}
+    },
+    {
+      "id": "protocol.envelope.reject-schema-only-payload",
+      "contract": "core.protocol-message@1",
+      "expected": {"code": "core.protocol.unknown-field@1"}
+    },
+    {
+      "id": "protocol.envelope.reject-nested-envelope",
+      "contract": "core.protocol-message@1",
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.envelope.reject-semantic-model-identity",
+      "contract": "core.protocol-message@1",
+      "expected": {"code": "core.protocol.unknown-contract@1"}
+    },
+    {
+      "id": "protocol.profile.roundtrip",
+      "contract": "core.profile-descriptor@1",
+      "expected": {"profile": "toml.1.0@1", "strict_equal": true}
+    },
+    {
+      "id": "protocol.capability.conditional-roundtrip",
+      "contract": "core.capability-declaration@1",
+      "expected": {"strict_equal": true}
+    },
+    {
+      "id": "protocol.capability.reject-contradiction",
+      "contract": "core.capability-declaration@1",
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.diagnostic.require-source-binding",
+      "contract": "core.diagnostic@1",
+      "expected": {"code": "core.protocol.process-local-handle@1"}
+    },
+    {
+      "id": "protocol.diagnostic.reject-category-registry-mismatch",
+      "contract": "core.diagnostic@1",
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.completion.reject-contradiction",
+      "contract": "core.completion@1",
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.completion.reject-unregistered-failure-code",
+      "contract": "core.completion@1",
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.query.definition-envelope",
+      "contract": "core.query-definition@1",
+      "expected": {"strict_equal": true, "pvce1_unchanged": true}
+    },
+    {
+      "id": "protocol.query.portable-result",
+      "contract": "core.query-result@1",
+      "expected": {"path_preserved": true, "strict_equal": true}
+    },
+    {
+      "id": "protocol.query.reject-native-handle",
+      "contract": "core.query-result@1",
+      "expected": {"code": "core.protocol.process-local-handle@1"}
+    },
+    {
+      "id": "protocol.projection.request-roundtrip",
+      "contract": "core.projection-request@1",
+      "expected": {"strict_equal": true}
+    },
+    {
+      "id": "protocol.projection.no-partial-value",
+      "contract": "core.projection-result@1",
+      "expected": {"contradiction_rejected": true}
+    },
+    {
+      "id": "protocol.projection.reject-unregistered-event-code",
+      "contract": "core.projection-report@1",
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.provenance.externalized-roundtrip",
+      "contract": "core.provenance-map@1",
+      "expected": {"strict_equal": true, "raw_node_ref": false}
+    },
+    {
+      "id": "protocol.change-set.actual-edit-roundtrip",
+      "contract": "core.change-set@1",
+      "expected": {"replacement_hex": "32", "strict_equal": true}
+    },
+    {
+      "id": "protocol.registry.current-roundtrip",
+      "contract": "core.registry-manifest@1",
+      "expected": {"sorted_unique": true, "is_current": true}
+    },
+    {
+      "id": "protocol.registry.error-code-schema",
+      "contract": "core.error-code-registry@1",
+      "expected": {"strict_valid": true}
+    },
+    {
+      "id": "protocol.errors.query-codes-registered",
+      "contract": "core.error-code-registry@1",
+      "expected": {"all_registered": true}
+    }
+  ]
+}

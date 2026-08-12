@@ -1,0 +1,182 @@
+{
+  "suite": "consema.ini.python-configparser314-differential@1",
+  "recorded_at": "2026-08-05",
+  "authority": {
+    "specification": "Python 3.14 configparser.ConfigParser",
+    "specification_url": "https://docs.python.org/3.14/library/configparser.html",
+    "distribution": "CPython Windows embeddable package",
+    "package": "python-3.14.6-embeddable-amd64.zip",
+    "package_url": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embeddable-amd64.zip",
+    "package_manifest_url": "https://www.python.org/ftp/python/3.14.6/windows-3.14.6.json",
+    "package_sha256": "c3a89aa7ead530bcac4729f3db7d000fbadb6ca7aa0461c2841867172aa0752a"
+  },
+  "runtime": {
+    "python.implementation": "CPython",
+    "python.version": "3.14.6",
+    "python.compiler": "MSC v.1944 64 bit (AMD64)",
+    "os.name": "Windows",
+    "os.release": "11",
+    "os.machine": "AMD64",
+    "windows_build": "10.0.26200.0"
+  },
+  "adapter": {
+    "source": "scripts/oracles/configparser_oracle.py",
+    "source_sha256": "2050a3317965006097e553574b95d19475440d44d7d9fbf73f35b33283cdd7bc",
+    "invoke": "python.exe -I scripts/oracles/configparser_oracle.py <input>",
+    "transport": "ASCII TSV; lowercase UTF-8 hex",
+    "ordering": "ConfigParser mapping insertion order"
+  },
+  "comparison": {
+    "complete": "compare defaults, non-DEFAULT section order, and items(section, raw=True) exactly",
+    "failed": "compare ConfigParser exception class and require Consema recovered formation with atomic projection/edit refusal",
+    "native": "retain all source occurrences independently of the ConfigParser public mapping view"
+  },
+  "exclusions": [
+    "interpolation evaluation and interpolation error timing",
+    "custom converters, optionxform, delimiters, comments, defaults, and dictionary types",
+    "ConfigParser.read multi-file aggregation and per-file error suppression",
+    "write serialization, filesystem metadata, and encoding selection",
+    "unnamed sections and allow_no_value extensions",
+    "mapping mutation after formation"
+  ],
+  "cases": [
+    {
+      "id": "basic",
+      "input": "conformance/oracles/python-configparser-v1/basic.ini",
+      "input_sha256": "bae47b1e454fe3f22604bf591ea6784bf904f2caa12748332339d3d05310b2ab",
+      "expected": {
+        "outcome": "complete",
+        "defaults": [],
+        "sections": [
+          {
+            "name": "73657276696365",
+            "entries": [
+              ["6e616d65", "776f726b6572"],
+              ["75726c", "68747470733a2f2f6578616d706c652e696e76616c69642f73657276696365"],
+              ["6d61726b6572", "76616c75652023206c69746572616c"],
+              ["73656d69", "76616c7565203b206c69746572616c"]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "casefold-collision",
+      "input": "conformance/oracles/python-configparser-v1/casefold-collision.ini",
+      "input_sha256": "6c5a528042230c8966d273f9448b900738b0dcb366e0fe452bf9f126f5e7e596",
+      "expected": {
+        "outcome": "failed",
+        "exception": "configparser.DuplicateOptionError"
+      }
+    },
+    {
+      "id": "continuation",
+      "input": "conformance/oracles/python-configparser-v1/continuation.ini",
+      "input_sha256": "0d87a77cd2a930050808962cf9e86d9cf2c78c915b232d6e5e7dfe559ce6f55d",
+      "expected": {
+        "outcome": "complete",
+        "defaults": [],
+        "sections": [
+          {
+            "name": "6c696e74",
+            "entries": [
+              ["6578636c756465", "6275696c642c0a646973742c0a0a67656e657261746564"],
+              ["73656c656374", "452c462c49"]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "default-override",
+      "input": "conformance/oracles/python-configparser-v1/default-override.ini",
+      "input_sha256": "75fb903b8208e46e2a4a2a3b6bead03acdd1a8bd56b3b4a52414bcc613b862c1",
+      "expected": {
+        "outcome": "complete",
+        "defaults": [
+          ["636f6c6f72", "626c7565"],
+          ["726f6f74", "2f737276"]
+        ],
+        "sections": [
+          {
+            "name": "576f726b6572",
+            "entries": [
+              ["636f6c6f72", "726564"],
+              ["726f6f74", "2f737276"],
+              ["6e616d65", "696e67657374"],
+              ["7461696c", "646f6e65"]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "defaults-and-raw",
+      "input": "conformance/oracles/python-configparser-v1/defaults-and-raw.ini",
+      "input_sha256": "768789617d52f3e0a02736d2c821121912928f1448c6958f3597bf4856caad55",
+      "expected": {
+        "outcome": "complete",
+        "defaults": [
+          ["726f6f74", "2f7372762f636f6e73656d61"],
+          ["6d61726b6572", "25286d697373696e672973"]
+        ],
+        "sections": [
+          {
+            "name": "576f726b6572",
+            "entries": [
+              ["726f6f74", "2f7372762f636f6e73656d61"],
+              ["6d61726b6572", "25286d697373696e672973"],
+              ["6e616d65", "696e67657374"],
+              ["70617468", "2528726f6f7429732f6a6f6273"]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "duplicate-option",
+      "input": "conformance/oracles/python-configparser-v1/duplicate-option.ini",
+      "input_sha256": "7780c5b72c9dd7c3e17927f43d5d00e3cb6ea8e0f0105a3aa27f1a1746dfcf92",
+      "expected": {
+        "outcome": "failed",
+        "exception": "configparser.DuplicateOptionError"
+      }
+    },
+    {
+      "id": "duplicate-section",
+      "input": "conformance/oracles/python-configparser-v1/duplicate-section.ini",
+      "input_sha256": "836cc690a6c50e951d8ec1530fdf7901eba44724efd2faea56f1d2f775008eb6",
+      "expected": {
+        "outcome": "failed",
+        "exception": "configparser.DuplicateSectionError"
+      }
+    },
+    {
+      "id": "missing-section",
+      "input": "conformance/oracles/python-configparser-v1/missing-section.ini",
+      "input_sha256": "3bd7a6f9202118567af8e248586423967fbfc4ce8f31e9094ee0135362f3eaad",
+      "expected": {
+        "outcome": "failed",
+        "exception": "configparser.MissingSectionHeaderError"
+      }
+    },
+    {
+      "id": "unicode-optionxform",
+      "input": "conformance/oracles/python-configparser-v1/unicode-optionxform.ini",
+      "input_sha256": "500d88cdb65ca890d7f3925e60a0e5584a2df1f2bd7d1ef5b8143dd2852aa72c",
+      "expected": {
+        "outcome": "complete",
+        "defaults": [],
+        "sections": [
+          {
+            "name": "556e69636f6465",
+            "entries": [
+              ["69cc8774656d", "726f636b65742df09f9a80"],
+              ["73747261c39f65", "636166c3a9"]
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

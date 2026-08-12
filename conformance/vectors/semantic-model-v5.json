@@ -1,0 +1,180 @@
+{
+  "suite": "consema.semantic-model-v5.conformance@1",
+  "semantic_model": "core.semantic-model@5",
+  "cases": [
+    {
+      "id": "registry.v5-manifest",
+      "capability": "core.registry-manifest@1",
+      "input": {},
+      "expected": {"semantic_model": "core.semantic-model@5", "contract_count": 30, "error_code_count": 132}
+    },
+    {
+      "id": "registry.v1-v4-frozen",
+      "capability": "core.registry-manifest@1",
+      "input": {},
+      "expected": {"contract_counts": [16, 18, 25, 25], "error_code_counts": [55, 62, 90, 92]}
+    },
+    {
+      "id": "registry.v5-additive-contracts",
+      "capability": "core.registry-manifest@1",
+      "input": {},
+      "expected": {"contracts": ["core.graph-projection-result@1", "core.graph-provenance-map@1", "core.graph-query-result@1", "core.portable-graph@1", "core.yaml-query-result@1"]}
+    },
+    {
+      "id": "registry.v5-error-codes",
+      "capability": "core.error-code-registry@1",
+      "input": {},
+      "expected": {
+        "error_code_count": 132,
+        "new_codes": [
+          "core.graph.invalid@1", "core.graph.resource-limit@1",
+          "core.pgce.invalid@1", "core.pgce.non-canonical@1", "core.pgce.resource-limit@1", "core.pgce.unsupported-version@1",
+          "yaml.alias.name-mismatch@1", "yaml.alias.name-unavailable@1", "yaml.anchor.name-unavailable@1", "yaml.anchor.unknown@1",
+          "yaml.edit.anchor-dependency@1", "yaml.edit.anchor-not-visible@1", "yaml.edit.canonical-fallback@1", "yaml.edit.invalid-anchor-name@1", "yaml.edit.invalid-placement@1", "yaml.edit.structural-container-conflict@1",
+          "yaml.mapping.missing-value@1",
+          "yaml.materialization.cross-document-sharing@1", "yaml.materialization.round-trip-mismatch@1", "yaml.materialization.tag-kind-mismatch@1", "yaml.materialization.unsupported-tag@1",
+          "yaml.native.invalid-source-span@1", "yaml.native.trailing-events@1", "yaml.native.trailing-named-occurrence@1", "yaml.native.unexpected-end@1", "yaml.native.unexpected-event@1",
+          "yaml.parse.syntax@1",
+          "yaml.profile.version-directive@1",
+          "yaml.projection.cycle@1", "yaml.projection.document-cardinality@1", "yaml.projection.graph-invalid@1", "yaml.projection.invalid-canonical-scalar@1", "yaml.projection.mapping-not-object@1", "yaml.projection.provenance-limit@1", "yaml.projection.resource-limit@1", "yaml.projection.sharing@1", "yaml.projection.unrepresentable-timestamp@1", "yaml.projection.unsupported-tag@1",
+          "yaml.scalar.invalid-explicit-tag@1", "yaml.tag.kind-mismatch@1"
+        ]
+      }
+    },
+    {
+      "id": "portable-graph.dual-transport",
+      "capability": "core.portable-graph@1",
+      "input": {"graph": {"roots": [0, 3], "nodes": [
+        {"kind": "Mapping", "tag": "tag:yaml.org,2002:map", "entries": [{"key": 1, "value": 2}]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "k"},
+        {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [2, 1]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "second"}
+      ]}},
+      "expected": {"pgce_hex": "50474345010204000341157461673a79616d6c2e6f72672c323030323a6d617001010220157461673a79616d6c2e6f72672c323030323a737472016b40157461673a79616d6c2e6f72672c323030323a73657102020120157461673a79616d6c2e6f72672c323030323a737472067365636f6e64", "json_sha256": "4f8bb12e93789779bebe0b97c9433f6a222bc1ea96594f7a3fe084a1f1f7b5bc", "pvce_sha256": "bcce45e5725178ea0c6bfb313fcd2a96f2aedb99493d0903df6f34f02baa3da3"}
+    },
+    {
+      "id": "portable-graph.reject-disagreement",
+      "capability": "core.portable-graph@1",
+      "input": {"graph": {"roots": [0], "nodes": [{"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "k"}]}, "node_index": 0, "replacement": "changed"},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "portable-graph.reject-node-limit",
+      "capability": "core.portable-graph@1",
+      "input": {"graph": {"roots": [0], "nodes": [{"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "k"}]}, "max_nodes": 0},
+      "expected": {"code": "core.protocol.resource-limit@1"}
+    },
+    {
+      "id": "graph-query.node-roundtrip",
+      "capability": "core.graph-query-result@1",
+      "input": {"graph": {"roots": [0], "nodes": [
+        {"kind": "Mapping", "tag": "tag:yaml.org,2002:map", "entries": [{"key": 1, "value": 2}]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "k"},
+        {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [3, 3]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "shared"}
+      ]}, "role": "GraphNode", "match": {"kind": "Node", "node": 3}},
+      "expected": {"accepted": true, "code": ""}
+    },
+    {
+      "id": "graph-query.sequence-roundtrip",
+      "capability": "core.graph-query-result@1",
+      "input": {"graph": {"roots": [0], "nodes": [
+        {"kind": "Mapping", "tag": "tag:yaml.org,2002:map", "entries": [{"key": 1, "value": 2}]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "k"},
+        {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [3, 3]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "shared"}
+      ]}, "role": "GraphSequenceElement", "match": {"kind": "SequenceElement", "parent": 2, "ordinal": 1, "node": 3}},
+      "expected": {"accepted": true, "code": ""}
+    },
+    {
+      "id": "graph-query.mapping-roundtrip",
+      "capability": "core.graph-query-result@1",
+      "input": {"graph": {"roots": [0], "nodes": [
+        {"kind": "Mapping", "tag": "tag:yaml.org,2002:map", "entries": [{"key": 1, "value": 2}]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "k"},
+        {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [3, 3]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "shared"}
+      ]}, "role": "GraphMappingEntry", "match": {"kind": "MappingEntry", "parent": 0, "ordinal": 0, "key": 1, "value": 2}},
+      "expected": {"accepted": true, "code": ""}
+    },
+    {
+      "id": "graph-query.reject-dangling-association",
+      "capability": "core.graph-query-result@1",
+      "input": {"graph": {"roots": [0], "nodes": [
+        {"kind": "Sequence", "tag": "tag:yaml.org,2002:seq", "items": [1]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"}
+      ]}, "role": "GraphSequenceElement", "match": {"kind": "SequenceElement", "parent": 0, "ordinal": 1, "node": 1}},
+      "expected": {"accepted": false, "code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "graph-provenance.reject-order",
+      "capability": "core.graph-provenance-map@1",
+      "input": {"locations": [{"kind": "Node", "node": 0}, {"kind": "Root", "ordinal": 0}], "source_id": "sha256:source", "node_locator": "/nodes/0", "start_byte": 0, "end_byte": 1, "relation": "Direct"},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "graph-projection.roundtrip",
+      "capability": "core.graph-projection-result@1",
+      "input": {"graph": {"roots": [0], "nodes": [
+        {"kind": "Mapping", "tag": "tag:yaml.org,2002:map", "entries": [{"key": 1, "value": 2}]},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "k"},
+        {"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "v"}
+      ]}, "locations": [{"kind": "Root", "ordinal": 0}, {"kind": "Node", "node": 0}, {"kind": "MappingKey", "parent": 0, "ordinal": 0}, {"kind": "MappingValue", "parent": 0, "ordinal": 0}], "source_id": "sha256:source", "node_locator": "/nodes/0", "start_byte": 0, "end_byte": 4, "relation": "Direct"},
+      "expected": {"accepted": true, "code": ""}
+    },
+    {
+      "id": "graph-projection.reject-out-of-range",
+      "capability": "core.graph-projection-result@1",
+      "input": {"graph": {"roots": [0], "nodes": [{"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"}]}, "locations": [{"kind": "Node", "node": 1}], "source_id": "sha256:source", "node_locator": "/nodes/1", "start_byte": 0, "end_byte": 1, "relation": "Reference"},
+      "expected": {"accepted": false, "code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "yaml-query.native-roles",
+      "capability": "core.yaml-query-result@1",
+      "input": {"source_id": "sha256:yaml", "roles": ["YamlStream", "YamlDocument", "YamlNode", "YamlMappingEntry", "YamlSequenceElement", "YamlAnchorDefinition", "YamlAliasOccurrence"]},
+      "expected": {"role_count": 7}
+    },
+    {
+      "id": "yaml-query.syntax-roundtrip",
+      "capability": "core.yaml-query-result@1",
+      "input": {"source_id": "sha256:yaml", "roles": ["YamlSyntaxPiece"]},
+      "expected": {"role_count": 1}
+    },
+    {
+      "id": "yaml-query.reject-domain-role",
+      "capability": "core.yaml-query-result@1",
+      "input": {"role": "YamlSyntaxPiece"},
+      "expected": {"code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "yaml-query.reject-process-local",
+      "capability": "core.yaml-query-result@1",
+      "input": {},
+      "expected": {"code": "core.protocol.process-local-handle@1"}
+    },
+    {
+      "id": "protocol.v4-reject-v5-contract",
+      "capability": "core.protocol-message@1",
+      "input": {"graph": {"roots": [], "nodes": []}},
+      "expected": {"code": "core.protocol.unknown-contract@1"}
+    },
+    {
+      "id": "protocol.v5-nested-error-code",
+      "capability": "core.protocol-message@1",
+      "input": {"failure_code": "yaml.parse.syntax@1"},
+      "expected": {"v4_code": "core.protocol.invalid-value@1"}
+    },
+    {
+      "id": "protocol.reject-truncated-pvce",
+      "capability": "core.protocol-message@1",
+      "input": {"graph": {"roots": [0], "nodes": [{"kind": "Scalar", "tag": "tag:yaml.org,2002:str", "content": "x"}]}, "truncate_bytes": 1},
+      "expected": {"code": "core.protocol.invalid-pvce@1"}
+    },
+    {
+      "id": "protocol.reject-unknown-payload-field",
+      "capability": "core.protocol-message@1",
+      "input": {"graph": {"roots": [], "nodes": []}},
+      "expected": {"code": "core.protocol.unknown-field@1"}
+    }
+  ]
+}

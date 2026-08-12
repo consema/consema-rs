@@ -12,23 +12,23 @@ use std::sync::Arc;
 const FIXTURES: &[(&str, &[u8])] = &[
     (
         "maven-pom.xml",
-        include_bytes!("../../../conformance/fixtures/xml/maven-pom.xml"),
+        include_bytes!("../../conformance/fixtures/xml/maven-pom.xml"),
     ),
     (
         "spring-application.xml",
-        include_bytes!("../../../conformance/fixtures/xml/spring-application.xml"),
+        include_bytes!("../../conformance/fixtures/xml/spring-application.xml"),
     ),
     (
         "logback.xml",
-        include_bytes!("../../../conformance/fixtures/xml/logback.xml"),
+        include_bytes!("../../conformance/fixtures/xml/logback.xml"),
     ),
     (
         "app-server-config.xml",
-        include_bytes!("../../../conformance/fixtures/xml/app-server-config.xml"),
+        include_bytes!("../../conformance/fixtures/xml/app-server-config.xml"),
     ),
     (
         "namespaced-service.xml",
-        include_bytes!("../../../conformance/fixtures/xml/namespaced-service.xml"),
+        include_bytes!("../../conformance/fixtures/xml/namespaced-service.xml"),
     ),
 ];
 

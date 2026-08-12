@@ -1,0 +1,141 @@
+{
+  "suite": "consema.yaml.conformance@1",
+  "profiles": ["yaml.1.2-core@1", "yaml.1.1-compat@1"],
+  "cases": [
+    {
+      "id": "profile.yaml12-scalars", "capability": "yaml.scalar-resolution@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "[yes, 017, 0o17, 1:02:03, 2001-12-15]"},
+      "expected": {"kinds": ["String", "Integer", "Integer", "String", "String"], "canonical": ["yes", "17", "15", "1:02:03", "2001-12-15"]}
+    },
+    {
+      "id": "profile.yaml11-scalars", "capability": "yaml.scalar-resolution@1",
+      "input": {"profile": "yaml.1.1-compat@1", "source": "%YAML 1.1\n---\n[yes, 017, 0o17, 1:02:03, 2001-12-15]"},
+      "expected": {"kinds": ["Boolean", "Integer", "String", "Integer", "Timestamp"], "canonical": ["true", "15", "0o17", "3723", "2001-12-15"]}
+    },
+    {
+      "id": "source.utf16le-bom", "capability": "yaml.document@1",
+      "input": {"profile": "yaml.1.2-core@1", "source_hex": "fffe61003a00200031000a00"},
+      "expected": {"encoding": "Utf16Le", "document_count": 1}
+    },
+    {
+      "id": "stream.empty", "capability": "yaml.document@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": ""},
+      "expected": {"document_count": 0, "alias_count": 0}
+    },
+    {
+      "id": "stream.multi-document", "capability": "yaml.document@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "---\n&a [one, *a]\n---\n{k: v}\n"},
+      "expected": {"document_count": 2, "alias_count": 1}
+    },
+    {
+      "id": "syntax.styles-and-trivia", "capability": "yaml.lossless-syntax@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "--- # doc\nplain: text\nsingle: 'x'\ndouble: \"y\"\nliteral: |-\n  a\nfolded: >+\n  b\nflow: [one, {k: v}]\n...\n"},
+      "expected": {"piece_count": 48, "required_kinds": ["DocumentStart", "Comment", "PlainScalar", "SingleQuotedScalar", "DoubleQuotedScalar", "LiteralBlockHeader", "FoldedBlockHeader", "BlockScalarContent", "FlowSequenceStart", "FlowMappingStart", "DocumentEnd"]}
+    },
+    {
+      "id": "native.arbitrary-duplicate-mapping", "capability": "yaml.native-semantics@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "? [a, b]\n: one\nk: two\nk: three\n"},
+      "expected": {"entry_count": 3, "key_kinds": ["Sequence", "Scalar", "Scalar"], "values": ["one", "two", "three"]}
+    },
+    {
+      "id": "formation.undefined-alias", "capability": "yaml.formation@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "[*missing]\n"},
+      "expected": {"code": "yaml.parse.syntax@1"}
+    },
+    {
+      "id": "graph.shared-cycle", "capability": "yaml.projection.best-exact-graph@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "&root [one, *root]\n"},
+      "expected": {"node_count": 2, "root_count": 1, "pgce_hex": "504743450101020040157461673a79616d6c2e6f72672c323030323a73657102010020157461673a79616d6c2e6f72672c323030323a737472036f6e65"}
+    },
+    {
+      "id": "query.mapping-entries", "capability": "yaml.query@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "{a: 1, b: 2}\n", "pipeline": ["yaml.documents@1", "yaml.document-root@1", "yaml.try-mapping-entries@1"]},
+      "expected": {"roles": ["YamlMappingEntry", "YamlMappingEntry"]}
+    },
+    {
+      "id": "query.alias-target", "capability": "yaml.query@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "[&x {k: v}, *x]\n", "pipeline": ["yaml.alias-occurrences@1", "yaml.alias-target@1"]},
+      "expected": {"roles": ["YamlNode"]}
+    },
+    {
+      "id": "query.syntax-comments", "capability": "yaml.query@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "a: 1 # first\nb: 2 # second\n", "kind": "Comment"},
+      "expected": {"ordinals": [5, 12]}
+    },
+    {
+      "id": "query.resource-limit", "capability": "yaml.query@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "[a, b, c]\n", "pipeline": ["yaml.documents@1", "yaml.document-root@1", "yaml.try-sequence-elements@1"], "max_results": 2},
+      "expected": {"code": "core.query.resource-limit@1"}
+    },
+    {
+      "id": "projection.sharing-policy", "capability": "yaml.projection.best-exact-value@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "[&x {k: v}, *x]\n"},
+      "expected": {"default_code": "yaml.projection.sharing@1", "event_count": 3}
+    },
+    {
+      "id": "projection.cycle", "capability": "yaml.projection.best-exact-value@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "&x [*x]\n"},
+      "expected": {"code": "yaml.projection.cycle@1"}
+    },
+    {
+      "id": "projection.tag-policy", "capability": "yaml.projection.best-exact-value@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "!example value\n"},
+      "expected": {"default_code": "yaml.projection.unsupported-tag@1", "value": "value"}
+    },
+    {
+      "id": "projection.mapping-policy", "capability": "yaml.projection.best-exact-value@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "{a: 1, a: 2}\n"},
+      "expected": {"object_code": "yaml.projection.mapping-not-object@1", "entry_count": 2}
+    },
+    {
+      "id": "projection.graph-provenance", "capability": "yaml.projection.best-exact-graph@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "&root [one, *root]\n"},
+      "expected": {"reference_origins": 1, "association_entries": 2}
+    },
+    {
+      "id": "materialization.graph-cycle-flow", "capability": "yaml.materialization@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "&root [one, *root]\n"},
+      "expected": {"source": "--- &g0 !!seq [!!str \"one\", *g0]\n"}
+    },
+    {
+      "id": "materialization.value-flow", "capability": "yaml.materialization@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "{a: [1, true]}\n"},
+      "expected": {"source": "--- !!map {? !!str \"a\" : !!seq [!!int \"1\", !!bool \"true\"]}\n"}
+    },
+    {
+      "id": "edit.scalar-atomic", "capability": "yaml.edit@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "# keep\na: 1\nb: two\n", "entry": 0, "integer": "2"},
+      "expected": {"source": "# keep\na: 2\nb: two\n", "edit_count": 1}
+    },
+    {
+      "id": "edit.anchor-rename", "capability": "yaml.edit@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "first: &x [one]\ncopy: *x\n", "entry": 0, "name": "renamed"},
+      "expected": {"source": "first: &renamed [one]\ncopy: *renamed\n"}
+    },
+    {
+      "id": "edit.structural-insert", "capability": "yaml.edit@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "seq: [one, two]\nmap: {a: 1}\n"},
+      "expected": {"source": "seq: [one, !!bool \"true\", two]\nmap: {a: 1, ? !!str \"b\" : !!int \"2\"}\n"}
+    },
+    {
+      "id": "edit.anchor-dependency", "capability": "yaml.edit@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "seq:\n  - &x one\ncopy: *x\n"},
+      "expected": {"code": "yaml.edit.anchor-dependency@1"}
+    },
+    {
+      "id": "resource.parse-source-bytes", "capability": "yaml.formation@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "a: 1\n", "max_source_bytes": 4},
+      "expected": {"code": "core.parse.resource-limit@1"}
+    },
+    {
+      "id": "resource.graph-provenance", "capability": "yaml.projection.best-exact-graph@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "[one, two]\n", "max_provenance_entries": 1},
+      "expected": {"code": "yaml.projection.provenance-limit@1"}
+    },
+    {
+      "id": "regression.plain-property-characters", "capability": "yaml.lossless-syntax@1",
+      "input": {"profile": "yaml.1.2-core@1", "source": "---\nk:#foo\n &a !t s\n"},
+      "expected": {"canonical": "k:#foo &a !t s"}
+    }
+  ]
+}

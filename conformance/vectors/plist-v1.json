@@ -1,0 +1,1643 @@
+{
+  "suite": "consema.plist.conformance@1",
+  "semantic_model": "core.semantic-model@6",
+  "profiles": [
+    "plist.xml@1",
+    "plist.binary@1"
+  ],
+  "cases": [
+    {
+      "id": "plist.xml-formation.all-value-types",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n    <dict>\n        <key>name</key><string>Consema</string>\n        <key>count</key><integer>0x2A</integer>\n        <key>ratio</key><real>1.5e3</real>\n        <key>negative</key><integer>-7</integer>\n        <key>enabled</key><true/>\n        <key>disabled</key><false/>\n        <key>payload</key><data>AQID</data>\n        <key>born</key><date>2023-01-01T00:00:00Z</date>\n        <key>tags</key><array><string>a</string><dict/></array>\n        <key>empty</key><string></string>\n    </dict>\n</plist>\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n    <dict>\n        <key>name</key><string>Consema</string>\n        <key>count</key><integer>0x2A</integer>\n        <key>ratio</key><real>1.5e3</real>\n        <key>negative</key><integer>-7</integer>\n        <key>enabled</key><true/>\n        <key>disabled</key><false/>\n        <key>payload</key><data>AQID</data>\n        <key>born</key><date>2023-01-01T00:00:00Z</date>\n        <key>tags</key><array><string>a</string><dict/></array>\n        <key>empty</key><string></string>\n    </dict>\n</plist>\n",
+        "keys": [
+          "name",
+          "count",
+          "ratio",
+          "negative",
+          "enabled",
+          "disabled",
+          "payload",
+          "born",
+          "tags",
+          "empty"
+        ],
+        "integer_value": 42,
+        "negative_integer": -7,
+        "real_value": 1500.0,
+        "bool_values": [
+          true,
+          false
+        ],
+        "data_hex": "010203",
+        "date_seconds": 694224000.0,
+        "nested_array": [
+          "a",
+          {}
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.doctype-exact",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><string>ok</string></plist>\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><string>ok</string></plist>\n",
+        "root_value": "ok"
+      }
+    },
+    {
+      "id": "plist.xml-formation.doctype-violations",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<!DOCTYPE wrong PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><string>ok</string></plist>"
+          },
+          {
+            "source": "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\" [<!ENTITY x \"y\">]>\n<plist version=\"1.0\"><string>ok</string></plist>"
+          },
+          {
+            "source": "<!DOCTYPE plist SYSTEM \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><string>ok</string></plist>"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "plist.parse.doctype@1",
+          "plist.parse.doctype-subset@1",
+          "plist.parse.doctype@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.root-contracts",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist><string>ok</string></plist>"
+          },
+          {
+            "source": "<plist version=\"2.0\"><string>ok</string></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\" extra=\"1\"><string>ok</string></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><string>a</string><string>b</string></plist>"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "plist.parse.root-version@1",
+          "plist.parse.root-version@1",
+          "plist.parse.root-attribute@1",
+          "plist.parse.root-value-count@1",
+          "plist.parse.root-value-count@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.unknown-element",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><dict><key>a</key><string>b</string><foo/></dict></plist>"
+          },
+          {
+            "source": "<p:plist version=\"1.0\"><string>ok</string></p:plist>"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "plist.parse.element-name@1",
+          "plist.parse.element-name@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.duplicate-keys",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<plist version=\"1.0\"><dict><key>a</key><integer>1</integer><key>a</key><integer>2</integer><key>b</key><string>three</string></dict></plist>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<plist version=\"1.0\"><dict><key>a</key><integer>1</integer><key>a</key><integer>2</integer><key>b</key><string>three</string></dict></plist>",
+        "keys": [
+          "a",
+          "a",
+          "b"
+        ],
+        "associations": 3,
+        "duplicate_groups": 1,
+        "values": [
+          1,
+          2,
+          "three"
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.integer-matrix",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><integer>-42</integer></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><integer>0x2A</integer></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><integer>+ 7</integer></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><integer>007</integer></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><integer>12a</integer></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><integer>9223372036854775808</integer></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><integer>-9223372036854775809</integer></plist>"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          null,
+          null,
+          "plist.parse.integer@1",
+          "plist.parse.integer@1",
+          "plist.parse.integer@1"
+        ],
+        "integers": [
+          -42,
+          42,
+          7,
+          7,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.real-special-values",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<plist version=\"1.0\"><array><real>nan</real><real>-inf</real><real>+infinity</real><real>1.5e3</real></array></plist>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<plist version=\"1.0\"><array><real>nan</real><real>-inf</real><real>+infinity</real><real>1.5e3</real></array></plist>",
+        "real_count": 4,
+        "nan_admitted": true,
+        "infinities_admitted": true,
+        "exponent_value": 1500.0
+      }
+    },
+    {
+      "id": "plist.xml-formation.date-matrix",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><date>2023-01-01T00:00:00Z</date></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><date>2023-01-01T00:00:00.5Z</date></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><date>2024-02-30T00:00:00Z</date></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><date>2023-01-01T00:00:00</date></plist>"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          "plist.parse.date@1",
+          "plist.parse.date@1",
+          "plist.parse.date@1"
+        ],
+        "seconds": [
+          694224000.0,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.base64-matrix",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><data>QUJD</data></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><data>QU\nJD</data></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><data>QUJ</data></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><data>AB$C</data></plist>"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          "plist.parse.data@1",
+          "plist.parse.data@1"
+        ],
+        "data_hexes": [
+          "414243",
+          "414243",
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.key-pair",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><dict><key>a</key></dict></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><dict><string>x</string><string>y</string></dict></plist>"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "plist.parse.dict-missing-value@1",
+          "plist.parse.dict-key@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.trailing-content",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<plist version=\"1.0\"><string>ok</string></plist> trailing"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "plist.parse.well-formedness@1"
+      }
+    },
+    {
+      "id": "plist.xml-formation.string-text-facts",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<plist version=\"1.0\"><dict><key>text</key><string>a &lt; b &amp; c &#65; <![CDATA[raw]]></string><key>lines</key><string>cr\r\nlf</string></dict></plist>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<plist version=\"1.0\"><dict><key>text</key><string>a &lt; b &amp; c &#65; <![CDATA[raw]]></string><key>lines</key><string>cr\r\nlf</string></dict></plist>",
+        "string_values": {
+          "text": "a < b & c A raw",
+          "lines": "cr\nlf"
+        },
+        "line_end_normalized": true
+      }
+    },
+    {
+      "id": "plist.xml-formation.empty-value-matrix",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><date/></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><integer/></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><data/></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><data></data></plist>"
+          },
+          {
+            "source": "<plist version=\"1.0\"><string/></plist>"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Complete",
+          "Complete"
+        ],
+        "diagnostics": [
+          "plist.parse.empty-value@1",
+          "plist.parse.empty-value@1",
+          "plist.parse.empty-value@1",
+          null,
+          null
+        ],
+        "values": [
+          null,
+          null,
+          null,
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "plist.xml-formation.utf16le-input",
+      "capability": "plist.xml-formation@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "encoding": "utf16le-bom",
+        "source": "<plist version=\"1.0\"><string>\u4e2d\u6587</string></plist>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render_hex": "fffe3c0070006c006900730074002000760065007200730069006f006e003d00220031002e00300022003e003c0073007400720069006e0067003e002d4e87653c002f0073007400720069006e0067003e003c002f0070006c006900730074003e00",
+        "string_value": "\u4e2d\u6587"
+      }
+    },
+    {
+      "id": "plist.binary-formation.minimal-document",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c697374303050080000000000000101000000000000000100000000000000000000000000000009"
+      },
+      "expected": {
+        "status": "Complete",
+        "value": "",
+        "num_objects": 1,
+        "top_object": 0,
+        "offset_int_size": 1,
+        "object_ref_size": 1,
+        "offset_table_offset": 9,
+        "sort_version": 0
+      }
+    },
+    {
+      "id": "plist.binary-formation.all-types-document",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c6973743030d90102030405060708090a0d0e0f101112131455617272617954626f6f6c54646174615464617465536633325a6672616374696f6e616c53696e74547265616c53737472a20b0c100110020943010203330000000000000000223f000000333ff8000000000000102a233ff8000000000000526869081b21262b30343f43484c4f5153545861666f717a000000000000010100000000000000150000000000000000000000000000007d"
+      },
+      "expected": {
+        "status": "Complete",
+        "top_kind": "dict",
+        "keys": [
+          "array",
+          "bool",
+          "data",
+          "date",
+          "f32",
+          "fractional",
+          "int",
+          "real",
+          "str"
+        ],
+        "int_value": 42,
+        "real_value": 1.5,
+        "f32_value": 0.5,
+        "data_hex": "010203",
+        "date_seconds": 0.0,
+        "fractional_seconds": 1.5,
+        "bool_values": [
+          true
+        ],
+        "array_elements": [
+          1,
+          2
+        ],
+        "str_value": "hi",
+        "num_objects": 21,
+        "offset_int_size": 1,
+        "object_ref_size": 1,
+        "offset_table_offset": 125
+      }
+    },
+    {
+      "id": "plist.binary-formation.integer-width-matrix",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "samples": [
+          {
+            "hex": "62706c6973743030100008000000000000010100000000000000010000000000000000000000000000000a"
+          },
+          {
+            "hex": "62706c6973743030100108000000000000010100000000000000010000000000000000000000000000000a"
+          },
+          {
+            "hex": "62706c697374303010ff08000000000000010100000000000000010000000000000000000000000000000a"
+          },
+          {
+            "hex": "62706c697374303011010008000000000000010100000000000000010000000000000000000000000000000b"
+          },
+          {
+            "hex": "62706c697374303011ffff08000000000000010100000000000000010000000000000000000000000000000b"
+          },
+          {
+            "hex": "62706c6973743030120001000008000000000000010100000000000000010000000000000000000000000000000d"
+          },
+          {
+            "hex": "62706c697374303012ffffffff08000000000000010100000000000000010000000000000000000000000000000d"
+          },
+          {
+            "hex": "62706c6973743030130000000000000005080000000000000101000000000000000100000000000000000000000000000011"
+          },
+          {
+            "hex": "62706c697374303013ffffffffffffffff080000000000000101000000000000000100000000000000000000000000000011"
+          },
+          {
+            "hex": "62706c697374303013ffffffffffffffd6080000000000000101000000000000000100000000000000000000000000000011"
+          },
+          {
+            "hex": "62706c6973743030137fffffffffffffff080000000000000101000000000000000100000000000000000000000000000011"
+          },
+          {
+            "hex": "62706c6973743030138000000000000000080000000000000101000000000000000100000000000000000000000000000011"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete"
+        ],
+        "integers": [
+          0,
+          1,
+          255,
+          256,
+          65535,
+          65536,
+          4294967295,
+          5,
+          -1,
+          -42,
+          9223372036854775807,
+          -9223372036854775808
+        ],
+        "diagnostics": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "non_minimal_width_observed": true
+      }
+    },
+    {
+      "id": "plist.binary-formation.strings-matrix",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "samples": [
+          {
+            "hex": "62706c69737430305548656c6c6f08000000000000010100000000000000010000000000000000000000000000000e"
+          },
+          {
+            "hex": "62706c6973743030624e16754c08000000000000010100000000000000010000000000000000000000000000000d"
+          },
+          {
+            "hex": "62706c697374303051e908000000000000010100000000000000010000000000000000000000000000000a"
+          },
+          {
+            "hex": "62706c697374303062d800004108000000000000010100000000000000010000000000000000000000000000000d"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Recovered",
+          "Complete"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          "plist.binary.string@1",
+          null
+        ],
+        "strings": [
+          "Hello",
+          "\u4e16\u754c",
+          null,
+          null
+        ],
+        "unpaired_utf16be_hex": "d8000041",
+        "unpaired_status": "UnpairedSurrogate"
+      }
+    },
+    {
+      "id": "plist.binary-formation.uid-matrix",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "samples": [
+          {
+            "hex": "62706c6973743030800508000000000000010100000000000000010000000000000000000000000000000a"
+          },
+          {
+            "hex": "62706c6973743030830102030408000000000000010100000000000000010000000000000000000000000000000d"
+          },
+          {
+            "hex": "62706c69737430308500000000000508000000000000010100000000000000010000000000000000000000000000000f"
+          },
+          {
+            "hex": "62706c697374303084010000000008000000000000010100000000000000010000000000000000000000000000000e"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Complete",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          null,
+          "plist.binary.uid@1"
+        ],
+        "uids": [
+          5,
+          16909060,
+          5,
+          null
+        ],
+        "non_minimal_width_observed": true
+      }
+    },
+    {
+      "id": "plist.binary-formation.shared-reference",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c6973743030a3010102d103045178516b5176080c0f11130000000000000101000000000000000500000000000000000000000000000015"
+      },
+      "expected": {
+        "status": "Complete",
+        "top_kind": "array",
+        "refs_of_top": [
+          1,
+          1,
+          2
+        ],
+        "shared_ref_count": 1,
+        "num_objects": 5
+      }
+    },
+    {
+      "id": "plist.binary-formation.duplicate-keys",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c6973743030d201010203516b10011002080d0f110000000000000101000000000000000400000000000000000000000000000013"
+      },
+      "expected": {
+        "status": "Complete",
+        "keys": [
+          "k",
+          "k"
+        ],
+        "values": [
+          1,
+          2
+        ],
+        "duplicate_groups": 1,
+        "associations": 2
+      }
+    },
+    {
+      "id": "plist.binary-formation.rejected-markers",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "samples": [
+          {
+            "hex": "62706c697374303000080000000000000101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c69737430300f080000000000000101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c697374303014080000000000000101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c697374303070080000000000000101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c6973743030b0080000000000000101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c6973743030e0080000000000000101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c69737430300d080000000000000101000000000000000100000000000000000000000000000009"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "plist.binary.marker@1",
+          "plist.binary.marker@1",
+          "plist.binary.marker@1",
+          "plist.binary.marker@1",
+          "plist.binary.marker@1",
+          "plist.binary.marker@1",
+          "plist.binary.marker@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.binary-formation.header-and-trailer",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "samples": [
+          {
+            "hex": "62706c697374303150080000000000000101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c697374303050080000000000010101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c697374303050080100000000000101000000000000000100000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c697374303050080000000000000101000000000000000000000000000000000000000000000009"
+          },
+          {
+            "hex": "62706c697374303050080000000000000101000000000000000100000000000000010000000000000009"
+          },
+          {
+            "hex": "62706c6973743030514100000000000000080000000000000001000000000000000100000000000000000000000000000009"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Complete",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "plist.binary.header@1",
+          null,
+          "plist.binary.trailer@1",
+          "plist.binary.trailer@1",
+          "plist.binary.trailer@1",
+          "plist.binary.trailer@1"
+        ],
+        "sort_version_one_accepted": true
+      }
+    },
+    {
+      "id": "plist.binary-formation.offset-and-reference",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "samples": [
+          {
+            "hex": "62706c697374303050500805000000000000010100000000000000020000000000000000000000000000000a"
+          },
+          {
+            "hex": "62706c69737430305050080a000000000000010100000000000000020000000000000000000000000000000a"
+          },
+          {
+            "hex": "62706c6973743030a10250080a000000000000010100000000000000020000000000000000000000000000000b"
+          },
+          {
+            "hex": "62706c69737430305f10fa6161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616108090000000000000101000000000000000200000000000000000000000000000105"
+          },
+          {
+            "hex": "62706c6973743030500808080000000000000101000000000000000200000000000000000000000000000009"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "plist.binary.offset-table@1",
+          "plist.binary.offset-table@1",
+          "plist.binary.reference@1",
+          "plist.binary.trailer@1",
+          "plist.binary.trailer@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.binary-formation.extended-size-and-cycle",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "samples": [
+          {
+            "hex": "62706c6973743030af101002030405060708090a0b0c0d0e0f10115050505050505050505050505050505008091b1c1d1e1f202122232425262728292a000000000000010100000000000000120000000000000000000000000000002b"
+          },
+          {
+            "hex": "62706c6973743030a10008000000000000010100000000000000010000000000000000000000000000000a"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          "plist.binary.cycle@1"
+        ],
+        "extended_array_length": 16,
+        "extended_count_is_object": true
+      }
+    },
+    {
+      "id": "plist.binary-formation.value-integrity",
+      "capability": "plist.binary-formation@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "samples": [
+          {
+            "hex": "62706c6973743030337ff8000000000000080000000000000101000000000000000100000000000000000000000000000011"
+          },
+          {
+            "hex": "62706c6973743030d1010210015161080b0d000000000000010100000000000000030000000000000000000000000000000f"
+          },
+          {
+            "hex": "62706c6973743030af50010101010101010101010101010101010809000000000000010100000000000000020000000000000000000000000000001a"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "plist.binary.date@1",
+          "plist.binary.non-string-key@1",
+          "plist.binary.extended-size@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.query.dict-entries-order",
+      "capability": "plist.query@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "domain": "plist.native-semantic-query@1",
+        "source": "<plist version=\"1.0\"><dict><key>a</key><integer>1</integer><key>b</key><array><string>x</string></array><key>a</key><integer>2</integer></dict></plist>",
+        "filters": [
+          {
+            "operator": "plist.document-root@1"
+          },
+          {
+            "operator": "plist.dict-entries@1"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "keys": [
+          "a",
+          "b",
+          "a"
+        ],
+        "value_types": [
+          "integer",
+          "array",
+          "integer"
+        ],
+        "duplicate_groups": 1
+      }
+    },
+    {
+      "id": "plist.query.typed-accessors",
+      "capability": "plist.query@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "domain": "plist.native-semantic-query@1",
+        "source": "<plist version=\"1.0\"><dict><key>count</key><integer>42</integer><key>created</key><date>2023-01-01T00:00:00Z</date><key>name</key><string>x</string></dict></plist>",
+        "samples": [
+          {
+            "filters": [
+              {
+                "operator": "plist.document-root@1"
+              },
+              {
+                "operator": "plist.dict-entries@1"
+              },
+              {
+                "operator": "plist.dict-key-equals@1",
+                "argument": "count"
+              },
+              {
+                "operator": "plist.dict-entry-value@1"
+              },
+              {
+                "operator": "plist.value-type-is@1",
+                "argument": "integer"
+              },
+              {
+                "operator": "plist.value-as-integer@1"
+              }
+            ]
+          },
+          {
+            "filters": [
+              {
+                "operator": "plist.document-root@1"
+              },
+              {
+                "operator": "plist.dict-entries@1"
+              },
+              {
+                "operator": "plist.dict-key-equals@1",
+                "argument": "created"
+              },
+              {
+                "operator": "plist.dict-entry-value@1"
+              },
+              {
+                "operator": "plist.value-as-date@1"
+              }
+            ]
+          },
+          {
+            "filters": [
+              {
+                "operator": "plist.document-root@1"
+              },
+              {
+                "operator": "plist.dict-entries@1"
+              },
+              {
+                "operator": "plist.dict-key-equals@1",
+                "argument": "count"
+              },
+              {
+                "operator": "plist.dict-entry-value@1"
+              },
+              {
+                "operator": "plist.value-as-string@1"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "terminals": [
+          "Completed",
+          "Completed",
+          "Failed"
+        ],
+        "integer_matches": [
+          {
+            "kind": "integer",
+            "value": 42
+          }
+        ],
+        "date_matches": [
+          {
+            "kind": "date",
+            "seconds": 694224000.0
+          }
+        ],
+        "mismatch_code": "plist.query.type-mismatch@1"
+      }
+    },
+    {
+      "id": "plist.query.binary-structure",
+      "capability": "plist.query@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "domain": "plist.binary-structure-query@1",
+        "hex": "62706c6973743030d1010251611001080b0d000000000000010100000000000000030000000000000000000000000000000f",
+        "filters": [
+          {
+            "operator": "plist.object-table@1"
+          },
+          {
+            "operator": "plist.offset-table@1"
+          },
+          {
+            "operator": "plist.trailer-facts@1"
+          },
+          {
+            "operator": "plist.top-object@1"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "num_objects": 3,
+        "top_object": 0,
+        "offset_int_size": 1,
+        "object_ref_size": 1,
+        "sort_version": 0,
+        "offset_table_offset": 15,
+        "object_offsets": [
+          8,
+          11,
+          13
+        ],
+        "markers": [
+          "d1",
+          "51",
+          "10"
+        ],
+        "top_marker": "d1",
+        "top_refs": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "id": "plist.projection.value-tree-record",
+      "capability": "plist.projection@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<plist version=\"1.0\"><dict><key>name</key><string>text</string><key>count</key><integer>42</integer><key>ratio</key><real>1.5</real><key>enabled</key><true/><key>disabled</key><false/><key>payload</key><data>AQID</data><key>created</key><date>2023-01-01T00:00:00Z</date><key>tags</key><array><string>a</string><string>b</string></array></dict></plist>"
+      },
+      "expected": {
+        "record": "plist.value-tree@1",
+        "root_kind": "dict",
+        "keys": [
+          "name",
+          "count",
+          "ratio",
+          "enabled",
+          "disabled",
+          "payload",
+          "created",
+          "tags"
+        ],
+        "leaves": {
+          "name": {
+            "kind": "string",
+            "text": "text"
+          },
+          "count": {
+            "kind": "integer",
+            "value": 42
+          },
+          "ratio": {
+            "kind": "real",
+            "value": 1.5
+          },
+          "enabled": {
+            "kind": "boolean",
+            "value": true
+          },
+          "disabled": {
+            "kind": "boolean",
+            "value": false
+          },
+          "payload": {
+            "kind": "data",
+            "hex": "010203"
+          },
+          "created": {
+            "kind": "date",
+            "seconds": 694224000.0
+          }
+        },
+        "array_leaves": {
+          "tags": [
+            "a",
+            "b"
+          ]
+        },
+        "association_order_preserved": true
+      }
+    },
+    {
+      "id": "plist.projection.require-object-policies",
+      "capability": "plist.projection@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "target": "plist.projection.require-object@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><dict><key>a</key><string>one</string><key>a</key><string>last</string><key>b</key><string>two</string></dict></plist>",
+            "collision_policy": "Reject"
+          },
+          {
+            "source": "<plist version=\"1.0\"><dict><key>a</key><string>one</string><key>a</key><string>last</string><key>b</key><string>two</string></dict></plist>",
+            "collision_policy": "First"
+          },
+          {
+            "source": "<plist version=\"1.0\"><dict><key>d</key><date>2023-01-01T00:00:00Z</date><key>s</key><string>x</string></dict></plist>",
+            "collision_policy": "Reject"
+          },
+          {
+            "source": "<plist version=\"1.0\"><dict><key>p</key><data>AQID</data></dict></plist>",
+            "collision_policy": "Reject"
+          }
+        ]
+      },
+      "expected": {
+        "fidelities": [
+          "Failed",
+          "Transformed",
+          "Failed",
+          "Failed"
+        ],
+        "codes": [
+          "plist.projection.collision@1",
+          null,
+          "plist.projection.unrepresentable@1",
+          "plist.projection.unrepresentable@1"
+        ],
+        "first_sample": {
+          "keys": [
+            "a",
+            "b"
+          ],
+          "values": [
+            "one",
+            "two"
+          ]
+        },
+        "events_after_first": 1
+      }
+    },
+    {
+      "id": "plist.projection.atomic-failures",
+      "capability": "plist.projection@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><dict><key>a</key></dict></plist>"
+          },
+          {
+            "profile": "plist.binary@1",
+            "hex": "62706c697374303062d800004108000000000000010100000000000000010000000000000000000000000000000d"
+          }
+        ]
+      },
+      "expected": {
+        "codes": [
+          "plist.projection.incomplete-document@1",
+          "plist.projection.unpaired-surrogate@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.materialization.xml-canonical-text",
+      "capability": "plist.materialization@1",
+      "input": {
+        "style": "plist.xml-canonical@1",
+        "record": {
+          "record": "plist.value-tree@1",
+          "root": {
+            "name": "value",
+            "count": 42,
+            "ratio": 1.5,
+            "enabled": true,
+            "disabled": false,
+            "payload": {
+              "hex": "010203"
+            },
+            "created": {
+              "epoch": "2001-01-01T00:00:00Z",
+              "seconds": 694224000.0
+            },
+            "title": "a & b < c",
+            "tags": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "render": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n    <dict>\n        <key>name</key>\n        <string>value</string>\n        <key>count</key>\n        <integer>42</integer>\n        <key>ratio</key>\n        <real>1.5</real>\n        <key>enabled</key>\n        <true/>\n        <key>disabled</key>\n        <false/>\n        <key>payload</key>\n        <data>AQID</data>\n        <key>created</key>\n        <date>2023-01-01T00:00:00Z</date>\n        <key>title</key>\n        <string>a &amp; b &lt; c</string>\n        <key>tags</key>\n        <array>\n            <string>a</string>\n            <string>b</string>\n        </array>\n    </dict>\n</plist>\n",
+        "closure": true
+      }
+    },
+    {
+      "id": "plist.materialization.binary-canonical-hex",
+      "capability": "plist.materialization@1",
+      "input": {
+        "style": "plist.binary-canonical@1",
+        "record": {
+          "record": "plist.value-tree@1",
+          "root": {
+            "name": "value",
+            "count": 42,
+            "ratio": 1.5,
+            "enabled": true,
+            "disabled": false,
+            "payload": {
+              "hex": "010203"
+            },
+            "created": {
+              "epoch": "2001-01-01T00:00:00Z",
+              "seconds": 694224000.0
+            },
+            "title": "a & b < c",
+            "tags": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "render_hex": "62706c6973743030d90102030405060708090a0b0c0d0e0f101112546e616d6555636f756e7455726174696f57656e61626c65645864697361626c6564577061796c6f61645763726561746564557469746c6554746167735576616c7565102a233ff80000000000000908430102033341c4b08240000000596120262062203c2063a2131451615162081b20262c343d454d53585e60696a6b6f788285870000000000000101000000000000001500000000000000000000000000000089",
+        "closure": true
+      }
+    },
+    {
+      "id": "plist.materialization.normalization-and-conversion",
+      "capability": "plist.materialization@1",
+      "input": {
+        "samples": [
+          {
+            "profile": "plist.binary@1",
+            "hex": "62706c6973743030a30101011300000000000000051300000000000000051005080c151e0000000000000101000000000000000400000000000000000000000000000020",
+            "style": "plist.binary-canonical@1"
+          },
+          {
+            "profile": "plist.binary@1",
+            "hex": "62706c6973743030d1010251611001080b0d000000000000010100000000000000030000000000000000000000000000000f",
+            "style": "plist.xml-canonical@1"
+          }
+        ]
+      },
+      "expected": {
+        "canonical_hex": "62706c6973743030a30101011005080c000000000000010100000000000000020000000000000000000000000000000e",
+        "deduplicated_scalars": 2,
+        "conversion_render": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n    <key>a</key>\n    <integer>1</integer>\n</dict>\n</plist>\n",
+        "closure": true,
+        "representation_change_reported": true
+      }
+    },
+    {
+      "id": "plist.materialization.fractional-date-policy",
+      "capability": "plist.materialization@1",
+      "input": {
+        "style": "plist.xml-canonical@1",
+        "samples": [
+          {
+            "record": {
+              "record": "plist.value-tree@1",
+              "root": {
+                "t": {
+                  "epoch": "2001-01-01T00:00:00Z",
+                  "seconds": 1.5
+                }
+              }
+            },
+            "truncate_policy": "TruncateWithReport"
+          },
+          {
+            "record": {
+              "record": "plist.value-tree@1",
+              "root": {
+                "t": {
+                  "epoch": "2001-01-01T00:00:00Z",
+                  "seconds": 1.5
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "renders": [
+          "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n    <dict>\n        <key>t</key>\n        <date>2001-01-01T00:00:01Z</date>\n    </dict>\n</plist>\n",
+          null
+        ],
+        "codes": [
+          null,
+          "plist.materialization.fractional-date@1"
+        ],
+        "truncation_events": 1
+      }
+    },
+    {
+      "id": "plist.materialization.old-record-shape-rejected",
+      "capability": "plist.materialization@1",
+      "input": {
+        "style": "plist.xml-canonical@1",
+        "samples": [
+          {
+            "record": {
+              "record": "plist.value-tree@1",
+              "value": {
+                "kind": "string",
+                "text": "x"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "codes": [
+          "core.materialization.invalid-request@1"
+        ]
+      }
+    },
+    {
+      "id": "plist.edit.xml-six-operations",
+      "capability": "plist.edit@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<plist version=\"1.0\"><dict><key>a</key><dict><key>b</key><string>old</string></dict><key>arr</key><array><integer>1</integer><integer>2</integer></array></dict></plist>",
+        "operations": [
+          {
+            "op": "plist.edit.set-value@1",
+            "path": [
+              "a",
+              "b"
+            ],
+            "value": {
+              "kind": "string",
+              "text": "new"
+            }
+          },
+          {
+            "op": "plist.edit.insert-dict-entry@1",
+            "dict": "a",
+            "key": "c",
+            "value": {
+              "kind": "integer",
+              "value": 3
+            },
+            "placement": "End"
+          },
+          {
+            "op": "plist.edit.insert-array-element@1",
+            "array": "arr",
+            "index": 0,
+            "value": {
+              "kind": "string",
+              "text": "z"
+            }
+          },
+          {
+            "op": "plist.edit.remove-array-element@1",
+            "array": "arr",
+            "index": 2
+          },
+          {
+            "op": "plist.edit.rename-dict-key@1",
+            "dict": "a",
+            "from": "c",
+            "to": "c2"
+          },
+          {
+            "op": "plist.edit.remove-dict-entry@1",
+            "dict": "a",
+            "key": "b"
+          }
+        ]
+      },
+      "expected": {
+        "status": "Complete",
+        "dict_a_keys": [
+          "c2"
+        ],
+        "dict_a_values": [
+          3
+        ],
+        "arr_elements": [
+          "z",
+          1
+        ],
+        "reparse_closure": true,
+        "untouched_byte_proof": true,
+        "patch_replays": true
+      }
+    },
+    {
+      "id": "plist.edit.binary-structural",
+      "capability": "plist.edit@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c6973743030a2010210015162080b0d000000000000010100000000000000030000000000000000000000000000000f",
+        "operations": [
+          {
+            "op": "plist.edit.set-value@1",
+            "path": [
+              1
+            ],
+            "value": {
+              "kind": "integer",
+              "value": 42
+            }
+          },
+          {
+            "op": "plist.edit.insert-array-element@1",
+            "path": [],
+            "index": 0,
+            "value": {
+              "kind": "boolean",
+              "value": true
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "Complete",
+        "top_kind": "array",
+        "elements": [
+          true,
+          1,
+          42
+        ],
+        "element_kinds": [
+          "boolean",
+          "integer",
+          "integer"
+        ],
+        "reparse_closure": true,
+        "untouched_object_bytes": true,
+        "patch_replays": true
+      }
+    },
+    {
+      "id": "plist.edit.conflicts",
+      "capability": "plist.edit@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "samples": [
+          {
+            "source": "<plist version=\"1.0\"><dict><key>a</key><string>x</string></dict></plist>",
+            "operations": [
+              {
+                "op": "plist.edit.set-value@1",
+                "path": [
+                  "a"
+                ],
+                "value": {
+                  "kind": "uid",
+                  "value": 5
+                }
+              }
+            ]
+          },
+          {
+            "source": "<plist version=\"1.0\"><dict><key>a</key></dict></plist>",
+            "operations": [
+              {
+                "op": "plist.edit.set-value@1",
+                "path": [
+                  "a"
+                ],
+                "value": {
+                  "kind": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          {
+            "profile": "plist.binary@1",
+            "hex": "62706c6973743030a2010210015162080b0d000000000000010100000000000000030000000000000000000000000000000f",
+            "source_id": "memory:plist-conformance",
+            "wrong_source": {
+              "profile": "plist.binary@1",
+              "hex": "62706c697374303050080000000000000101000000000000000100000000000000000000000000000009"
+            },
+            "operations": [
+              {
+                "op": "plist.edit.set-value@1",
+                "path": [
+                  1
+                ],
+                "value": {
+                  "kind": "integer",
+                  "value": 42
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "codes": [
+          "plist.edit.uid-in-xml@1",
+          "core.edit.incomplete-target@1",
+          "core.edit.wrong-snapshot@1"
+        ],
+        "base_unchanged": true
+      }
+    },
+    {
+      "id": "plist.conversion.xml-to-binary-round-trip",
+      "capability": "plist.conversion@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n    <dict>\n        <key>name</key><string>Consema</string>\n        <key>count</key><integer>0x2A</integer>\n        <key>ratio</key><real>1.5e3</real>\n        <key>negative</key><integer>-7</integer>\n        <key>enabled</key><true/>\n        <key>disabled</key><false/>\n        <key>payload</key><data>AQID</data>\n        <key>born</key><date>2023-01-01T00:00:00Z</date>\n        <key>tags</key><array><string>a</string><dict/></array>\n        <key>empty</key><string></string>\n    </dict>\n</plist>\n"
+      },
+      "expected": {
+        "target": "plist.binary@1",
+        "representation_change_reported": true,
+        "closure": true,
+        "round_trip": true,
+        "dict_keys": [
+          "name",
+          "count",
+          "ratio",
+          "negative",
+          "enabled",
+          "disabled",
+          "payload",
+          "born",
+          "tags",
+          "empty"
+        ]
+      }
+    },
+    {
+      "id": "plist.conversion.binary-to-xml-round-trip",
+      "capability": "plist.conversion@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c6973743030517810020908a20203233ff80000000000005161516251635164d40607080900010405080a0c0d0e111a1c1e20220000000000000101000000000000000b000000000000000a000000000000002b"
+      },
+      "expected": {
+        "target": "plist.xml@1",
+        "representation_change_reported": true,
+        "closure": true,
+        "round_trip": true,
+        "dict_keys": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ]
+      }
+    },
+    {
+      "id": "plist.conversion.uid-inexpressible-to-xml",
+      "capability": "plist.conversion@1",
+      "input": {
+        "profile": "plist.binary@1",
+        "hex": "62706c6973743030800508000000000000010100000000000000010000000000000000000000000000000a"
+      },
+      "expected": {
+        "target": "plist.xml@1",
+        "code": "plist.conversion.inexpressible@1"
+      }
+    },
+    {
+      "id": "plist.conversion.duplicate-keys-preserved",
+      "capability": "plist.conversion@1",
+      "input": {
+        "profile": "plist.xml@1",
+        "source": "<plist version=\"1.0\"><dict><key>a</key><integer>1</integer><key>a</key><integer>2</integer><key>b</key><string>three</string></dict></plist>"
+      },
+      "expected": {
+        "target": "plist.binary@1",
+        "representation_change_reported": true,
+        "closure": true,
+        "round_trip": true,
+        "dict_keys": [
+          "a",
+          "a",
+          "b"
+        ]
+      }
+    }
+  ]
+}

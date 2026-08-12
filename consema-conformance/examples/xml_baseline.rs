@@ -10,9 +10,9 @@ use consema::xml::{
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-const MAVEN_SOURCE: &[u8] = include_bytes!("../../../conformance/fixtures/xml/maven-pom.xml");
+const MAVEN_SOURCE: &[u8] = include_bytes!("../../conformance/fixtures/xml/maven-pom.xml");
 const SERVICE_SOURCE: &[u8] =
-    include_bytes!("../../../conformance/fixtures/xml/namespaced-service.xml");
+    include_bytes!("../../conformance/fixtures/xml/namespaced-service.xml");
 
 fn main() {
     let iterations = std::env::args().nth(1).map_or(20_000, |value| {

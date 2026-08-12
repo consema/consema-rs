@@ -15,7 +15,7 @@ use consema_yaml::{
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-const SOURCE: &[u8] = include_bytes!("../../../conformance/fixtures/yaml/anchor-heavy.yaml");
+const SOURCE: &[u8] = include_bytes!("../../conformance/fixtures/yaml/anchor-heavy.yaml");
 
 fn main() {
     let iterations = std::env::args().nth(1).map_or(20_000, |value| {

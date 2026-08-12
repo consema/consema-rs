@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<server xmlns="urn:example:server"
+        xmlns:db="urn:example:datasource"
+        xmlns:sec="urn:example:security">
+  <sec:realm name="app-realm">
+    <sec:user username="service" roles="app,read"/>
+  </sec:realm>
+  <db:datasource id="primary">
+    <db:pool min="2" max="20"/>
+    <db:connection-string><![CDATA[jdbc:example://primary.example:5432/app?sslmode=require]]></db:connection-string>
+  </db:datasource>
+  <connector port="8080" protocol="HTTP"/>
+</server>

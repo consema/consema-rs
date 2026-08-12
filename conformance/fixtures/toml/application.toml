@@ -1,0 +1,22 @@
+# A realistic service configuration exercising logical and syntactic tables.
+service.name = "catalog"
+service.environment = "production"
+service.listen = { host = "0.0.0.0", port = 8080 }
+
+[database]
+url = "postgres://db.internal/catalog"
+pool_size = 32
+timeouts = [1.0, 5.0, 30.0]
+
+[observability.logs]
+level = "info"
+json = true
+
+[[upstreams]]
+name = "inventory-a"
+endpoints = ["https://inventory-a.internal"]
+
+[[upstreams]]
+name = "inventory-b"
+endpoints = ["https://inventory-b.internal/primary", "https://inventory-b.internal/backup"]
+

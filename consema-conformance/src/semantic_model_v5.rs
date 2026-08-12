@@ -24,7 +24,7 @@ const SUITE: &str = "consema.semantic-model-v5.conformance@1";
 
 /// Embedded language-neutral semantic-model v5 suite bytes.
 pub const SEMANTIC_MODEL_V5_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/semantic-model-v5.json");
+    include_str!("../../conformance/vectors/semantic-model-v5.json");
 
 /// Runs the embedded `consema.semantic-model-v5.conformance@1` suite.
 #[must_use]

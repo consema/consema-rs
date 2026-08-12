@@ -15,34 +15,32 @@ const ADAPTER_SHA256: &str = "71cf3030b74ef264ad8e15f5633e653d70f3ec96b0bbd6944c
 
 /// Embedded, authority-recorded Java SE 25 Properties differential manifest.
 pub const PROPERTIES_JDK25_ORACLE_JSON: &str =
-    include_str!("../../../conformance/oracles/java-properties-v1/manifest.json");
+    include_str!("../../conformance/oracles/java-properties-v1/manifest.json");
 
 const READER_BASICS: &[u8] =
-    include_bytes!("../../../conformance/oracles/java-properties-v1/reader-basics.properties");
-const READER_CONTINUATION: &[u8] = include_bytes!(
-    "../../../conformance/oracles/java-properties-v1/reader-continuation.properties"
-);
+    include_bytes!("../../conformance/oracles/java-properties-v1/reader-basics.properties");
+const READER_CONTINUATION: &[u8] =
+    include_bytes!("../../conformance/oracles/java-properties-v1/reader-continuation.properties");
 const READER_DUPLICATES: &[u8] =
-    include_bytes!("../../../conformance/oracles/java-properties-v1/reader-duplicates.properties");
+    include_bytes!("../../conformance/oracles/java-properties-v1/reader-duplicates.properties");
 const READER_ESCAPES: &[u8] =
-    include_bytes!("../../../conformance/oracles/java-properties-v1/reader-escapes.properties");
+    include_bytes!("../../conformance/oracles/java-properties-v1/reader-escapes.properties");
 const READER_FINAL_CONTINUATION: &[u8] = include_bytes!(
-    "../../../conformance/oracles/java-properties-v1/reader-final-continuation.properties"
+    "../../conformance/oracles/java-properties-v1/reader-final-continuation.properties"
 );
 const READER_JAVA_UTF16: &[u8] =
-    include_bytes!("../../../conformance/oracles/java-properties-v1/reader-java-utf16.properties");
-const READER_MALFORMED_HEX: &[u8] = include_bytes!(
-    "../../../conformance/oracles/java-properties-v1/reader-malformed-hex.properties"
-);
+    include_bytes!("../../conformance/oracles/java-properties-v1/reader-java-utf16.properties");
+const READER_MALFORMED_HEX: &[u8] =
+    include_bytes!("../../conformance/oracles/java-properties-v1/reader-malformed-hex.properties");
 const READER_MALFORMED_SHORT: &[u8] = include_bytes!(
-    "../../../conformance/oracles/java-properties-v1/reader-malformed-short.properties"
+    "../../conformance/oracles/java-properties-v1/reader-malformed-short.properties"
 );
 const READER_MULTIPLE_U: &[u8] =
-    include_bytes!("../../../conformance/oracles/java-properties-v1/reader-multiple-u.properties");
+    include_bytes!("../../conformance/oracles/java-properties-v1/reader-multiple-u.properties");
 const READER_MESSAGES: &[u8] =
-    include_bytes!("../../../conformance/fixtures/properties/messages.properties");
+    include_bytes!("../../conformance/fixtures/properties/messages.properties");
 const LATIN1_RESOURCE_HEX: &str =
-    include_str!("../../../conformance/fixtures/properties/latin1-resource.properties.hex");
+    include_str!("../../conformance/fixtures/properties/latin1-resource.properties.hex");
 
 /// Runs the embedded Java SE 25 Properties differential manifest.
 #[must_use]

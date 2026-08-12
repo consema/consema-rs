@@ -1,0 +1,2141 @@
+{
+  "manifest": "consema.differential.byte-parity@1",
+  "generated": "2026-08-07",
+  "cases": [
+    {
+      "id": "pvce.null",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Null\"}}",
+      "kinds": [
+        "Null"
+      ]
+    },
+    {
+      "id": "pvce.boolean-true",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Boolean\",\"value\":true}}",
+      "kinds": [
+        "Boolean"
+      ]
+    },
+    {
+      "id": "pvce.boolean-false",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Boolean\",\"value\":false}}",
+      "kinds": [
+        "Boolean"
+      ]
+    },
+    {
+      "id": "pvce.integer-zero",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Integer\",\"value\":\"0\"}}",
+      "kinds": [
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.integer-minus-256",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Integer\",\"value\":\"-256\"}}",
+      "kinds": [
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.integer-max-int64",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Integer\",\"value\":\"9223372036854775807\"}}",
+      "kinds": [
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.integer-min-int64",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Integer\",\"value\":\"-9223372036854775808\"}}",
+      "kinds": [
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.integer-127-byte-magnitude",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Integer\",\"value\":\"702223880805592151456759840151962786569522257399338504974336254522393264865238137237142489540654437582500444843247630303354647534431314931612685275935445798350655833690880801860555545317367555154113605281582053784524026102900245630757473088050106395169337932361665227499793929447186391815763110662594625535\"}}",
+      "kinds": [
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.integer-128-byte-magnitude",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Integer\",\"value\":\"-179769313486231590772930519078902473361797697894230657273430081157732675805500963132708477322407536021120113879871393357658789768814416622492847430639474124377767893424865485276302219601246094119453082952085005768838150682342462881473913110540827237163350510684586298239947245938479716304835356329624224136960\"}}",
+      "kinds": [
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.integer-256-bit",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Integer\",\"value\":\"-4307232389973303652939381438\"}}",
+      "kinds": [
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.decimal-zero",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Decimal\",\"coefficient\":\"0\",\"exponent\":\"0\"}}",
+      "kinds": [
+        "Decimal"
+      ]
+    },
+    {
+      "id": "pvce.decimal-123e-2",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Decimal\",\"coefficient\":\"123\",\"exponent\":\"-2\"}}",
+      "kinds": [
+        "Decimal"
+      ]
+    },
+    {
+      "id": "pvce.decimal-neg-big",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Decimal\",\"coefficient\":\"-456789123\",\"exponent\":\"30\"}}",
+      "kinds": [
+        "Decimal"
+      ]
+    },
+    {
+      "id": "pvce.decimal-1e100",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Decimal\",\"coefficient\":\"1\",\"exponent\":\"100\"}}",
+      "kinds": [
+        "Decimal"
+      ]
+    },
+    {
+      "id": "pvce.decimal-5e-100",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Decimal\",\"coefficient\":\"5\",\"exponent\":\"-100\"}}",
+      "kinds": [
+        "Decimal"
+      ]
+    },
+    {
+      "id": "pvce.float32-nan",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"BinaryFloat32\",\"bits\":\"7fc00001\"}}",
+      "kinds": [
+        "BinaryFloat32"
+      ]
+    },
+    {
+      "id": "pvce.float32-zero",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"BinaryFloat32\",\"bits\":\"00000000\"}}",
+      "kinds": [
+        "BinaryFloat32"
+      ]
+    },
+    {
+      "id": "pvce.float32-neg-inf",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"BinaryFloat32\",\"bits\":\"ff800000\"}}",
+      "kinds": [
+        "BinaryFloat32"
+      ]
+    },
+    {
+      "id": "pvce.float32-one",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"BinaryFloat32\",\"bits\":\"3f800000\"}}",
+      "kinds": [
+        "BinaryFloat32"
+      ]
+    },
+    {
+      "id": "pvce.float64-nan",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"BinaryFloat64\",\"bits\":\"7ff8000000000001\"}}",
+      "kinds": [
+        "BinaryFloat64"
+      ]
+    },
+    {
+      "id": "pvce.float64-neg-zero",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"BinaryFloat64\",\"bits\":\"8000000000000000\"}}",
+      "kinds": [
+        "BinaryFloat64"
+      ]
+    },
+    {
+      "id": "pvce.float64-one",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"BinaryFloat64\",\"bits\":\"3ff0000000000000\"}}",
+      "kinds": [
+        "BinaryFloat64"
+      ]
+    },
+    {
+      "id": "pvce.float64-max",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"BinaryFloat64\",\"bits\":\"7fefffffffffffff\"}}",
+      "kinds": [
+        "BinaryFloat64"
+      ]
+    },
+    {
+      "id": "pvce.string-empty",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"String\",\"value\":\"\"}}",
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pvce.string-escapes",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"String\",\"value\":\"quote \\\" slash \\\\ newline\\n tab\\t nul\\u0000 bell\\u0007\"}}",
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pvce.string-unicode",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"String\",\"value\":\"中文 é 🎉 é\"}}",
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pvce.bytes-empty",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Bytes\",\"hex\":\"\"}}",
+      "kinds": [
+        "Bytes"
+      ]
+    },
+    {
+      "id": "pvce.bytes-golden",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Bytes\",\"hex\":\"0001feff\"}}",
+      "kinds": [
+        "Bytes"
+      ]
+    },
+    {
+      "id": "pvce.bytes-ff",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Bytes\",\"hex\":\"ff\"}}",
+      "kinds": [
+        "Bytes"
+      ]
+    },
+    {
+      "id": "pvce.date-leap",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Date\",\"year\":\"2000\",\"month\":\"2\",\"day\":\"29\"}}",
+      "kinds": [
+        "Date"
+      ]
+    },
+    {
+      "id": "pvce.date-golden",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Date\",\"year\":\"-12345\",\"month\":\"2\",\"day\":\"28\"}}",
+      "kinds": [
+        "Date"
+      ]
+    },
+    {
+      "id": "pvce.date-epoch",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Date\",\"year\":\"1970\",\"month\":\"1\",\"day\":\"1\"}}",
+      "kinds": [
+        "Date"
+      ]
+    },
+    {
+      "id": "pvce.time-midnight",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Time\",\"hour\":\"0\",\"minute\":\"0\",\"second\":\"0\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"0\",\"exponent\":\"0\"}}}",
+      "kinds": [
+        "Time"
+      ]
+    },
+    {
+      "id": "pvce.time-golden",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Time\",\"hour\":\"23\",\"minute\":\"59\",\"second\":\"58\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"125\",\"exponent\":\"-3\"}}}",
+      "kinds": [
+        "Time"
+      ]
+    },
+    {
+      "id": "pvce.time-nano",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Time\",\"hour\":\"12\",\"minute\":\"34\",\"second\":\"56\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"1\",\"exponent\":\"-9\"}}}",
+      "kinds": [
+        "Time"
+      ]
+    },
+    {
+      "id": "pvce.local-datetime-golden",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"LocalDateTime\",\"date\":{\"type\":\"Date\",\"year\":\"-12345\",\"month\":\"2\",\"day\":\"28\"},\"time\":{\"type\":\"Time\",\"hour\":\"23\",\"minute\":\"59\",\"second\":\"58\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"125\",\"exponent\":\"-3\"}}}}",
+      "kinds": [
+        "LocalDateTime"
+      ]
+    },
+    {
+      "id": "pvce.offset-datetime-golden",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"OffsetDateTime\",\"local\":{\"type\":\"LocalDateTime\",\"date\":{\"type\":\"Date\",\"year\":\"-12345\",\"month\":\"2\",\"day\":\"28\"},\"time\":{\"type\":\"Time\",\"hour\":\"23\",\"minute\":\"59\",\"second\":\"58\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"125\",\"exponent\":\"-3\"}}},\"offset_seconds\":\"-82800\"}}",
+      "kinds": [
+        "OffsetDateTime"
+      ]
+    },
+    {
+      "id": "pvce.offset-zero",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"OffsetDateTime\",\"local\":{\"type\":\"LocalDateTime\",\"date\":{\"type\":\"Date\",\"year\":\"1970\",\"month\":\"1\",\"day\":\"1\"},\"time\":{\"type\":\"Time\",\"hour\":\"0\",\"minute\":\"0\",\"second\":\"0\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"0\",\"exponent\":\"0\"}}},\"offset_seconds\":\"0\"}}",
+      "kinds": [
+        "OffsetDateTime"
+      ]
+    },
+    {
+      "id": "pvce.offset-pos",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"OffsetDateTime\",\"local\":{\"type\":\"LocalDateTime\",\"date\":{\"type\":\"Date\",\"year\":\"2026\",\"month\":\"8\",\"day\":\"7\"},\"time\":{\"type\":\"Time\",\"hour\":\"12\",\"minute\":\"34\",\"second\":\"56\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"125\",\"exponent\":\"-3\"}}},\"offset_seconds\":\"45296\"}}",
+      "kinds": [
+        "OffsetDateTime"
+      ]
+    },
+    {
+      "id": "pvce.object-empty",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[]}}",
+      "kinds": [
+        "Object"
+      ]
+    },
+    {
+      "id": "pvce.object-single",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"a\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]}}",
+      "kinds": [
+        "Object"
+      ]
+    },
+    {
+      "id": "pvce.object-multi",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"\",\"value\":{\"type\":\"Null\"}},{\"key\":\"中\",\"value\":{\"type\":\"String\",\"value\":\"值\"}},{\"key\":\"a b\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Integer\",\"value\":\"1\"},{\"type\":\"Integer\",\"value\":\"2\"}]}},{\"key\":\"k\\n\",\"value\":{\"type\":\"Boolean\",\"value\":true}}]}}",
+      "kinds": [
+        "Object"
+      ]
+    },
+    {
+      "id": "pvce.object-nested",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"a\",\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"b\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Object\",\"entries\":[{\"key\":\"c\",\"value\":{\"type\":\"Null\"}}]}]}}]}}]}}",
+      "kinds": [
+        "Object",
+        "Array"
+      ]
+    },
+    {
+      "id": "pvce.array-empty",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Sequence\",\"items\":[]}}",
+      "kinds": [
+        "Array"
+      ]
+    },
+    {
+      "id": "pvce.array-all-kinds",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Null\"},{\"type\":\"Boolean\",\"value\":false},{\"type\":\"Integer\",\"value\":\"12345678901234567890\"},{\"type\":\"Decimal\",\"coefficient\":\"123\",\"exponent\":\"-2\"},{\"type\":\"BinaryFloat32\",\"bits\":\"7fc00001\"},{\"type\":\"BinaryFloat64\",\"bits\":\"8000000000000000\"},{\"type\":\"String\",\"value\":\"quote \\\" slash \\\\ newline\\n 世界\"},{\"type\":\"Bytes\",\"hex\":\"0001feff\"},{\"type\":\"Date\",\"year\":\"-44\",\"month\":\"3\",\"day\":\"15\"},{\"type\":\"Time\",\"hour\":\"12\",\"minute\":\"34\",\"second\":\"56\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"125\",\"exponent\":\"-3\"}},{\"type\":\"LocalDateTime\",\"date\":{\"type\":\"Date\",\"year\":\"-44\",\"month\":\"3\",\"day\":\"15\"},\"time\":{\"type\":\"Time\",\"hour\":\"12\",\"minute\":\"34\",\"second\":\"56\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"125\",\"exponent\":\"-3\"}}},{\"type\":\"OffsetDateTime\",\"local\":{\"type\":\"LocalDateTime\",\"date\":{\"type\":\"Date\",\"year\":\"-44\",\"month\":\"3\",\"day\":\"15\"},\"time\":{\"type\":\"Time\",\"hour\":\"12\",\"minute\":\"34\",\"second\":\"56\",\"fraction\":{\"type\":\"Decimal\",\"coefficient\":\"125\",\"exponent\":\"-3\"}}},\"offset_seconds\":\"-90\"},{\"type\":\"Sequence\",\"items\":[{\"type\":\"String\",\"value\":\"nested\"}]},{\"type\":\"Object\",\"entries\":[{\"key\":\"a\",\"value\":{\"type\":\"Integer\",\"value\":\"1\"}}]},{\"type\":\"EntryMapping\",\"entries\":[{\"key\":{\"type\":\"Boolean\",\"value\":true},\"value\":{\"type\":\"Null\"}}]}]}}",
+      "kinds": [
+        "Null",
+        "Boolean",
+        "Integer",
+        "Decimal",
+        "BinaryFloat32",
+        "BinaryFloat64",
+        "String",
+        "Bytes",
+        "Date",
+        "Time",
+        "LocalDateTime",
+        "OffsetDateTime",
+        "Array",
+        "Object",
+        "EntryMapping"
+      ]
+    },
+    {
+      "id": "pvce.array-nested",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Sequence\",\"items\":[{\"type\":\"Sequence\",\"items\":[{\"type\":\"Sequence\",\"items\":[{\"type\":\"Null\"}]}]}]}]}}",
+      "kinds": [
+        "Array"
+      ]
+    },
+    {
+      "id": "pvce.array-200-items",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Integer\",\"value\":\"0\"},{\"type\":\"Integer\",\"value\":\"1\"},{\"type\":\"Integer\",\"value\":\"2\"},{\"type\":\"Integer\",\"value\":\"3\"},{\"type\":\"Integer\",\"value\":\"4\"},{\"type\":\"Integer\",\"value\":\"5\"},{\"type\":\"Integer\",\"value\":\"6\"},{\"type\":\"Integer\",\"value\":\"7\"},{\"type\":\"Integer\",\"value\":\"8\"},{\"type\":\"Integer\",\"value\":\"9\"},{\"type\":\"Integer\",\"value\":\"10\"},{\"type\":\"Integer\",\"value\":\"11\"},{\"type\":\"Integer\",\"value\":\"12\"},{\"type\":\"Integer\",\"value\":\"13\"},{\"type\":\"Integer\",\"value\":\"14\"},{\"type\":\"Integer\",\"value\":\"15\"},{\"type\":\"Integer\",\"value\":\"16\"},{\"type\":\"Integer\",\"value\":\"17\"},{\"type\":\"Integer\",\"value\":\"18\"},{\"type\":\"Integer\",\"value\":\"19\"},{\"type\":\"Integer\",\"value\":\"20\"},{\"type\":\"Integer\",\"value\":\"21\"},{\"type\":\"Integer\",\"value\":\"22\"},{\"type\":\"Integer\",\"value\":\"23\"},{\"type\":\"Integer\",\"value\":\"24\"},{\"type\":\"Integer\",\"value\":\"25\"},{\"type\":\"Integer\",\"value\":\"26\"},{\"type\":\"Integer\",\"value\":\"27\"},{\"type\":\"Integer\",\"value\":\"28\"},{\"type\":\"Integer\",\"value\":\"29\"},{\"type\":\"Integer\",\"value\":\"30\"},{\"type\":\"Integer\",\"value\":\"31\"},{\"type\":\"Integer\",\"value\":\"32\"},{\"type\":\"Integer\",\"value\":\"33\"},{\"type\":\"Integer\",\"value\":\"34\"},{\"type\":\"Integer\",\"value\":\"35\"},{\"type\":\"Integer\",\"value\":\"36\"},{\"type\":\"Integer\",\"value\":\"37\"},{\"type\":\"Integer\",\"value\":\"38\"},{\"type\":\"Integer\",\"value\":\"39\"},{\"type\":\"Integer\",\"value\":\"40\"},{\"type\":\"Integer\",\"value\":\"41\"},{\"type\":\"Integer\",\"value\":\"42\"},{\"type\":\"Integer\",\"value\":\"43\"},{\"type\":\"Integer\",\"value\":\"44\"},{\"type\":\"Integer\",\"value\":\"45\"},{\"type\":\"Integer\",\"value\":\"46\"},{\"type\":\"Integer\",\"value\":\"47\"},{\"type\":\"Integer\",\"value\":\"48\"},{\"type\":\"Integer\",\"value\":\"49\"},{\"type\":\"Integer\",\"value\":\"50\"},{\"type\":\"Integer\",\"value\":\"51\"},{\"type\":\"Integer\",\"value\":\"52\"},{\"type\":\"Integer\",\"value\":\"53\"},{\"type\":\"Integer\",\"value\":\"54\"},{\"type\":\"Integer\",\"value\":\"55\"},{\"type\":\"Integer\",\"value\":\"56\"},{\"type\":\"Integer\",\"value\":\"57\"},{\"type\":\"Integer\",\"value\":\"58\"},{\"type\":\"Integer\",\"value\":\"59\"},{\"type\":\"Integer\",\"value\":\"60\"},{\"type\":\"Integer\",\"value\":\"61\"},{\"type\":\"Integer\",\"value\":\"62\"},{\"type\":\"Integer\",\"value\":\"63\"},{\"type\":\"Integer\",\"value\":\"64\"},{\"type\":\"Integer\",\"value\":\"65\"},{\"type\":\"Integer\",\"value\":\"66\"},{\"type\":\"Integer\",\"value\":\"67\"},{\"type\":\"Integer\",\"value\":\"68\"},{\"type\":\"Integer\",\"value\":\"69\"},{\"type\":\"Integer\",\"value\":\"70\"},{\"type\":\"Integer\",\"value\":\"71\"},{\"type\":\"Integer\",\"value\":\"72\"},{\"type\":\"Integer\",\"value\":\"73\"},{\"type\":\"Integer\",\"value\":\"74\"},{\"type\":\"Integer\",\"value\":\"75\"},{\"type\":\"Integer\",\"value\":\"76\"},{\"type\":\"Integer\",\"value\":\"77\"},{\"type\":\"Integer\",\"value\":\"78\"},{\"type\":\"Integer\",\"value\":\"79\"},{\"type\":\"Integer\",\"value\":\"80\"},{\"type\":\"Integer\",\"value\":\"81\"},{\"type\":\"Integer\",\"value\":\"82\"},{\"type\":\"Integer\",\"value\":\"83\"},{\"type\":\"Integer\",\"value\":\"84\"},{\"type\":\"Integer\",\"value\":\"85\"},{\"type\":\"Integer\",\"value\":\"86\"},{\"type\":\"Integer\",\"value\":\"87\"},{\"type\":\"Integer\",\"value\":\"88\"},{\"type\":\"Integer\",\"value\":\"89\"},{\"type\":\"Integer\",\"value\":\"90\"},{\"type\":\"Integer\",\"value\":\"91\"},{\"type\":\"Integer\",\"value\":\"92\"},{\"type\":\"Integer\",\"value\":\"93\"},{\"type\":\"Integer\",\"value\":\"94\"},{\"type\":\"Integer\",\"value\":\"95\"},{\"type\":\"Integer\",\"value\":\"96\"},{\"type\":\"Integer\",\"value\":\"97\"},{\"type\":\"Integer\",\"value\":\"98\"},{\"type\":\"Integer\",\"value\":\"99\"},{\"type\":\"Integer\",\"value\":\"100\"},{\"type\":\"Integer\",\"value\":\"101\"},{\"type\":\"Integer\",\"value\":\"102\"},{\"type\":\"Integer\",\"value\":\"103\"},{\"type\":\"Integer\",\"value\":\"104\"},{\"type\":\"Integer\",\"value\":\"105\"},{\"type\":\"Integer\",\"value\":\"106\"},{\"type\":\"Integer\",\"value\":\"107\"},{\"type\":\"Integer\",\"value\":\"108\"},{\"type\":\"Integer\",\"value\":\"109\"},{\"type\":\"Integer\",\"value\":\"110\"},{\"type\":\"Integer\",\"value\":\"111\"},{\"type\":\"Integer\",\"value\":\"112\"},{\"type\":\"Integer\",\"value\":\"113\"},{\"type\":\"Integer\",\"value\":\"114\"},{\"type\":\"Integer\",\"value\":\"115\"},{\"type\":\"Integer\",\"value\":\"116\"},{\"type\":\"Integer\",\"value\":\"117\"},{\"type\":\"Integer\",\"value\":\"118\"},{\"type\":\"Integer\",\"value\":\"119\"},{\"type\":\"Integer\",\"value\":\"120\"},{\"type\":\"Integer\",\"value\":\"121\"},{\"type\":\"Integer\",\"value\":\"122\"},{\"type\":\"Integer\",\"value\":\"123\"},{\"type\":\"Integer\",\"value\":\"124\"},{\"type\":\"Integer\",\"value\":\"125\"},{\"type\":\"Integer\",\"value\":\"126\"},{\"type\":\"Integer\",\"value\":\"127\"},{\"type\":\"Integer\",\"value\":\"128\"},{\"type\":\"Integer\",\"value\":\"129\"},{\"type\":\"Integer\",\"value\":\"130\"},{\"type\":\"Integer\",\"value\":\"131\"},{\"type\":\"Integer\",\"value\":\"132\"},{\"type\":\"Integer\",\"value\":\"133\"},{\"type\":\"Integer\",\"value\":\"134\"},{\"type\":\"Integer\",\"value\":\"135\"},{\"type\":\"Integer\",\"value\":\"136\"},{\"type\":\"Integer\",\"value\":\"137\"},{\"type\":\"Integer\",\"value\":\"138\"},{\"type\":\"Integer\",\"value\":\"139\"},{\"type\":\"Integer\",\"value\":\"140\"},{\"type\":\"Integer\",\"value\":\"141\"},{\"type\":\"Integer\",\"value\":\"142\"},{\"type\":\"Integer\",\"value\":\"143\"},{\"type\":\"Integer\",\"value\":\"144\"},{\"type\":\"Integer\",\"value\":\"145\"},{\"type\":\"Integer\",\"value\":\"146\"},{\"type\":\"Integer\",\"value\":\"147\"},{\"type\":\"Integer\",\"value\":\"148\"},{\"type\":\"Integer\",\"value\":\"149\"},{\"type\":\"Integer\",\"value\":\"150\"},{\"type\":\"Integer\",\"value\":\"151\"},{\"type\":\"Integer\",\"value\":\"152\"},{\"type\":\"Integer\",\"value\":\"153\"},{\"type\":\"Integer\",\"value\":\"154\"},{\"type\":\"Integer\",\"value\":\"155\"},{\"type\":\"Integer\",\"value\":\"156\"},{\"type\":\"Integer\",\"value\":\"157\"},{\"type\":\"Integer\",\"value\":\"158\"},{\"type\":\"Integer\",\"value\":\"159\"},{\"type\":\"Integer\",\"value\":\"160\"},{\"type\":\"Integer\",\"value\":\"161\"},{\"type\":\"Integer\",\"value\":\"162\"},{\"type\":\"Integer\",\"value\":\"163\"},{\"type\":\"Integer\",\"value\":\"164\"},{\"type\":\"Integer\",\"value\":\"165\"},{\"type\":\"Integer\",\"value\":\"166\"},{\"type\":\"Integer\",\"value\":\"167\"},{\"type\":\"Integer\",\"value\":\"168\"},{\"type\":\"Integer\",\"value\":\"169\"},{\"type\":\"Integer\",\"value\":\"170\"},{\"type\":\"Integer\",\"value\":\"171\"},{\"type\":\"Integer\",\"value\":\"172\"},{\"type\":\"Integer\",\"value\":\"173\"},{\"type\":\"Integer\",\"value\":\"174\"},{\"type\":\"Integer\",\"value\":\"175\"},{\"type\":\"Integer\",\"value\":\"176\"},{\"type\":\"Integer\",\"value\":\"177\"},{\"type\":\"Integer\",\"value\":\"178\"},{\"type\":\"Integer\",\"value\":\"179\"},{\"type\":\"Integer\",\"value\":\"180\"},{\"type\":\"Integer\",\"value\":\"181\"},{\"type\":\"Integer\",\"value\":\"182\"},{\"type\":\"Integer\",\"value\":\"183\"},{\"type\":\"Integer\",\"value\":\"184\"},{\"type\":\"Integer\",\"value\":\"185\"},{\"type\":\"Integer\",\"value\":\"186\"},{\"type\":\"Integer\",\"value\":\"187\"},{\"type\":\"Integer\",\"value\":\"188\"},{\"type\":\"Integer\",\"value\":\"189\"},{\"type\":\"Integer\",\"value\":\"190\"},{\"type\":\"Integer\",\"value\":\"191\"},{\"type\":\"Integer\",\"value\":\"192\"},{\"type\":\"Integer\",\"value\":\"193\"},{\"type\":\"Integer\",\"value\":\"194\"},{\"type\":\"Integer\",\"value\":\"195\"},{\"type\":\"Integer\",\"value\":\"196\"},{\"type\":\"Integer\",\"value\":\"197\"},{\"type\":\"Integer\",\"value\":\"198\"},{\"type\":\"Integer\",\"value\":\"199\"}]}}",
+      "kinds": [
+        "Array",
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.entry-mapping-empty",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"EntryMapping\",\"entries\":[]}}",
+      "kinds": [
+        "EntryMapping"
+      ]
+    },
+    {
+      "id": "pvce.entry-mapping-bool-key",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"EntryMapping\",\"entries\":[{\"key\":{\"type\":\"Boolean\",\"value\":true},\"value\":{\"type\":\"Null\"}}]}}",
+      "kinds": [
+        "EntryMapping"
+      ]
+    },
+    {
+      "id": "pvce.entry-mapping-dup-keys",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"EntryMapping\",\"entries\":[{\"key\":{\"type\":\"String\",\"value\":\"a\"},\"value\":{\"type\":\"Integer\",\"value\":\"1\"}},{\"key\":{\"type\":\"String\",\"value\":\"a\"},\"value\":{\"type\":\"Integer\",\"value\":\"2\"}}]}}",
+      "kinds": [
+        "EntryMapping",
+        "Integer"
+      ]
+    },
+    {
+      "id": "pvce.entry-mapping-nested",
+      "codec": "pvce",
+      "value": "{\"schema\":\"core.portable-value-json@1\",\"value\":{\"type\":\"EntryMapping\",\"entries\":[{\"key\":{\"type\":\"Sequence\",\"items\":[{\"type\":\"Integer\",\"value\":\"1\"},{\"type\":\"Integer\",\"value\":\"2\"}]},\"value\":{\"type\":\"Object\",\"entries\":[{\"key\":\"x\",\"value\":{\"type\":\"Null\"}}]}}]}}",
+      "kinds": [
+        "EntryMapping",
+        "Array",
+        "Object"
+      ]
+    },
+    {
+      "id": "pgce.empty-graph",
+      "codec": "pgce",
+      "graph": {
+        "roots": [],
+        "nodes": []
+      },
+      "kinds": [
+        "Array",
+        "Object"
+      ]
+    },
+    {
+      "id": "pgce.scalar-vector",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "x",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.scalar-unicode",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "中文值",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.scalar-empty-content",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.sequence-two",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              1,
+              2
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "a",
+            "items": null,
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "b",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.sequence-sharing",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              1,
+              1
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "x",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.sequence-nested",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              1
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              2,
+              3
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "x",
+            "items": null,
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "y",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.mapping-empty",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Mapping",
+            "tag": "tag:yaml.org,2002:map",
+            "content": "",
+            "items": null,
+            "entries": []
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.mapping-scalar-keys",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Mapping",
+            "tag": "tag:yaml.org,2002:map",
+            "content": "",
+            "items": null,
+            "entries": [
+              {
+                "key": 1,
+                "value": 2
+              }
+            ]
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "a",
+            "items": null,
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "b",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.mapping-nested-keys",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Mapping",
+            "tag": "tag:yaml.org,2002:map",
+            "content": "",
+            "items": null,
+            "entries": [
+              {
+                "key": 1,
+                "value": 2
+              }
+            ]
+          },
+          {
+            "kind": "Mapping",
+            "tag": "tag:yaml.org,2002:map",
+            "content": "",
+            "items": null,
+            "entries": [
+              {
+                "key": 3,
+                "value": 3
+              }
+            ]
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "v",
+            "items": null,
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "k",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.mapping-multi-dup",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Mapping",
+            "tag": "tag:yaml.org,2002:map",
+            "content": "",
+            "items": null,
+            "entries": [
+              {
+                "key": 1,
+                "value": 1
+              },
+              {
+                "key": 1,
+                "value": 1
+              },
+              {
+                "key": 2,
+                "value": 1
+              }
+            ]
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "a",
+            "items": null,
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "b",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.cycle-self",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              0,
+              1
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "loop",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.cycle-mutual",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              1
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              0
+            ],
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.multi-root",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0,
+          1
+        ],
+        "nodes": [
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "first",
+            "items": null,
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "second",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.mapping-deep",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              1
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Mapping",
+            "tag": "tag:yaml.org,2002:map",
+            "content": "",
+            "items": null,
+            "entries": [
+              {
+                "key": 2,
+                "value": 3
+              }
+            ]
+          },
+          {
+            "kind": "Mapping",
+            "tag": "tag:yaml.org,2002:map",
+            "content": "",
+            "items": null,
+            "entries": [
+              {
+                "key": 4,
+                "value": 4
+              }
+            ]
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "deep",
+            "items": null,
+            "entries": null
+          },
+          {
+            "kind": "Scalar",
+            "tag": "tag:yaml.org,2002:str",
+            "content": "key",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.long-tag",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Scalar",
+            "tag": "tag:example.com/very-long-tag-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+            "content": "x",
+            "items": null,
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    },
+    {
+      "id": "pgce.chain-130",
+      "codec": "pgce",
+      "graph": {
+        "roots": [
+          0
+        ],
+        "nodes": [
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "",
+            "items": [
+              1
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n1",
+            "items": [
+              2
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n2",
+            "items": [
+              3
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n3",
+            "items": [
+              4
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n4",
+            "items": [
+              5
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n5",
+            "items": [
+              6
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n6",
+            "items": [
+              7
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n7",
+            "items": [
+              8
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n8",
+            "items": [
+              9
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n9",
+            "items": [
+              10
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n10",
+            "items": [
+              11
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n11",
+            "items": [
+              12
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n12",
+            "items": [
+              13
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n13",
+            "items": [
+              14
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n14",
+            "items": [
+              15
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n15",
+            "items": [
+              16
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n16",
+            "items": [
+              17
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n17",
+            "items": [
+              18
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n18",
+            "items": [
+              19
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n19",
+            "items": [
+              20
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n20",
+            "items": [
+              21
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n21",
+            "items": [
+              22
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n22",
+            "items": [
+              23
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n23",
+            "items": [
+              24
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n24",
+            "items": [
+              25
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n25",
+            "items": [
+              26
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n26",
+            "items": [
+              27
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n27",
+            "items": [
+              28
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n28",
+            "items": [
+              29
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n29",
+            "items": [
+              30
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n30",
+            "items": [
+              31
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n31",
+            "items": [
+              32
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n32",
+            "items": [
+              33
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n33",
+            "items": [
+              34
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n34",
+            "items": [
+              35
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n35",
+            "items": [
+              36
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n36",
+            "items": [
+              37
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n37",
+            "items": [
+              38
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n38",
+            "items": [
+              39
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n39",
+            "items": [
+              40
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n40",
+            "items": [
+              41
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n41",
+            "items": [
+              42
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n42",
+            "items": [
+              43
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n43",
+            "items": [
+              44
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n44",
+            "items": [
+              45
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n45",
+            "items": [
+              46
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n46",
+            "items": [
+              47
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n47",
+            "items": [
+              48
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n48",
+            "items": [
+              49
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n49",
+            "items": [
+              50
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n50",
+            "items": [
+              51
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n51",
+            "items": [
+              52
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n52",
+            "items": [
+              53
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n53",
+            "items": [
+              54
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n54",
+            "items": [
+              55
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n55",
+            "items": [
+              56
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n56",
+            "items": [
+              57
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n57",
+            "items": [
+              58
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n58",
+            "items": [
+              59
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n59",
+            "items": [
+              60
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n60",
+            "items": [
+              61
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n61",
+            "items": [
+              62
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n62",
+            "items": [
+              63
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n63",
+            "items": [
+              64
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n64",
+            "items": [
+              65
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n65",
+            "items": [
+              66
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n66",
+            "items": [
+              67
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n67",
+            "items": [
+              68
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n68",
+            "items": [
+              69
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n69",
+            "items": [
+              70
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n70",
+            "items": [
+              71
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n71",
+            "items": [
+              72
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n72",
+            "items": [
+              73
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n73",
+            "items": [
+              74
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n74",
+            "items": [
+              75
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n75",
+            "items": [
+              76
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n76",
+            "items": [
+              77
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n77",
+            "items": [
+              78
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n78",
+            "items": [
+              79
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n79",
+            "items": [
+              80
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n80",
+            "items": [
+              81
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n81",
+            "items": [
+              82
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n82",
+            "items": [
+              83
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n83",
+            "items": [
+              84
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n84",
+            "items": [
+              85
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n85",
+            "items": [
+              86
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n86",
+            "items": [
+              87
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n87",
+            "items": [
+              88
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n88",
+            "items": [
+              89
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n89",
+            "items": [
+              90
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n90",
+            "items": [
+              91
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n91",
+            "items": [
+              92
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n92",
+            "items": [
+              93
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n93",
+            "items": [
+              94
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n94",
+            "items": [
+              95
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n95",
+            "items": [
+              96
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n96",
+            "items": [
+              97
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n97",
+            "items": [
+              98
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n98",
+            "items": [
+              99
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n99",
+            "items": [
+              100
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n100",
+            "items": [
+              101
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n101",
+            "items": [
+              102
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n102",
+            "items": [
+              103
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n103",
+            "items": [
+              104
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n104",
+            "items": [
+              105
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n105",
+            "items": [
+              106
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n106",
+            "items": [
+              107
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n107",
+            "items": [
+              108
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n108",
+            "items": [
+              109
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n109",
+            "items": [
+              110
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n110",
+            "items": [
+              111
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n111",
+            "items": [
+              112
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n112",
+            "items": [
+              113
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n113",
+            "items": [
+              114
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n114",
+            "items": [
+              115
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n115",
+            "items": [
+              116
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n116",
+            "items": [
+              117
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n117",
+            "items": [
+              118
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n118",
+            "items": [
+              119
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n119",
+            "items": [
+              120
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n120",
+            "items": [
+              121
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n121",
+            "items": [
+              122
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n122",
+            "items": [
+              123
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n123",
+            "items": [
+              124
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n124",
+            "items": [
+              125
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n125",
+            "items": [
+              126
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n126",
+            "items": [
+              127
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n127",
+            "items": [
+              128
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n128",
+            "items": [
+              129
+            ],
+            "entries": null
+          },
+          {
+            "kind": "Sequence",
+            "tag": "tag:yaml.org,2002:seq",
+            "content": "n129",
+            "items": [],
+            "entries": null
+          }
+        ]
+      },
+      "kinds": [
+        "String"
+      ]
+    }
+  ]
+}

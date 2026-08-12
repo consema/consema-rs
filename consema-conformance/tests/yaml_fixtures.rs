@@ -22,28 +22,28 @@ struct Fixture {
 const FIXTURES: &[Fixture] = &[
     Fixture {
         name: "kubernetes-workload",
-        source: include_bytes!("../../../conformance/fixtures/yaml/kubernetes-workload.yaml"),
+        source: include_bytes!("../../conformance/fixtures/yaml/kubernetes-workload.yaml"),
         document_count: 2,
         alias_count: 0,
         tree_shaped: true,
     },
     Fixture {
         name: "github-actions-ci",
-        source: include_bytes!("../../../conformance/fixtures/yaml/github-actions-ci.yaml"),
+        source: include_bytes!("../../conformance/fixtures/yaml/github-actions-ci.yaml"),
         document_count: 1,
         alias_count: 0,
         tree_shaped: true,
     },
     Fixture {
         name: "compose-services",
-        source: include_bytes!("../../../conformance/fixtures/yaml/compose-services.yaml"),
+        source: include_bytes!("../../conformance/fixtures/yaml/compose-services.yaml"),
         document_count: 1,
         alias_count: 0,
         tree_shaped: true,
     },
     Fixture {
         name: "anchor-heavy",
-        source: include_bytes!("../../../conformance/fixtures/yaml/anchor-heavy.yaml"),
+        source: include_bytes!("../../conformance/fixtures/yaml/anchor-heavy.yaml"),
         document_count: 1,
         alias_count: 5,
         tree_shaped: false,

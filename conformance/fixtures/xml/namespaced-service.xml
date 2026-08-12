@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="service.xsl"?>
+<svc:service xmlns:svc="urn:example:service"
+             xmlns:cfg="urn:example:config"
+             xmlns:meta="urn:example:meta"
+             meta:revision="42">
+  <svc:endpoint name="catalog" path="/v1/catalog" cfg:timeout="2s">
+    <svc:description>Catalog lookup endpoint</svc:description>
+    <svc:backends>
+      <svc:backend host="catalog-1" weight="3"/>
+      <svc:backend host="catalog-2" weight="2"/>
+    </svc:backends>
+  </svc:endpoint>
+  <cfg:settings>
+    <cfg:cache ttl="300s" size="10000"/>
+  </cfg:settings>
+</svc:service>

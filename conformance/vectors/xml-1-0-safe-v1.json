@@ -1,0 +1,594 @@
+{
+  "suite": "consema.xml-1-0-safe.conformance@1",
+  "semantic_model": "core.semantic-model@6",
+  "cases": [
+    {
+      "id": "xml.formation.basic-complete",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\"><child>t</child></root>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<root a=\"1\"><child>t</child></root>"
+      }
+    },
+    {
+      "id": "xml.formation.default-namespace-on-elements",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root xmlns=\"urn:app\" version=\"1\"><child/></root>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<root xmlns=\"urn:app\" version=\"1\"><child/></root>"
+      }
+    },
+    {
+      "id": "xml.formation.prefixed-namespace-resolution",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<p:root xmlns:p=\"urn:one\"><p:child xmlns:q=\"urn:two\" q:attr=\"x\"/></p:root>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<p:root xmlns:p=\"urn:one\"><p:child xmlns:q=\"urn:two\" q:attr=\"x\"/></p:root>"
+      }
+    },
+    {
+      "id": "xml.formation.predefined-and-character-references",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root>a &lt; b &amp; c &#65;</root>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<root>a &lt; b &amp; c &#65;</root>"
+      }
+    },
+    {
+      "id": "xml.formation.internal-entity-expansion",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<!DOCTYPE root [<!ENTITY greeting \"hello\">]><root>&greeting;</root>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<!DOCTYPE root [<!ENTITY greeting \"hello\">]><root>&greeting;</root>"
+      }
+    },
+    {
+      "id": "xml.formation.mixed-content-order",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root>a<child/>b<![CDATA[c]]><!--d--><?pi e?>f</root>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<root>a<child/>b<![CDATA[c]]><!--d--><?pi e?>f</root>"
+      }
+    },
+    {
+      "id": "xml.formation.crlf-semantic-normalization",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root>line1\r\nline2</root>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<root>line1\r\nline2</root>"
+      }
+    },
+    {
+      "id": "xml.formation.utf16le-with-bom",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "encoding": "utf16le-bom",
+        "source": "<root>中文</root>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render_hex": "fffe3c0072006f006f0074003e002d4e87653c002f0072006f006f0074003e00"
+      }
+    },
+    {
+      "id": "xml.formation.duplicate-expanded-attribute-recovered",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root xmlns:p=\"urn:u\" xmlns:q=\"urn:u\" p:a=\"1\" q:a=\"2\"/>"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "xml.namespace.duplicate-attribute@1"
+      }
+    },
+    {
+      "id": "xml.formation.unbound-prefix-recovered",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<p:root/>"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "xml.namespace.unbound-prefix@1"
+      }
+    },
+    {
+      "id": "xml.formation.external-subset-recovered",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<!DOCTYPE root SYSTEM \"http://evil.example/x.dtd\"><root/>"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "xml.dtd.external-subset@1"
+      }
+    },
+    {
+      "id": "xml.formation.unknown-entity-recovered",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root>&unknown;</root>"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "xml.entity.unknown@1"
+      }
+    },
+    {
+      "id": "xml.formation.missing-root-recovered",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<?xml version=\"1.0\"?><!-- nothing -->"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "xml.tree.missing-root@1"
+      }
+    },
+    {
+      "id": "xml.formation.dtd-comment-not-excluded-markup",
+      "capability": "xml.formation@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<!DOCTYPE root [<!-- <!ELEMENT not-a-decl> -->]><root/>"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "<!DOCTYPE root [<!-- <!ELEMENT not-a-decl> -->]><root/>"
+      }
+    },
+    {
+      "id": "xml.syntax-query.kind-and-text-filter",
+      "capability": "xml.syntax-query@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\">t</root>",
+        "filters": [
+          {
+            "operator": "xml.syntax-kind-is",
+            "argument": "local-name"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "matches": [
+          {
+            "kind": "local-name",
+            "text": "root",
+            "ordinal": 1
+          },
+          {
+            "kind": "local-name",
+            "text": "root",
+            "ordinal": 10
+          }
+        ]
+      }
+    },
+    {
+      "id": "xml.syntax-query.entity-reference-kind",
+      "capability": "xml.syntax-query@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root>&lt;</root>",
+        "filters": [
+          {
+            "operator": "xml.syntax-kind-is",
+            "argument": "entity-reference"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "matches": [
+          {
+            "kind": "entity-reference",
+            "text": "&lt;",
+            "ordinal": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "xml.syntax-query.attribute-value-kind",
+      "capability": "xml.syntax-query@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\"/>",
+        "filters": [
+          {
+            "operator": "xml.syntax-kind-is",
+            "argument": "attribute-value"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "matches": [
+          {
+            "kind": "attribute-value",
+            "text": "1",
+            "ordinal": 6
+          }
+        ]
+      }
+    },
+    {
+      "id": "xml.native-query.attributes-and-values",
+      "capability": "xml.native-query@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\"/>",
+        "filters": [
+          {
+            "operator": "xml.document-root"
+          },
+          {
+            "operator": "xml.element-attributes"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "matches": [
+          {
+            "role": "attribute",
+            "local": "a",
+            "value": "1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "xml.native-query.descendants-order",
+      "capability": "xml.native-query@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root><a/><b/><c/></root>",
+        "filters": [
+          {
+            "operator": "xml.document-root"
+          },
+          {
+            "operator": "xml.element-descendants"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "matches": [
+          {
+            "role": "element",
+            "local": "a"
+          },
+          {
+            "role": "element",
+            "local": "b"
+          },
+          {
+            "role": "element",
+            "local": "c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "xml.projection.element-tree-record",
+      "capability": "xml.projection@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\"><child>t</child></root>"
+      },
+      "expected": {
+        "record": "xml.element-tree@1",
+        "root_local": "root",
+        "root_attribute_value": "1",
+        "content_kinds": [
+          "element"
+        ]
+      }
+    },
+    {
+      "id": "xml.projection.namespace-record",
+      "capability": "xml.projection@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<p:root xmlns:p=\"urn:p\"/>",
+        "expected_namespace": "urn:p"
+      },
+      "expected": {
+        "record": "xml.element-tree@1",
+        "root_local": "root",
+        "root_namespace": "urn:p"
+      }
+    },
+    {
+      "id": "xml.projection.recovered-never-projects",
+      "capability": "xml.projection@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<p:root/>"
+      },
+      "expected": {
+        "failure": "xml.projection.recovered-document@1"
+      }
+    },
+    {
+      "id": "xml.materialization.canonical-round-trip",
+      "capability": "xml.materialization@1",
+      "input": {
+        "record": {
+          "record": "xml.element-tree@1",
+          "root": {
+            "expanded-name": {
+              "namespace": null,
+              "local": "root"
+            },
+            "attributes": [
+              {
+                "expanded-name": {
+                  "namespace": null,
+                  "local": "a"
+                },
+                "value": "1"
+              }
+            ],
+            "content": [
+              {
+                "kind": "text",
+                "fragments": [
+                  {
+                    "kind": "literal",
+                    "text": "t"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "render": "<root a=\"1\">t</root>\n"
+      }
+    },
+    {
+      "id": "xml.materialization.escapes-content",
+      "capability": "xml.materialization@1",
+      "input": {
+        "record": {
+          "record": "xml.element-tree@1",
+          "root": {
+            "expanded-name": {
+              "namespace": null,
+              "local": "root"
+            },
+            "content": [
+              {
+                "kind": "text",
+                "fragments": [
+                  {
+                    "kind": "literal",
+                    "text": "a < b & c"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "render": "<root>a &lt; b &amp; c</root>\n"
+      }
+    },
+    {
+      "id": "xml.materialization.invalid-record-rejected",
+      "capability": "xml.materialization@1",
+      "input": {
+        "record": {
+          "record": "xml.something-else@1",
+          "root": {
+            "expanded-name": {
+              "namespace": null,
+              "local": "root"
+            }
+          }
+        }
+      },
+      "expected": {
+        "failure": "invalid-record"
+      }
+    },
+    {
+      "id": "xml.edit.set-attribute-value",
+      "capability": "xml.edit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\"/>",
+        "operations": [
+          {
+            "op": "set-attribute-value",
+            "attribute": "a",
+            "value": "2"
+          }
+        ]
+      },
+      "expected": {
+        "render": "<root a=\"2\"/>"
+      }
+    },
+    {
+      "id": "xml.edit.insert-and-remove-element",
+      "capability": "xml.edit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root><a/></root>",
+        "operations": [
+          {
+            "op": "insert-element",
+            "name": "x",
+            "content": "c"
+          },
+          {
+            "op": "remove-element",
+            "name": "a"
+          }
+        ]
+      },
+      "expected": {
+        "render": "<root><x>c</x></root>"
+      }
+    },
+    {
+      "id": "xml.edit.rename-element-both-tags",
+      "capability": "xml.edit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<old><child>t</child></old>",
+        "operations": [
+          {
+            "op": "rename-element",
+            "from": "old",
+            "to": "new"
+          }
+        ]
+      },
+      "expected": {
+        "render": "<new><child>t</child></new>"
+      }
+    },
+    {
+      "id": "xml.edit.insert-attribute-end",
+      "capability": "xml.edit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\"/>",
+        "operations": [
+          {
+            "op": "insert-attribute",
+            "element": "root",
+            "name": "b",
+            "value": "2",
+            "placement": "End"
+          }
+        ]
+      },
+      "expected": {
+        "render": "<root a=\"1\" b=\"2\"/>"
+      }
+    },
+    {
+      "id": "xml.edit.remove-attribute",
+      "capability": "xml.edit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\" b=\"2\"/>",
+        "operations": [
+          {
+            "op": "remove-attribute",
+            "attribute": "b"
+          }
+        ]
+      },
+      "expected": {
+        "render": "<root a=\"1\"/>"
+      }
+    },
+    {
+      "id": "xml.edit.replace-text-occurrence",
+      "capability": "xml.edit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root><a>one</a><b>two</b></root>",
+        "operations": [
+          {
+            "op": "replace-text",
+            "text": 1,
+            "value": "TWO"
+          }
+        ]
+      },
+      "expected": {
+        "render": "<root><a>one</a><b>TWO</b></root>"
+      }
+    },
+    {
+      "id": "xml.edit.rename-attribute",
+      "capability": "xml.edit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "source": "<root a=\"1\"/>",
+        "operations": [
+          {
+            "op": "rename-attribute",
+            "attribute": "a",
+            "to": "renamed"
+          }
+        ]
+      },
+      "expected": {
+        "render": "<root renamed=\"1\"/>"
+      }
+    },
+    {
+      "id": "xml.limit.entity-amplification-recovered",
+      "capability": "xml.limit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "amplification_ratio": 2,
+        "source": "<!DOCTYPE root [<!ENTITY a \"xxxxxxxxxxxxxxxxxxxx\">]><root>&a;&a;&a;&a;&a;&a;</root>"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "xml.entity.amplification@1"
+      }
+    },
+    {
+      "id": "xml.limit.mixed-content-diagnostic",
+      "capability": "xml.limit@1",
+      "input": {
+        "profile": "xml.1.0-safe@1",
+        "max_mixed_content_items": 1,
+        "source": "<root>a<child/></root>"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "xml.limit.mixed-content@1"
+      }
+    }
+  ]
+}

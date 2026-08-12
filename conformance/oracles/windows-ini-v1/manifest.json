@@ -1,0 +1,96 @@
+{
+  "suite": "consema.ini.windows-wide-api-differential@1",
+  "recorded_at": "2026-08-05",
+  "authority": {
+    "api": "GetPrivateProfileStringW",
+    "documentation_url": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getprivateprofilestringw",
+    "windows_build": "10.0.26200.0",
+    "module": "%SystemRoot%/System32/kernel32.dll",
+    "module_file_version": "10.0.26100.8972 (WinBuild.160101.0800)",
+    "module_sha256": "b5ad8f395042f9599fd7cc5345281db9ec2ab73a90481320fc2c8ac742bf0280"
+  },
+  "adapter": {
+    "source": "scripts/oracles/WindowsIniOracle.cs",
+    "source_sha256": "74527cfca16d5197d82d30a9b8dc2805d9ff0a8d5b99e05da8d92f31ff7a2c82",
+    "invoke": "PowerShell Add-Type CompilerParameters(TreatWarningsAsErrors=true,WarningLevel=4); GUID absolute UTF-16LE file; GetPrivateProfileStringW",
+    "transport": "lowercase big-endian UTF-16 code-unit hex",
+    "input_sha256_basis": "input_sha256 = SHA-256 of the decoded bytes (after hex decode), not of the stored .hex file text"
+  },
+  "comparison": {
+    "value": "first ASCII-case-equivalent section, then first ASCII-case-equivalent key, otherwise caller default",
+    "sections": "ordered native section occurrence names",
+    "keys": "ordered key names from the first ASCII-case-equivalent section"
+  },
+  "exclusions": [
+    "registry-mapped system INI names",
+    "relative path and Windows directory search",
+    "profile write APIs and cache flush",
+    "default buffer truncation",
+    "integer conversion APIs",
+    "host ANSI code page"
+  ],
+  "cases": [
+    {
+      "id": "basic",
+      "input": "conformance/oracles/windows-ini-v1/basic.ini.hex",
+      "input_sha256": "0c223635b3b52fff7c730c4d933309fdf5f582207e15b18ed1fa9a70e44d157e",
+      "native_sections": 1,
+      "native_entries": 3,
+      "queries": [
+        {"kind": "value", "section": "Main", "key": "Name", "default": "fallback", "utf16be_hex": "0077006f0072006b00650072"},
+        {"kind": "value", "section": "Main", "key": "Empty", "default": "fallback", "utf16be_hex": ""},
+        {"kind": "value", "section": "Main", "key": "Port", "default": "fallback", "utf16be_hex": "0038003000380030"},
+        {"kind": "value", "section": "Main", "key": "Missing", "default": "fallback", "utf16be_hex": "00660061006c006c006200610063006b"},
+        {"kind": "sections", "utf16be_hex": ["004d00610069006e"]},
+        {"kind": "keys", "section": "Main", "utf16be_hex": ["004e0061006d0065", "0045006d007000740079", "0050006f00720074"]}
+      ]
+    },
+    {
+      "id": "casefold-first-wins",
+      "input": "conformance/oracles/windows-ini-v1/casefold.ini.hex",
+      "input_sha256": "55fcd2dfe59a0ddefde49bc6fa318be1fb74fdc9c01a21a01cbabd72f6cc0bbb",
+      "native_sections": 1,
+      "native_entries": 2,
+      "queries": [
+        {"kind": "value", "section": "main", "key": "Name", "default": "fallback", "utf16be_hex": "00660069007200730074"},
+        {"kind": "value", "section": "main", "key": "NAME", "default": "fallback", "utf16be_hex": "00660069007200730074"},
+        {"kind": "value", "section": "main", "key": "name", "default": "fallback", "utf16be_hex": "00660069007200730074"}
+      ]
+    },
+    {
+      "id": "quote-and-trim",
+      "input": "conformance/oracles/windows-ini-v1/quotes.ini.hex",
+      "input_sha256": "cbfc53a32beb539adc916cdd34ee1fd15674555a40cc28832a338a7a23583af7",
+      "native_sections": 1,
+      "native_entries": 3,
+      "queries": [
+        {"kind": "value", "section": "Main", "key": "Double", "default": "fallback", "utf16be_hex": "002000760061006c007500650020"},
+        {"kind": "value", "section": "Main", "key": "Single", "default": "fallback", "utf16be_hex": "006f0074006800650072"},
+        {"kind": "value", "section": "Main", "key": "Plain", "default": "fallback", "utf16be_hex": "007200610077"}
+      ]
+    },
+    {
+      "id": "duplicate-sections",
+      "input": "conformance/oracles/windows-ini-v1/sections.ini.hex",
+      "input_sha256": "424e6bf019ccdf2782ddce828486774764e0fcf0879926d1565ae6dba69eb672",
+      "native_sections": 3,
+      "native_entries": 3,
+      "queries": [
+        {"kind": "sections", "utf16be_hex": ["004f006e0065", "00540077006f", "004f006e0065"]},
+        {"kind": "keys", "section": "One", "utf16be_hex": ["0041"]},
+        {"kind": "keys", "section": "Two", "utf16be_hex": ["0042"]}
+      ]
+    },
+    {
+      "id": "unicode-wide",
+      "input": "conformance/oracles/windows-ini-v1/unicode.ini.hex",
+      "input_sha256": "68256323580c78de7016050182ae2292c450aa4418a520bb0fd0927356d1a6c3",
+      "native_sections": 1,
+      "native_entries": 2,
+      "queries": [
+        {"kind": "value", "section": "General", "key": "City", "default": "fallback", "utf16be_hex": "004d006f006e0074007200e90061006c"},
+        {"kind": "value", "section": "General", "key": "Rocket", "default": "fallback", "utf16be_hex": "d83dde80"}
+      ]
+    }
+  ]
+}

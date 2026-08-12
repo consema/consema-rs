@@ -21,14 +21,14 @@ use std::collections::HashSet;
 
 /// Embedded language-neutral Consema 0.6 JSON-family suite.
 pub const JSON_FAMILY_V2_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/json-family-v2.json");
+    include_str!("../../conformance/vectors/json-family-v2.json");
 
 /// JSON5 v2.2.3 reference parser corpus with pinned provenance and license.
 pub const JSON5_REFERENCE_CORPUS_JSON: &str =
-    include_str!("../../../conformance/corpora/json5-v2.2.3.json");
+    include_str!("../../conformance/corpora/json5-v2.2.3.json");
 
 const JSON5_PACKAGE_FIXTURE: &[u8] =
-    include_bytes!("../../../conformance/fixtures/json5/package-json5-v2.2.3.json5");
+    include_bytes!("../../conformance/fixtures/json5/package-json5-v2.2.3.json5");
 
 /// Runs the embedded JSON-family production suite.
 #[must_use]

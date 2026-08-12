@@ -29,7 +29,7 @@ use std::collections::HashSet;
 
 /// Embedded language-neutral Consema 0.5 operation suite.
 pub const OPERATIONS_V1_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/operations-v1.json");
+    include_str!("../../conformance/vectors/operations-v1.json");
 
 /// Runs the embedded operation suite.
 #[must_use]

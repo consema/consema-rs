@@ -10,9 +10,9 @@ use consema::hcl::{
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-const MAIN_TF_SOURCE: &[u8] = include_bytes!("../../../conformance/fixtures/hcl/tf/main.tf");
+const MAIN_TF_SOURCE: &[u8] = include_bytes!("../../conformance/fixtures/hcl/tf/main.tf");
 const TERRAFORM_TFVARS_SOURCE: &[u8] =
-    include_bytes!("../../../conformance/fixtures/hcl/tfvars/terraform.tfvars");
+    include_bytes!("../../conformance/fixtures/hcl/tfvars/terraform.tfvars");
 
 fn main() {
     let iterations = std::env::args().nth(1).map_or(20_000, |value| {

@@ -17,7 +17,7 @@ use std::collections::HashSet;
 
 /// Embedded shared syntax-query suite bytes.
 pub const SYNTAX_QUERY_V1_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/syntax-query-v1.json");
+    include_str!("../../conformance/vectors/syntax-query-v1.json");
 
 /// Runs the embedded `consema.syntax-query.conformance@1` suite.
 #[must_use]

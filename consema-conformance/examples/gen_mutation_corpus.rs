@@ -70,7 +70,7 @@ macro_rules! fixture {
             encoding: $encoding,
             path: $path,
             source: Source::Bytes(include_bytes!(concat!(
-                "../../../conformance/fixtures/",
+                "../../conformance/fixtures/",
                 $path
             ))),
         }
@@ -82,10 +82,7 @@ macro_rules! fixture {
             profile: $profile,
             encoding: $encoding,
             path: $path,
-            source: Source::Hex(include_str!(concat!(
-                "../../../conformance/fixtures/",
-                $path
-            ))),
+            source: Source::Hex(include_str!(concat!("../../conformance/fixtures/", $path))),
         }
     };
 }

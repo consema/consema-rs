@@ -1,0 +1,21 @@
+{
+  // Human-authored service configuration.
+  service: {
+    name: 'orders-api',
+    bind: '127.0.0.1',
+    port: 8080,
+  },
+  features: {
+    auditLog: true,
+    batchSize: 0x100,
+    retryRatio: .25,
+  },
+  upstreams: [
+    {name: 'catalog', url: 'https://catalog.internal'},
+    {name: 'billing', url: 'https://billing.internal'},
+  ],
+  labels: {
+    environment: 'staging',
+    owner: 'platform',
+  },
+}

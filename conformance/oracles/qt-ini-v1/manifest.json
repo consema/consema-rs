@@ -1,0 +1,106 @@
+{
+  "suite": "consema.ini.qt610-portable-differential@1",
+  "recorded_at": "2026-08-05",
+  "authority": {
+    "specification": "Qt 6 QSettings::IniFormat",
+    "specification_url": "https://doc.qt.io/qt-6/qsettings.html",
+    "distribution": "Qt Online Installer repository",
+    "package": "6.10.2-0-202601261212qtbase-Windows-Windows_11_24H2-Mingw-Windows-Windows_11_24H2-X86_64.7z",
+    "package_url": "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6102/qt6_6102/qt.qt6.6102.win64_mingw/6.10.2-0-202601261212qtbase-Windows-Windows_11_24H2-Mingw-Windows-Windows_11_24H2-X86_64.7z",
+    "package_sha1": "6cc55697362aab5ddc30d94fe337e9f73fc286d9",
+    "package_sha256": "511139353ebf960d16e8140eaae0c5424977152e7bc51d040d0279ca8d96a389",
+    "qt6core_sha256": "7e14027a0bb4017325db707c315c70ee008c8f2364f60bb2eb04d53c017ee762"
+  },
+  "compiler": {
+    "package": "13.1.0-202407240918mingw1310.7z",
+    "package_url": "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/tools_mingw1310/qt.tools.win64_mingw1310/13.1.0-202407240918mingw1310.7z",
+    "package_sha1": "23c4bdecc1a2d2588f1b32b3e6cbf64d2a7ee852",
+    "package_sha256": "a7b502294a903b64fccd4a41ba39f48d3f6c9a5ece167f0cfaeac920d15b344f",
+    "executable_sha256": "cd65c087ad69a877e5a105c607cc910abfabcc52ba7e9448572f36567b51698c",
+    "version_line": "g++.exe (x86_64-posix-seh-rev1, Built by MinGW-Builds project) 13.1.0"
+  },
+  "runtime": {
+    "qt.version": "6.10.2",
+    "qt.build-abi": "x86_64-little_endian-llp64",
+    "qt.cpu": "x86_64",
+    "os.product-type": "windows",
+    "os.product-version": "11",
+    "os.kernel-type": "winnt",
+    "os.kernel-version": "10.0.26200",
+    "windows_build": "10.0.26200.0"
+  },
+  "adapter": {
+    "source": "scripts/oracles/QtIniOracle.cpp",
+    "source_sha256": "68e46532e86a930f72c32e7ff42c05fe2e2b33720273eaffcaf5871a06164125",
+    "compile": "g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -DUNICODE -D_UNICODE -I <qt>/include -I <qt>/include/QtCore <source> -L <qt>/lib -lQt6Core -o <work>/QtIniOracle.exe",
+    "invoke": "QtIniOracle.exe <input>",
+    "transport": "ASCII TSV; lowercase UTF-8 hex",
+    "ordering": "QString case-sensitive lexical order"
+  },
+  "comparison": {
+    "profile": "ini.portable@1",
+    "transform": "flatten each native section/key occurrence to section/key and sort lexically",
+    "value": "compare QString string content exactly"
+  },
+  "exclusions": [
+    "General and %General top-level section remapping",
+    "percent-encoded, non-ASCII, slash, and backslash keys",
+    "QVariant @-type decoding and non-string values",
+    "fallback scopes, advisory locks, smart merging, and filesystem writes",
+    "case-equivalent collisions, duplicate collapse, and malformed recovery",
+    "non-portable encodings, comments, delimiters, escapes, and continuation syntax"
+  ],
+  "cases": [
+    {
+      "id": "basic",
+      "input": "conformance/oracles/qt-ini-v1/basic.ini",
+      "input_sha256": "bc745d8a385b548d9c9962591dac7eaf7cf0dc663111595ddfc77972d68015ea",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["6465736b746f702f7363616c65", "313235"],
+          ["6465736b746f702f7468656d65", "6461726b"]
+        ]
+      }
+    },
+    {
+      "id": "comments",
+      "input": "conformance/oracles/qt-ini-v1/comments.ini",
+      "input_sha256": "07635ed7c135033f3ec0121fc773fd4ba7b35badc820689b9565b18ba7cd25b8",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["666561747572652f656e61626c6564", "74727565"],
+          ["666561747572652f6d6f6465", "736166652076616c7565"]
+        ]
+      }
+    },
+    {
+      "id": "multi-section",
+      "input": "conformance/oracles/qt-ini-v1/multi-section.ini",
+      "input_sha256": "7c90516df5b01380045e8e5cf66bdad59cce2dfb40dc1bad9300d7c28e6772d2",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["6c6f6767696e672f656d707479", ""],
+          ["6c6f6767696e672f6c6576656c", "696e666f"],
+          ["6e6574776f726b2f686f7374", "6578616d706c652e696e76616c6964"],
+          ["6e6574776f726b2f706f7274", "343433"]
+        ]
+      }
+    },
+    {
+      "id": "ordering",
+      "input": "conformance/oracles/qt-ini-v1/ordering.ini",
+      "input_sha256": "1a9b3ffb0d1b4aa160331d8f17aea96f10fa3612569ce26bc08386c3af027280",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["616c7068612f6669727374", "6f6e65"],
+          ["616c7068612f7365636f6e64", "74776f"],
+          ["7a6574612f6c617374", "76616c7565"]
+        ]
+      }
+    }
+  ]
+}

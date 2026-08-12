@@ -1,0 +1,141 @@
+{
+  "suite": "consema.ini.conformance@1",
+  "profiles": ["ini.portable@1", "ini.windows@1", "ini.python-configparser@1"],
+  "cases": [
+    {
+      "id": "formation.portable-lossless", "capability": "ini.document@1",
+      "input": {"profile": "ini.portable@1", "source": "; heading\r\n[core]\r\nname=value\nempty="},
+      "expected": {"formation": "Complete", "physical_lines": 4, "logical_lines": 3, "section_names": ["core"], "keys": ["name", "empty"], "values": ["value", ""], "value_states": ["Present", "Empty"], "exact_coverage": true}
+    },
+    {
+      "id": "formation.profile-counterexample-matrix", "capability": "ini.document@1",
+      "input": {"samples": [
+        {"source": "[s]\nkey=value\n", "encoding": "default"},
+        {"source": "[s]\nkey:value\n", "encoding": "default"},
+        {"source": "[s]\nkey=é\n", "encoding": "default"}
+      ]},
+      "expected": {"portable": ["Complete", "Recovered", "Recovered"], "windows": ["Complete", "Recovered", "Fatal"], "python": ["Complete", "Complete", "Complete"]}
+    },
+    {
+      "id": "formation.windows-utf16-case-and-quote", "capability": "ini.document@1",
+      "input": {"profile": "ini.windows@1", "source_hex": "fffe5b004d00610069006e005d000d000a0020004e0061006d00650020003d0022002000760061006c0075006500200022000d000a005b006d00610069006e005d000d000a004e0041004d0045003d00740077006f00"},
+      "expected": {"encoding": "Utf16Le", "section_names": ["Main", "main"], "comparison_section": "main", "keys": ["Name", "NAME"], "comparison_key": "name", "values": [" value ", "two"], "quote_style": "Double", "case_collision_code": "ini.formation.case-collision@1", "exact_coverage": true}
+    },
+    {
+      "id": "formation.windows-explicit-code-page", "capability": "ini.document@1",
+      "input": {"profile": "ini.windows@1", "source_hex": "5b735d0d0a6b3d80", "code_page": 1252},
+      "expected": {"value": "€", "encoding": "WindowsCodePage(1252)", "bom_policy": "TreatAsContent", "exact_coverage": true}
+    },
+    {
+      "id": "formation.python-default-continuation-raw", "capability": "ini.document@1",
+      "input": {"profile": "ini.python-configparser@1", "source": "[DEFAULT]\nRoot = raw%(x)s\n[Sec]\nKey: first\n    second\n\n    third\nOther = #literal ;literal"},
+      "expected": {"formation": "Complete", "default_section": true, "comparison_keys": ["root", "key", "other"], "values": ["raw%(x)s", "first\nsecond\n\nthird", "#literal ;literal"], "continuation_physical_lines": 4, "exact_coverage": true}
+    },
+    {
+      "id": "formation.python-unicode16-optionxform", "capability": "ini.document@1",
+      "input": {"profile": "ini.python-configparser@1", "source": "[S]\nİ=1\ni̇=2\n"},
+      "expected": {"formation": "Recovered", "comparison_keys": ["i̇", "i̇"], "duplicate_group": true, "code": "ini.formation.case-collision@1"}
+    },
+    {
+      "id": "formation.recovery-never-fabricates-entry", "capability": "ini.formation@1",
+      "input": {"profile": "ini.portable@1", "source": "[s]\nbare\n"},
+      "expected": {"formation": "Recovered", "entries": 0, "error_lines": 1, "code": "ini.parse.missing-delimiter@1", "projection_code": "ini.projection.incomplete-document@1", "edit_code": "core.edit.incomplete-target@1"}
+    },
+    {
+      "id": "query.native-order-and-profile-equivalence", "capability": "ini.query@1",
+      "input": {"profile": "ini.windows@1", "source": "[Main]\r\nName=one\r\nname=two\r\n[Other]\r\nempty=\r\n", "section_name": "MAIN", "comparison": "ProfileEquivalent"},
+      "expected": {"keys": ["Name", "name"], "roles": ["IniEntry", "IniEntry"], "duplicate_group": true, "terminal": "Completed"}
+    },
+    {
+      "id": "query.syntax-decoded-structure-order", "capability": "ini.query@1",
+      "input": {"profile": "ini.windows@1", "source": "[S]\r\nName=\" value \"\r\n", "text": "Name", "kind": "Quote"},
+      "expected": {"kinds": ["EntryKey", "Quote", "Quote"], "strictly_increasing_ordinals": true, "role": "IniSyntaxPiece"}
+    },
+    {
+      "id": "query.validation-limit-cancellation", "capability": "ini.query@1",
+      "input": {"profile": "ini.portable@1", "source": "[s]\na=1\nb=2\n", "max_results": 1},
+      "expected": {"invalid_composition": true, "limit_code": "core.query.resource-limit@1", "first_yielded": true, "terminal": "Cancelled"}
+    },
+    {
+      "id": "projection.exact-duplicate-entry-mapping", "capability": "ini.projection@1",
+      "input": {"profile": "ini.windows@1", "source": "[Main]\r\nName=one\r\nname=two\r\n[main]\r\nOther=three\r\n"},
+      "expected": {"fidelity": "Exact", "section_keys": ["Main", "main"], "first_entry_keys": ["Name", "name"], "events": 0, "association_provenance": true}
+    },
+    {
+      "id": "projection.explicit-object-collapse", "capability": "ini.projection@1",
+      "input": {"profile": "ini.windows@1", "source": "[Main]\r\nName=one\r\nname=two\r\n[main]\r\nOther=three\r\n", "comparison": "ProfileEquivalent"},
+      "expected": {"rejects": true, "first_fidelity": "Transformed", "first_events": 2, "first_section": "Main", "first_key": "Name", "first_value": "one", "last_section": "main", "last_key": "Other", "last_value": "three", "collapsed_provenance": true}
+    },
+    {
+      "id": "projection.fragmented-value-provenance", "capability": "ini.projection@1",
+      "input": {"python_source": "[s]\nkey = first\n  second\n", "windows_source": "[s]\r\nk=\" value \"\r\n"},
+      "expected": {"continuation_relation": "ContinuationFragment", "quote_relation": "QuoteDerived"}
+    },
+    {
+      "id": "materialization.all-canonical-styles", "capability": "ini.materialization@1",
+      "input": {
+        "portable": [{"section": "main", "entries": [["key", "value"], ["empty", ""]]}],
+        "windows": [{"section": "Main", "entries": [["quoted", " value "], ["plain", "value"]]}],
+        "python": [{"section": "DEFAULT", "entries": [["raw", "%(name)s"], ["multi", "first\n\nthird"]]}]
+      },
+      "expected": {"portable_source": "[main]\nkey=value\nempty=\n", "windows_decoded": "\uFEFF[Main]\r\nquoted=\" value \"\r\nplain=value\r\n", "windows_encoding": "Utf16Le", "python_decoded": "[DEFAULT]\nraw = %(name)s\nmulti = first\n\n    third\n", "exact_fidelity": true, "closure": true}
+    },
+    {
+      "id": "materialization.atomic-failures-and-limits", "capability": "ini.materialization@1",
+      "input": {"value": [{"section": "s", "entries": [["key", "value"]]}], "limit_names": ["max_input_nodes", "max_output_bytes", "max_depth", "max_report_entries", "max_provenance_entries"]},
+      "expected": {"scalar_code": "core.materialization.unrepresentable@1", "limit_outcomes": ["Failed", "Failed", "Failed", "Complete", "Failed"], "limit_code": "core.materialization.resource-limit@1"}
+    },
+    {
+      "id": "edit.all-eight-operations", "capability": "ini.edit@1",
+      "input": {"profile": "ini.portable@1", "source": "[one]\na=1\n[two]\nb=2\n", "semantic_value": "9", "literal_value": "8", "new_section": "three", "renamed_section": "renamed", "new_key": "c", "new_value": "3", "renamed_key": "renamed"},
+      "expected": {"outputs": [
+        "[one]\na=9\n[two]\nb=2\n",
+        "[one]\na=8\n[two]\nb=2\n",
+        "[one]\na=1\n[two]\nb=2\n[three]\n",
+        "[two]\nb=2\n",
+        "[renamed]\na=1\n[two]\nb=2\n",
+        "[one]\na=1\nc=3\n[two]\nb=2\n",
+        "[one]\n[two]\nb=2\n",
+        "[one]\nrenamed=1\n[two]\nb=2\n"
+      ], "one_source_edit_each": true}
+    },
+    {
+      "id": "edit.dry-run-patch-proof-and-atomic-failure", "capability": "ini.edit@1",
+      "input": {"profile": "ini.portable@1", "source": "; before\n[s]\nk=old\n; after\n", "value": "new value", "source_id": "memory:ini-conformance", "wrong_source": "[x]\nk=other\n"},
+      "expected": {"source": "; before\n[s]\nk=new value\n; after\n", "dry_run_equals_commit": true, "patch_replays": true, "proof_verifies": true, "wrong_snapshot_code": "core.edit.wrong-snapshot@1", "base_unchanged": true}
+    },
+    {
+      "id": "resource.formation-limit-matrix", "capability": "ini.formation@1",
+      "input": {"limits": [
+        {"name": "max_source_bytes", "profile": "ini.portable@1", "source": "[s]\nk=1\n", "value": 4},
+        {"name": "max_token_count", "profile": "ini.portable@1", "source": "[s]\nk=1\n", "value": 1},
+        {"name": "max_node_count", "profile": "ini.portable@1", "source": "[s]\nk=1\n", "value": 1},
+        {"name": "max_diagnostics", "profile": "ini.portable@1", "source": "[s]\nbare\nbad\n", "value": 0},
+        {"name": "max_decoded_utf8_bytes", "profile": "ini.portable@1", "source": "[s]\nk=1\n", "value": 1},
+        {"name": "max_decoded_scalars", "profile": "ini.portable@1", "source": "[s]\nk=1\n", "value": 1},
+        {"name": "max_physical_lines", "profile": "ini.portable@1", "source": "[s]\nk=1\n", "value": 1},
+        {"name": "max_physical_line_bytes", "profile": "ini.portable@1", "source": "[section]\nkey=value\n", "value": 3},
+        {"name": "max_physical_line_scalars", "profile": "ini.portable@1", "source": "[section]\nkey=value\n", "value": 3},
+        {"name": "max_logical_lines", "profile": "ini.portable@1", "source": "[s]\nk=1\n", "value": 1},
+        {"name": "max_logical_line_bytes", "profile": "ini.python-configparser@1", "source": "[s]\nk=one\n  two\n", "value": 8},
+        {"name": "max_logical_line_scalars", "profile": "ini.python-configparser@1", "source": "[s]\nk=one\n  two\n", "value": 4},
+        {"name": "max_continuation_lines", "profile": "ini.python-configparser@1", "source": "[s]\nk=one\n  two\n", "value": 0},
+        {"name": "max_sections", "profile": "ini.portable@1", "source": "[a]\nx=1\n[b]\ny=2\n", "value": 1},
+        {"name": "max_entries", "profile": "ini.portable@1", "source": "[s]\na=1\nb=2\n", "value": 1},
+        {"name": "max_duplicate_group_members", "profile": "ini.windows@1", "source": "[s]\r\na=1\r\nA=2\r\n", "value": 1},
+        {"name": "max_recovery_regions", "profile": "ini.portable@1", "source": "[s]\nbare\nbad\n", "value": 1}
+      ]},
+      "expected": {"fatal_count": 17, "no_partial_documents": true}
+    },
+    {
+      "id": "resource.projection-limit-matrix", "capability": "ini.projection@1",
+      "input": {"profile": "ini.portable@1", "source": "[s]\na=1\n", "limits": ["max_source_associations", "max_value_nodes", "max_provenance_units"]},
+      "expected": {"failed_count": 3, "code": "core.projection.resource-limit@1"}
+    },
+    {
+      "id": "registry.frozen-eight-operation-surface", "capability": "ini.edit@1",
+      "input": {"profiles": ["ini.portable@1", "ini.windows@1", "ini.python-configparser@1"]},
+      "expected": {"operations": ["ini.edit.insert-entry@1", "ini.edit.insert-section@1", "ini.edit.remove-entry@1", "ini.edit.remove-section@1", "ini.edit.rename-entry@1", "ini.edit.rename-section@1", "ini.edit.replace-literal-value@1", "ini.edit.replace-semantic-value@1"], "direct_structural": 6}
+    }
+  ]
+}

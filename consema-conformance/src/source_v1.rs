@@ -14,8 +14,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 /// Embedded language-neutral raw-source suite bytes.
-pub const SOURCE_V1_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/source-v1.json");
+pub const SOURCE_V1_VECTORS_JSON: &str = include_str!("../../conformance/vectors/source-v1.json");
 
 /// Runs the embedded `consema.source.conformance@1` suite.
 #[must_use]

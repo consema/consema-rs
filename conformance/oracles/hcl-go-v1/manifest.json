@@ -1,0 +1,416 @@
+{
+  "suite": "consema.hcl.go-differential@1",
+  "recorded_at": "2026-08-07",
+  "authority": {
+    "specification": "HCL Native Syntax as frozen by hashicorp/hcl v2 (hclsyntax spec)",
+    "specification_url": "https://github.com/hashicorp/hcl/tree/v2.21.0/hclsyntax",
+    "distribution": "github.com/hashicorp/hcl/v2 module",
+    "module": "github.com/hashicorp/hcl/v2",
+    "version": "v2.21.0",
+    "commit": "360ae579460fab69e9939599af85c8f255a59007",
+    "module_hash": "h1:lve4q/o/2rqwYOgUg3y3V2YPyD1/zkCLGjIV74Jit14=",
+    "release_url": "https://github.com/hashicorp/hcl/releases/tag/v2.21.0",
+    "expression_parser": "hclsyntax.ParseExpression",
+    "document_parser": "hclparse.ParseHCL (hclsyntax.ParseConfig)",
+    "evaluation": "never invoked; no cty evaluation, no value comparison (RFC 0014 §12)"
+  },
+  "runtime": {
+    "go.version": "go1.26.5",
+    "go.os": "windows",
+    "go.arch": "amd64",
+    "hcl.module": "v2.21.0",
+    "windows_build": "10.0.26200.0"
+  },
+  "driver": {
+    "source": "conformance/oracles/hcl-go-v1/main.go",
+    "source_sha256": "c652af9e33621542d54b3e4d27f91f0ca67a6c021a2e3446600e73580279bedf",
+    "go_mod_sha256": "bbd1c1acc83b809fc4228a424f52afc3a89eaa577d50b39cd4943361b5d37f81",
+    "go_sum_sha256": "6ed4258b13184ff7ed96d6f6ef2a5bdc91b4506da97d4f454020cdef91a23158",
+    "invoke_document": "hcl-go-differential.exe --document <input>",
+    "invoke_expression": "hcl-go-differential.exe --expression <input>",
+    "transport": "ASCII TSV; lowercase UTF-8 hex input digest; outcome accept|reject",
+    "ordering": "input-sha256 line, then outcome line"
+  },
+  "comparison": {
+    "scope": "parse outcome only: Go accept/reject versus Consema Complete/Recovered/FatalFormationFailure",
+    "never_compared": [
+      "cty values or any evaluated result",
+      "diagnostic summaries or recovery region shapes",
+      "token streams, spans, or AST shapes"
+    ],
+    "consema_counterpart": "Consema Complete maps to Go accept; Consema Recovered or FatalFormationFailure maps to Go reject"
+  },
+  "exclusions": {
+    "divergence_inventory": [
+      {
+        "id": "D-1",
+        "name": "Leading BOM",
+        "oracle": "silently strips the BOM (stripUTF8BOM in scanTokens) and accepts",
+        "consema": "Recovered with hcl.parse.byte-order-mark@1 (RFC 0014 §2); BOM bytes stay content, never a Bom kind",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-2",
+        "name": "Lone CR",
+        "oracle": "rejects (Newline = '\\r'? '\\n', so a lone CR is an invalid token)",
+        "consema": "Recovered with hcl.parse.lone-cr@1 (RFC 0014 §2)",
+        "kind": "exclusion (equivalent outcome: a lone CR never appears in a Complete document under either parser)"
+      },
+      {
+        "id": "D-3",
+        "name": "Invalid UTF-8",
+        "oracle": "reports a parse error",
+        "consema": "FatalFormationFailure with hcl.parse.invalid-utf8@1 (RFC 0012/0013 precedent)",
+        "kind": "exclusion (both parsers refuse the source)"
+      },
+      {
+        "id": "D-4",
+        "name": "Underscore-leading identifiers",
+        "oracle": "accepts (_foo: the scanner Ident rule admits a leading underscore)",
+        "consema": "Recovered as a grammar error (Identifier = ID_Start (ID_Continue | '-')*, UAX #31)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-5",
+        "name": "Numeric attribute access foo.0",
+        "oracle": "accepts (HIL-inherited: a number after a dot is an attribute step)",
+        "consema": "Recovered as a grammar error (GetAttr = '.' Identifier)",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-6",
+        "name": "Namespaced function calls foo::bar()",
+        "oracle": "accepts (function names may be identifiers separated by '::')",
+        "consema": "Recovered as a grammar error (FunctionCall = Identifier '(' ...')')",
+        "kind": "exclusion"
+      },
+      {
+        "id": "D-7",
+        "name": "Single-identifier for-directive",
+        "oracle": "accepts %{ for x in list } (the key is read only when a comma follows)",
+        "consema": "accepts; frozen implementation behavior (RFC 0014 §4.4)",
+        "kind": "frozen implementation behavior, not a divergence"
+      },
+      {
+        "id": "D-8",
+        "name": "Heredoc closing-line whitespace",
+        "oracle": "matches the closing line with bytes.TrimSpace, accepting tabs and trailing whitespace",
+        "consema": "accepts; frozen implementation behavior (RFC 0014 §4.5), broader than the specification's arbitrary spaces",
+        "kind": "frozen implementation behavior, not a divergence"
+      },
+      {
+        "id": "D-9",
+        "name": "EOF-terminated body item",
+        "oracle": "accepts end of file as the terminator of the last attribute, block, or one-line block",
+        "consema": "accepts; frozen implementation behavior (RFC 0014 §4.2)",
+        "kind": "frozen implementation behavior, not a divergence"
+      }
+    ],
+    "shape_level": [
+      "recovery-region boundary shape: Consema's deterministic expression recovery (RFC 0014 §3) differs from the Go parser's internal recovery; the differential never compares recovery shapes, only accept/reject",
+      "duplicate-attribute treatment: both parsers reject; excluded only because the recovered piece shapes differ (Consema keeps the duplicate occurrence as a proven syntax piece)",
+      "attribute/block name sharing: both parse-time structures accept it; expected-no-divergence exclusion"
+    ],
+    "application_layer": [
+      "Terraform's static-only tfvars evaluation rule is application-layer policy (hard gate 3), never replicated at formation and never an oracle outcome",
+      "Terraform's undeclared-variable rejection is application-layer (no schema in the generic HCL model, hard gate 2)",
+      "Terraform's tfvars block rejection messages are loader-level behavior, not parse outcomes",
+      "terraform.tfvars auto-load, .auto.tfvars naming, and -var-file precedence are CLI/application conventions, never Consema facts",
+      "the JSON-based HCL syntax (.tf.json, *.auto.tfvars.json) is a separate syntax system (RFC 0014 §14) and out of scope for this differential"
+    ],
+    "policy": "a differential disagreement cannot be resolved by changing Consema behavior without an RFC, and no untracked allowlist exists (RFC 0014 §12)"
+  },
+  "skip_path": "when no Go toolchain is available, the wrapper exits with code 3 and the manifest records the allowed skip; the suite id remains consema.hcl.go-differential@1",
+  "cases": [
+    {
+      "id": "basic",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/basic.tf",
+      "input_sha256": "28dea99b812bfd018af61ccdb400ca28f406635d69c33221c75e1534770fb2f1",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "bom",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/bom.tf",
+      "input_sha256": "deee8f48e4404d481f18e8b339187f15cd9e039e8d511dbec9a02692f4d165a5",
+      "divergence": "D-1",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "lone-cr",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/lone-cr.tf",
+      "input_sha256": "b2063d734f19f670ebe86eb57504c95be0b639d823f4430491ec5d5da33207e5",
+      "divergence": "D-2",
+      "expected": {
+        "outcome": "reject"
+      }
+    },
+    {
+      "id": "invalid-utf8",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/invalid-utf8.tf",
+      "input_sha256": "66205d42e87307f472dddd7ccb1f7371efb907f008a6d0a7cd8a9872d6e6b36c",
+      "divergence": "D-3",
+      "expected": {
+        "outcome": "reject"
+      }
+    },
+    {
+      "id": "underscore",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/underscore.tf",
+      "input_sha256": "bffa11df79eb1c6c07f62f19f169b443b7637c9ee5019e7ecc20c20b4764e5fd",
+      "divergence": "D-4",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "numeric-attr",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/numeric-attr.tf",
+      "input_sha256": "573b2033dc27b94685c2d4a96c71a2b0be46e1b46a460173f4f95e4ee218ce41",
+      "divergence": "D-5",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "namespaced-fn",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/namespaced-fn.tf",
+      "input_sha256": "758bd4d0239f7eeead1cb8bc20c53ed79919877048701977608995154dc0c0dd",
+      "divergence": "D-6",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "template-strip-markers",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/template-strip-markers.tf",
+      "input_sha256": "87188e9b1d7631aac6744239d7611e99a3f80d0ea47fc4a383772ecd5cefbdcb",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expr-strip-directive",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/expr-strip-directive.tf",
+      "input_sha256": "06251f3e778b4cd3b5ec1227e2e9ac53258f57da96a3a437dc2251b9b1243543",
+      "divergence": null,
+      "expected": {
+        "outcome": "reject"
+      }
+    },
+    {
+      "id": "heredoc-tabs",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/heredoc-tabs.tf",
+      "input_sha256": "e6147865bb2ed50e13cd14acb0f1bf218ac8169f5063dddfd145179fbf97e9da",
+      "divergence": "D-8",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "eof-terminated",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/eof-terminated.tf",
+      "input_sha256": "b5bc1ffd90912fb18bef6e7d80909192c7a6492896320156d67fbaf104c6544a",
+      "divergence": "D-9",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "duplicate-attribute",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/duplicate-attribute.tf",
+      "input_sha256": "77325de64b12330fa9169711d7672f0789c6f0a02cd2348c5ef71d648fd04a0a",
+      "divergence": "shape-level: duplicate-attribute",
+      "expected": {
+        "outcome": "reject"
+      }
+    },
+    {
+      "id": "shared-names",
+      "mode": "document",
+      "input": "conformance/oracles/hcl-go-v1/fixtures/shared-names.tf",
+      "input_sha256": "e846bcae5631573189a9c69f88d7182e3dfd184cbefed2f4020c1ac0e3977c2e",
+      "divergence": "shape-level: attribute/block name sharing",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "fixture-main",
+      "mode": "document",
+      "input": "conformance/fixtures/hcl/tf/main.tf",
+      "input_sha256": "1c9a57fc4f6b7358d22aac8c2f13c7b9ab421194007eac7d6673e7b5558e2436",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "fixture-network",
+      "mode": "document",
+      "input": "conformance/fixtures/hcl/tf/network.tf",
+      "input_sha256": "f70f705bb4be09a0aa92ee5234d17bfa2fdccfda36e571622a5ef4049f6aa68f",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "fixture-variables",
+      "mode": "document",
+      "input": "conformance/fixtures/hcl/tf/variables.tf",
+      "input_sha256": "c64e8efc649e9ecfff224aa9dbd0810b82bdb4a6aa2098851f7fc4ac20ad5f6f",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "fixture-packer",
+      "mode": "document",
+      "input": "conformance/fixtures/hcl/tf/packer.pkr.hcl",
+      "input_sha256": "5cf7157e228bc55236b7b1ae00d176454c304615223fcce6d88d7b0a1c7864e2",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "fixture-nomad",
+      "mode": "document",
+      "input": "conformance/fixtures/hcl/tf/nomad.hcl",
+      "input_sha256": "8dcf29c034373aaa526b207731b222d8c1f2f73d61234340e925582bac6738ab",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "fixture-vault",
+      "mode": "document",
+      "input": "conformance/fixtures/hcl/tf/vault.hcl",
+      "input_sha256": "1a7972ebd4cc0fa6721f38891d5358d423325f9b81c61d63b70830adfe49717a",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "fixture-terraform-tfvars",
+      "mode": "document",
+      "input": "conformance/fixtures/hcl/tfvars/terraform.tfvars",
+      "input_sha256": "b085a2b416ebf8a24d0794cc5407158290f3fae8166d2e442b0306b813628b61",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "fixture-prod-tfvars",
+      "mode": "document",
+      "input": "conformance/fixtures/hcl/tfvars/prod.tfvars",
+      "input_sha256": "0e5aedfae3d247899a140b134c0e26af1b4fe7d7f520fa96a08454aadee5ef64",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expression-binary",
+      "mode": "expression",
+      "input": "conformance/oracles/hcl-go-v1/expressions/binary.txt",
+      "input_sha256": "6212702c7a0d68f00b8b23b5aecfca631a96c20d2cad78cd874611ac87cdbce1",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expression-traversal",
+      "mode": "expression",
+      "input": "conformance/oracles/hcl-go-v1/expressions/traversal.txt",
+      "input_sha256": "34ba5338325bf6d411e1726258ba34c33335ded1aae959655f1b1ae18ea83371",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expression-conditional",
+      "mode": "expression",
+      "input": "conformance/oracles/hcl-go-v1/expressions/conditional.txt",
+      "input_sha256": "b639fb0e1608ea6de3ebb779b472105da25fae71ff76a3bc418e154b55235e1c",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expression-for",
+      "mode": "expression",
+      "input": "conformance/oracles/hcl-go-v1/expressions/for-expr.txt",
+      "input_sha256": "eb48e51c62edc472d3d7be9e0445cf48abf0ddea30bb4cf7e759ad7a40e45d87",
+      "divergence": null,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expression-numeric-attr",
+      "mode": "expression",
+      "input": "conformance/oracles/hcl-go-v1/expressions/numeric-attr.txt",
+      "input_sha256": "f62977391e48138accb9a8dfec2046f1ee0befedab868803ad3620450b349395",
+      "divergence": "D-5",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expression-namespaced",
+      "mode": "expression",
+      "input": "conformance/oracles/hcl-go-v1/expressions/namespaced.txt",
+      "input_sha256": "b6aa3fc3a71c8cad33693661211e50d4f34faf9f6afd95ad5c7a4bf77d626065",
+      "divergence": "D-6",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expression-underscore",
+      "mode": "expression",
+      "input": "conformance/oracles/hcl-go-v1/expressions/underscore.txt",
+      "input_sha256": "583da8894acbb7b121f9b85bc263859bd68c3a239f4934b62fc13f4f0beedc62",
+      "divergence": "D-4",
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "id": "expression-invalid",
+      "mode": "expression",
+      "input": "conformance/oracles/hcl-go-v1/expressions/invalid.txt",
+      "input_sha256": "354d594a12b59e5b397387eccfe0168f5ef0d306c14ca64632d6ce6213bc81ed",
+      "divergence": null,
+      "expected": {
+        "outcome": "reject"
+      }
+    }
+  ]
+}

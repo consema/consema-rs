@@ -1,0 +1,137 @@
+{
+  "suite": "consema.ini.dotnet10-provider-differential@1",
+  "recorded_at": "2026-08-05",
+  "authority": {
+    "specification": ".NET 10 IniConfigurationProvider",
+    "specification_url": "https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.configuration.ini.iniconfigurationprovider?view=net-10.0-pp",
+    "release_metadata_url": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json",
+    "distribution": ".NET SDK Windows x64 ZIP",
+    "package": "dotnet-sdk-10.0.302-win-x64.zip",
+    "package_url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.302/dotnet-sdk-10.0.302-win-x64.zip",
+    "download_mirror": "https://dotnetcli.azureedge.net/dotnet/Sdk/10.0.302/dotnet-sdk-10.0.302-win-x64.zip",
+    "package_sha512": "7d170ed75fa9af34c00646621d92011dbd71943952e2787cd15df9be78e6452b55dadef34d7eff77b802e6af4959e071a55855ac649afeac70901c3a2a258716",
+    "package_sha256": "2cb9d5d98aeda0582ec02a1e429a613df6d97a1ce0f06b361f7def9b7e7c1a6b",
+    "dotnet_executable_sha256": "4377f10c78400f0370b88156773de9843c07f14e65b3232005ec3179ef38d463",
+    "ini_assembly_sha256": "3627e5553db01ffe29b13616da468763e43d2e5f291cafbdbbe3f28dad438416"
+  },
+  "runtime": {
+    "sdk.version": "10.0.302",
+    "host.version": "10.0.10",
+    "dotnet.framework": ".NET 10.0.10",
+    "dotnet.runtime-version": "10.0.10",
+    "os.description": "Microsoft Windows 10.0.26200",
+    "os.architecture": "X64",
+    "process.architecture": "X64",
+    "ini.assembly-version": "10.0.0.0",
+    "ini.informational-version": "10.0.10+f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+    "windows_build": "10.0.26200.0"
+  },
+  "adapter": {
+    "source": "scripts/oracles/dotnet-ini/Program.cs",
+    "source_sha256": "c0303847b0ec79097802135b07f243e5d7f39923d5803280686384815feb955b",
+    "project": "scripts/oracles/dotnet-ini/DotnetIniOracle.csproj",
+    "project_sha256": "676085d4fc674143e0869726db6e61a17d1c44aa2b5a34f3d1bf306189ea6c31",
+    "nuget_config": "scripts/oracles/dotnet-ini/NuGet.Config",
+    "nuget_config_sha256": "5256a7e3e07d2c5c94f7a1e6c45f39aab011c659c5e2d53e452dea525ce04575",
+    "restore": "dotnet msbuild <project> -target:Restore -property:RestoreConfigFile=<clear-only-config> -property:NuGetAudit=false",
+    "build": "dotnet build <project> --no-restore -c Release -o <work>/out",
+    "invoke": "dotnet <work>/out/DotnetIniOracle.dll <input>",
+    "transport": "ASCII TSV; lowercase UTF-8 hex",
+    "ordering": "System.StringComparer.Ordinal"
+  },
+  "comparison": {
+    "profile": "ini.python-configparser@1 shared subset",
+    "transform": "flatten section and option with ':'; trim syntax whitespace; remove matching outer double quotes; compare provider keys with ASCII case-insensitive equivalence",
+    "native_recovered": "require atomic Consema projection and edit refusal",
+    "provider_collision": "retain the complete native document but reject the provider view atomically"
+  },
+  "exclusions": [
+    "configuration provider layering, reload, binding, and precedence",
+    "filesystem lookup, optional files, change tokens, and writes",
+    "global keys, slash comments, colon option delimiters, and continuation lines",
+    "DEFAULT inheritance, interpolation, typed conversion, and caller defaults",
+    "non-ASCII case-insensitive equivalence and locale-sensitive behavior",
+    "partial provider Data mutation after a failed Load"
+  ],
+  "cases": [
+    {
+      "id": "basic",
+      "input": "conformance/oracles/dotnet-ini-v1/basic.ini",
+      "input_sha256": "08eb76e124a5cfa49037e4d7e2cd363899330f4478e21c554f66b5da91e9ba6c",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["736572766963653a456d707479", ""],
+          ["736572766963653a456e64706f696e74", "68747470733a2f2f6578616d706c652e696e76616c69642f73657276696365"],
+          ["736572766963653a4e616d65", "776f726b6572"]
+        ]
+      }
+    },
+    {
+      "id": "casefold-duplicate",
+      "input": "conformance/oracles/dotnet-ini-v1/casefold-duplicate.ini",
+      "input_sha256": "49c3105b7d4d8a42597c1ffd69a593aaa5abe8dfa6130e0e1ad3026c1c60164d",
+      "expected": {
+        "outcome": "failed",
+        "exception": "System.FormatException",
+        "failure_surface": "native-recovered"
+      }
+    },
+    {
+      "id": "comments-whitespace",
+      "input": "conformance/oracles/dotnet-ini-v1/comments-whitespace.ini",
+      "input_sha256": "dc6b6d6f4025d1b8ef8e47a9e5786177884ce9078ffcad57379cf426cbbec220",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["536572766963653a4d61726b6572", "76616c75652023206c69746572616c"],
+          ["536572766963653a4e616d65", "776f726b6572"]
+        ]
+      }
+    },
+    {
+      "id": "malformed-line",
+      "input": "conformance/oracles/dotnet-ini-v1/malformed-line.ini",
+      "input_sha256": "239c9b0c037ecac5c2924aa5e68b528670b595d782e5b7d9131b293312a970ed",
+      "expected": {
+        "outcome": "failed",
+        "exception": "System.FormatException",
+        "failure_surface": "native-recovered"
+      }
+    },
+    {
+      "id": "quoted-value",
+      "input": "conformance/oracles/dotnet-ini-v1/quoted-value.ini",
+      "input_sha256": "dbe139f9cc03c69137aeaca0a64c32d949b4892c70e32574e90fdbf153421fe5",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["536572766963653a4d657373616765", "2076616c756520776974682073706163657320"],
+          ["536572766963653a53696e676c65", "276c69746572616c27"]
+        ]
+      }
+    },
+    {
+      "id": "section-casefold-duplicate",
+      "input": "conformance/oracles/dotnet-ini-v1/section-casefold-duplicate.ini",
+      "input_sha256": "453dd7f80e3cfdf0f0e9afeb4075a2b79a66d180a803c8d8f32d2a9ef98b47dc",
+      "expected": {
+        "outcome": "failed",
+        "exception": "System.FormatException",
+        "failure_surface": "provider-view-collision"
+      }
+    },
+    {
+      "id": "section-path",
+      "input": "conformance/oracles/dotnet-ini-v1/section-path.ini",
+      "input_sha256": "c5ddbba55a94458e8ff8aa169ecf750e63fdb43fe5ff03d16a117986f622d227",
+      "expected": {
+        "outcome": "complete",
+        "entries": [
+          ["4f746865723a456e61626c6564", "74727565"],
+          ["506172656e743a4368696c643a4e616d65", "6e6573746564"]
+        ]
+      }
+    }
+  ]
+}

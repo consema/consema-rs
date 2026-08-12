@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 /// Embedded semantic-model v2 protocol suite bytes.
 pub const PROTOCOL_V2_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/protocol-v2.json");
+    include_str!("../../conformance/vectors/protocol-v2.json");
 
 /// Runs the embedded `consema.protocol.conformance@2` suite.
 #[must_use]

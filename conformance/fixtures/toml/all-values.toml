@@ -1,0 +1,14 @@
+title = "Consema fixture"
+enabled = true
+integer = 42
+hex = 0xDEAD_BEEF
+float = -0.0
+positive_infinity = inf
+not_a_number = nan
+local_date = 1979-05-27
+local_time = 07:32:00.123456789
+local_date_time = 1979-05-27T07:32:00
+offset_date_time = 1979-05-27T07:32:00-07:00
+ports = [8000, 8001, 8002]
+point = { x = 1, y = 2 }
+

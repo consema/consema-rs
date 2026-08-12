@@ -1,0 +1,2082 @@
+{
+  "suite": "consema.hcl.conformance@1",
+  "semantic_model": "core.semantic-model@6",
+  "profiles": [
+    "hcl.native@1",
+    "hcl.tfvars@1"
+  ],
+  "cases": [
+    {
+      "id": "hcl.native-formation.body-basic",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "region = \"us-east-1\"\n\nserver \"web\" \"1\" {\n  port = 8080\n}\n\nplain {\n  x = 1\n}\n\noneline { y = 2 }\n\nshared = 1\nshared \"b\" {\n  z = 3\n}"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "region = \"us-east-1\"\n\nserver \"web\" \"1\" {\n  port = 8080\n}\n\nplain {\n  x = 1\n}\n\noneline { y = 2 }\n\nshared = 1\nshared \"b\" {\n  z = 3\n}"
+      }
+    },
+    {
+      "id": "hcl.native-formation.comments",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "# leading hash\na = 1 // trailing slash\nb = 2 /* inline */\nc = 3 /* spans\nlines */\nd = 4 # comment terminates the attribute\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "# leading hash\na = 1 // trailing slash\nb = 2 /* inline */\nc = 3 /* spans\nlines */\nd = 4 # comment terminates the attribute\n"
+      }
+    },
+    {
+      "id": "hcl.native-formation.duplicate-attribute",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = 1\na = 2\nb = 3\n"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "hcl.parse.duplicate-attribute@1"
+      }
+    },
+    {
+      "id": "hcl.native-formation.expression-matrix",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "int = 42\nreal = 1.5\nexp = 1e3\nneg = -7\nyes = true\nno = false\nnil = null\nstr = \"hello\"\nescaped = \"line\\nbreak\"\ninterp = \"value: ${name}\"\ncall = max(1, 2, 3)\nv = my_var\nbin = 1 + 2 * 3\ncmp = a == b\nlogic = a && b || !c\ncond = x ? \"yes\" : \"no\"\ntup = [1, \"two\", true]\nobj = {key = 1, \"quoted\" = 2}\nparen = (1 + 2) * 3\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "int = 42\nreal = 1.5\nexp = 1e3\nneg = -7\nyes = true\nno = false\nnil = null\nstr = \"hello\"\nescaped = \"line\\nbreak\"\ninterp = \"value: ${name}\"\ncall = max(1, 2, 3)\nv = my_var\nbin = 1 + 2 * 3\ncmp = a == b\nlogic = a && b || !c\ncond = x ? \"yes\" : \"no\"\ntup = [1, \"two\", true]\nobj = {key = 1, \"quoted\" = 2}\nparen = (1 + 2) * 3\n"
+      }
+    },
+    {
+      "id": "hcl.native-formation.heredoc",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "plain = <<EOT\nalpha\nbeta\nEOT\nindented = <<-EOT\n    one\n      two\n    EOT\nnotclosing = <<EOT\nEOT has content\nEOT\ntrimmed = <<EOT\ntail\nEOT  \n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "plain = <<EOT\nalpha\nbeta\nEOT\nindented = <<-EOT\n    one\n      two\n    EOT\nnotclosing = <<EOT\nEOT has content\nEOT\ntrimmed = <<EOT\ntail\nEOT  \n"
+      }
+    },
+    {
+      "id": "hcl.native-formation.templates",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = \"plain\"\nb = \"esc: \\n \\t \\\" \\\\\"\nc = \"uni: \\u0041 \\U0001F600\"\nd = \"interp: ${x}\"\ne = \"strips: ${~ x ~}\"\nf = \"if: %{ if x }yes%{ endif }\"\ng = \"for2: %{ for k, v in m }${k}%{ endfor }\"\nh = \"for1: %{ for x in list }${x}%{ endfor }\"\ni = \"lit: $${x} %%{y}\"\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "a = \"plain\"\nb = \"esc: \\n \\t \\\" \\\\\"\nc = \"uni: \\u0041 \\U0001F600\"\nd = \"interp: ${x}\"\ne = \"strips: ${~ x ~}\"\nf = \"if: %{ if x }yes%{ endif }\"\ng = \"for2: %{ for k, v in m }${k}%{ endfor }\"\nh = \"for1: %{ for x in list }${x}%{ endfor }\"\ni = \"lit: $${x} %%{y}\"\n"
+      }
+    },
+    {
+      "id": "hcl.native-formation.number-matrix",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "a = 0\n"
+          },
+          {
+            "source": "a = 42\n"
+          },
+          {
+            "source": "a = 1.50\n"
+          },
+          {
+            "source": "a = 1e3\n"
+          },
+          {
+            "source": "a = 15e-1\n"
+          },
+          {
+            "source": "a = 1E+2\n"
+          },
+          {
+            "source": "a = 0.5\n"
+          },
+          {
+            "source": "a = 1e\n"
+          },
+          {
+            "source": "a = 1.\n"
+          },
+          {
+            "source": "a = 1.e3\n"
+          },
+          {
+            "source": "a = 0x1F\n"
+          },
+          {
+            "source": "a = 1_000\n"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "hcl.parse.invalid-number@1",
+          "hcl.parse.newline@1",
+          "hcl.parse.newline@1",
+          "hcl.parse.invalid-number@1",
+          "hcl.parse.invalid-number@1"
+        ],
+        "canonical_values": [
+          0,
+          42,
+          1.5,
+          1000,
+          1.5,
+          100,
+          0.5,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.identifiers-keywords",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "foo-bar = 1\n"
+          },
+          {
+            "source": "变量 = 2\n"
+          },
+          {
+            "source": "true = 1\n"
+          },
+          {
+            "source": "false = 2\n"
+          },
+          {
+            "source": "null = 3\n"
+          },
+          {
+            "source": "true { x = 1 }\n"
+          },
+          {
+            "source": "_foo = 1\n"
+          },
+          {
+            "source": "a = _bar\n"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "hcl.parse.identifier@1",
+          "hcl.parse.identifier@1"
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.unary-compound",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "a = -1 + 2\n"
+          },
+          {
+            "source": "a = 2 * -1\n"
+          },
+          {
+            "source": "a = -1 * 2\n"
+          },
+          {
+            "source": "a = !!x\n"
+          },
+          {
+            "source": "a = !true\n"
+          },
+          {
+            "source": "a = - (1 + 2)\n"
+          },
+          {
+            "source": "a = -x\n"
+          },
+          {
+            "source": "a = +1\n"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "hcl.parse.expression@1"
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.operators-precedence",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "a = 1 + 2 * 3\n"
+          },
+          {
+            "source": "a = (1 + 2) * 3\n"
+          },
+          {
+            "source": "a = 2 > 1 && 3 <= 3\n"
+          },
+          {
+            "source": "a = x ? y : z\n"
+          },
+          {
+            "source": "a = -a == b\n"
+          },
+          {
+            "source": "a = (\n  1 +\n  2\n)\n"
+          },
+          {
+            "source": "a = myfunc(1, 2,)\n"
+          },
+          {
+            "source": "a = merge(m1, m2...)\n"
+          },
+          {
+            "source": "a = 2 ** 3\n"
+          },
+          {
+            "source": "a = foo.0\n"
+          },
+          {
+            "source": "a = foo::bar()\n"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "hcl.parse.expression@1",
+          "hcl.parse.expression@1",
+          "hcl.parse.invalid-character@1"
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.constructors",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "nlsep = [\n  1,\n  2,\n]\nobj = {\n  a = 1\n  b = 2\n}\ndups = { a = 1, a = 2 }\nnumkey = { 1 = \"one\" }\ncolon = { \"k\" : 3 }\nforkey = { \"for\" = 1 }\nparenkey = { (x) = 2 }\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "nlsep = [\n  1,\n  2,\n]\nobj = {\n  a = 1\n  b = 2\n}\ndups = { a = 1, a = 2 }\nnumkey = { 1 = \"one\" }\ncolon = { \"k\" : 3 }\nforkey = { \"for\" = 1 }\nparenkey = { (x) = 2 }\n"
+      }
+    },
+    {
+      "id": "hcl.native-formation.for-expressions",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "ftuple = [for x in list : x * 2]\nfobj = {for k, v in map : k => v if v != null}\nfgroup = {for k, v in map : k => v...}\nfcond = [for x in list : x if x > 0]\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "ftuple = [for x in list : x * 2]\nfobj = {for k, v in map : k => v if v != null}\nfgroup = {for k, v in map : k => v...}\nfcond = [for x in list : x if x > 0]\n"
+      }
+    },
+    {
+      "id": "hcl.native-formation.traversals-splats",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "v = foo\nattr = foo.bar\nidx = foo[0]\nsplat1 = foo.*.bar\nsplat2 = foo[*].bar\nchain = foo[0].bar[*].baz\nkwroot = true.bar\nexpridx = foo[1 + 1]\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "v = foo\nattr = foo.bar\nidx = foo[0]\nsplat1 = foo.*.bar\nsplat2 = foo[*].bar\nchain = foo[0].bar[*].baz\nkwroot = true.bar\nexpridx = foo[1 + 1]\n"
+      }
+    },
+    {
+      "id": "hcl.native-formation.source-contract",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "﻿a = 1\n"
+          },
+          {
+            "source": "a = 1\n﻿b = 2\n"
+          },
+          {
+            "source": "a = 1\rb = 2\n"
+          },
+          {
+            "source": "a = 1\r\nb = 2\r\n"
+          },
+          {
+            "source": "a = 1\nb = 2\n"
+          },
+          {
+            "hex": "61203d20310aff0a"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Complete",
+          "Complete",
+          "FatalFormationFailure"
+        ],
+        "diagnostics": [
+          "hcl.parse.byte-order-mark@1",
+          "hcl.parse.byte-order-mark@1",
+          "hcl.parse.lone-cr@1",
+          null,
+          null,
+          "hcl.parse.invalid-utf8@1"
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.recovery-matrix",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "a = \"abc\n"
+          },
+          {
+            "source": "a = <<EOT\ncontent\n"
+          },
+          {
+            "source": "a = \"${ 1 +\"\n"
+          },
+          {
+            "source": "a = [1, 2\n"
+          },
+          {
+            "source": "a = 1 @ 2\nb = 3\n"
+          },
+          {
+            "source": "a = 1 /* one /* two */ still\n"
+          },
+          {
+            "source": "a = <<\"EOT\"\ncontent\nEOT\n"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "hcl.parse.unterminated-string@1",
+          "hcl.parse.unterminated-heredoc@1",
+          "hcl.parse.unterminated-interpolation@1",
+          "hcl.parse.expression@1",
+          "hcl.parse.invalid-character@1",
+          "hcl.parse.newline@1",
+          "hcl.parse.expression@1"
+        ],
+        "proven_attribute_names": [
+          null,
+          null,
+          null,
+          null,
+          [
+            "a",
+            "b"
+          ],
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.production-shape",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "terraform {\n  required_version = \">= 1.5\"\n}\n\nvariable \"region\" {\n  type    = string\n  default = \"us-east-1\"\n}\n\nlocals {\n  common_tags = {\n    Env = \"prod\"\n  }\n}\n\nresource \"aws_instance\" \"web\" {\n  ami           = \"ami-0abcdef1234567890\"\n  instance_type = \"t3.micro\"\n  count         = 2\n  tags          = local.common_tags\n}\n\nmodule \"vpc\" {\n  source  = \"./modules/vpc\"\n  cidr    = \"10.0.0.0/16\"\n  enabled = true\n}\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "terraform {\n  required_version = \">= 1.5\"\n}\n\nvariable \"region\" {\n  type    = string\n  default = \"us-east-1\"\n}\n\nlocals {\n  common_tags = {\n    Env = \"prod\"\n  }\n}\n\nresource \"aws_instance\" \"web\" {\n  ami           = \"ami-0abcdef1234567890\"\n  instance_type = \"t3.micro\"\n  count         = 2\n  tags          = local.common_tags\n}\n\nmodule \"vpc\" {\n  source  = \"./modules/vpc\"\n  cidr    = \"10.0.0.0/16\"\n  enabled = true\n}\n"
+      }
+    },
+    {
+      "id": "hcl.tfvars-formation.attributes-only",
+      "capability": "hcl.tfvars-formation@1",
+      "input": {
+        "profile": "hcl.tfvars@1",
+        "source": "region = \"us-east-1\"\ncount = 3\nratio = 0.5\nenabled = true\ntags = [\"a\", \"b\"]\nlabels = {\n  env = \"prod\"\n}\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "region = \"us-east-1\"\ncount = 3\nratio = 0.5\nenabled = true\ntags = [\"a\", \"b\"]\nlabels = {\n  env = \"prod\"\n}\n"
+      }
+    },
+    {
+      "id": "hcl.tfvars-formation.block-rejected",
+      "capability": "hcl.tfvars-formation@1",
+      "input": {
+        "profile": "hcl.tfvars@1",
+        "source": "region = \"us-east-1\"\nblock \"x\" {\n  a = 1\n}\n"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "hcl.tfvars.block-not-allowed@1"
+      }
+    },
+    {
+      "id": "hcl.tfvars-formation.expression-grammar-full",
+      "capability": "hcl.tfvars-formation@1",
+      "input": {
+        "profile": "hcl.tfvars@1",
+        "source": "computed = max(1, 2)\nref = var.other\njoined = \"prefix-${var.suffix}\"\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "computed = max(1, 2)\nref = var.other\njoined = \"prefix-${var.suffix}\"\n"
+      }
+    },
+    {
+      "id": "hcl.tfvars-formation.duplicate-attribute",
+      "capability": "hcl.tfvars-formation@1",
+      "input": {
+        "profile": "hcl.tfvars@1",
+        "source": "a = 1\na = 2\n"
+      },
+      "expected": {
+        "status": "Recovered",
+        "diagnostic": "hcl.parse.duplicate-attribute@1"
+      }
+    },
+    {
+      "id": "hcl.tfvars-formation.production-shape",
+      "capability": "hcl.tfvars-formation@1",
+      "input": {
+        "profile": "hcl.tfvars@1",
+        "source": "# Production-shaped terraform.tfvars fixture\nregion = \"us-east-1\"\ninstance_type = \"t3.micro\"\nami = \"ami-0abcdef1234567890\"\ncount = 2\nmonitoring = true\ntags = {\n  Name = \"web-server\"\n  Env  = \"prod\"\n}\nsecurity_groups = [\n  \"sg-0123456789abcdef0\",\n  \"sg-1123456789abcdef0\",\n]\nlaunch_template = {\n  id      = \"lt-0123456789abcdef0\"\n  version = 1\n}\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "# Production-shaped terraform.tfvars fixture\nregion = \"us-east-1\"\ninstance_type = \"t3.micro\"\nami = \"ami-0abcdef1234567890\"\ncount = 2\nmonitoring = true\ntags = {\n  Name = \"web-server\"\n  Env  = \"prod\"\n}\nsecurity_groups = [\n  \"sg-0123456789abcdef0\",\n  \"sg-1123456789abcdef0\",\n]\nlaunch_template = {\n  id      = \"lt-0123456789abcdef0\"\n  version = 1\n}\n"
+      }
+    },
+    {
+      "id": "hcl.query.native-body-walk",
+      "capability": "hcl.query@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "domain": "hcl.native-semantic-query@1",
+        "source": "region = \"us-east-1\"\nserver \"web\" {\n  port = 8080\n}\ncount = 3\n",
+        "filters": [
+          {
+            "operator": "hcl.document-body@1"
+          },
+          {
+            "operator": "hcl.body-attributes@1"
+          },
+          {
+            "operator": "hcl.attribute-name-equals@1",
+            "argument": "count"
+          },
+          {
+            "operator": "hcl.attribute-expression@1"
+          },
+          {
+            "operator": "hcl.expression-is-literal@1"
+          },
+          {
+            "operator": "hcl.expression-kind-is@1",
+            "argument": "number"
+          },
+          {
+            "operator": "hcl.expression-text@1"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "matches": [
+          {
+            "kind": "number",
+            "text": "3",
+            "literal": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "hcl.query.blocks-and-labels",
+      "capability": "hcl.query@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "domain": "hcl.native-semantic-query@1",
+        "source": "region = \"us-east-1\"\nserver \"web\" {\n  port = 8080\n}\ncount = 3\n",
+        "samples": [
+          {
+            "filters": [
+              {
+                "operator": "hcl.document-body@1"
+              },
+              {
+                "operator": "hcl.body-blocks@1"
+              },
+              {
+                "operator": "hcl.block-type-equals@1",
+                "argument": "server"
+              },
+              {
+                "operator": "hcl.block-labels@1"
+              },
+              {
+                "operator": "hcl.block-label-equals@1",
+                "argument": "web"
+              }
+            ]
+          },
+          {
+            "filters": [
+              {
+                "operator": "hcl.document-body@1"
+              },
+              {
+                "operator": "hcl.body-blocks@1"
+              },
+              {
+                "operator": "hcl.block-type-equals@1",
+                "argument": "server"
+              },
+              {
+                "operator": "hcl.block-nested-body@1"
+              },
+              {
+                "operator": "hcl.body-attributes@1"
+              },
+              {
+                "operator": "hcl.attribute-name-equals@1",
+                "argument": "port"
+              },
+              {
+                "operator": "hcl.attribute-expression@1"
+              },
+              {
+                "operator": "hcl.expression-text@1"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "terminals": [
+          "Completed",
+          "Completed"
+        ],
+        "label_matches": [
+          {
+            "text": "web",
+            "quoted": true
+          }
+        ],
+        "nested_matches": [
+          {
+            "kind": "number",
+            "text": "8080"
+          }
+        ]
+      }
+    },
+    {
+      "id": "hcl.query.literal-accessors",
+      "capability": "hcl.query@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "domain": "hcl.native-semantic-query@1",
+        "samples": [
+          {
+            "source": "count = 42\n",
+            "filters": [
+              {
+                "operator": "hcl.document-body@1"
+              },
+              {
+                "operator": "hcl.body-attributes@1"
+              },
+              {
+                "operator": "hcl.attribute-name-equals@1",
+                "argument": "count"
+              },
+              {
+                "operator": "hcl.attribute-expression@1"
+              },
+              {
+                "operator": "hcl.attribute-literal-value@1",
+                "argument": "as-integer"
+              }
+            ]
+          },
+          {
+            "source": "name = \"x\"\n",
+            "filters": [
+              {
+                "operator": "hcl.document-body@1"
+              },
+              {
+                "operator": "hcl.body-attributes@1"
+              },
+              {
+                "operator": "hcl.attribute-name-equals@1",
+                "argument": "name"
+              },
+              {
+                "operator": "hcl.attribute-expression@1"
+              },
+              {
+                "operator": "hcl.attribute-literal-value@1",
+                "argument": "as-integer"
+              }
+            ]
+          },
+          {
+            "source": "name = var.name\n",
+            "filters": [
+              {
+                "operator": "hcl.document-body@1"
+              },
+              {
+                "operator": "hcl.body-attributes@1"
+              },
+              {
+                "operator": "hcl.attribute-name-equals@1",
+                "argument": "name"
+              },
+              {
+                "operator": "hcl.attribute-expression@1"
+              },
+              {
+                "operator": "hcl.attribute-literal-value@1",
+                "argument": "as-string"
+              }
+            ]
+          },
+          {
+            "source": "enabled = true\n",
+            "filters": [
+              {
+                "operator": "hcl.document-body@1"
+              },
+              {
+                "operator": "hcl.body-attributes@1"
+              },
+              {
+                "operator": "hcl.attribute-name-equals@1",
+                "argument": "enabled"
+              },
+              {
+                "operator": "hcl.attribute-expression@1"
+              },
+              {
+                "operator": "hcl.attribute-literal-value@1",
+                "argument": "as-boolean-is"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "terminals": [
+          "Completed",
+          "Failed",
+          "Failed",
+          "Completed"
+        ],
+        "codes": [
+          null,
+          "hcl.query.type-mismatch@1",
+          "hcl.query.non-literal@1",
+          null
+        ],
+        "integer_matches": [
+          {
+            "kind": "integer",
+            "value": 42
+          }
+        ],
+        "boolean_matches": [
+          {
+            "kind": "boolean",
+            "value": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "hcl.query.lossless-kind-filter",
+      "capability": "hcl.query@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "domain": "hcl.lossless-syntax-query@1",
+        "source": "# c\nregion = \"us-east-1\"\n",
+        "samples": [
+          {
+            "filters": [
+              {
+                "operator": "hcl.syntax-kind-is@1",
+                "argument": "LineComment"
+              }
+            ]
+          },
+          {
+            "filters": [
+              {
+                "operator": "hcl.syntax-kind-is@1",
+                "argument": "StringContent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "terminals": [
+          "Completed",
+          "Completed"
+        ],
+        "matches": [
+          [
+            {
+              "kind": "LineComment",
+              "text": "# c",
+              "ordinal": 0
+            }
+          ],
+          [
+            {
+              "kind": "StringContent",
+              "text": "us-east-1",
+              "ordinal": 7
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "hcl.query.error-regions",
+      "capability": "hcl.query@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "domain": "hcl.native-semantic-query@1",
+        "source": "a = 1\nb {\n",
+        "filters": [
+          {
+            "operator": "hcl.document-body@1"
+          },
+          {
+            "operator": "hcl.error-regions@1"
+          }
+        ]
+      },
+      "expected": {
+        "terminal": "Completed",
+        "error_regions": [
+          {
+            "code": "hcl.parse.block@1",
+            "position": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "hcl.projection.literal-complete-record",
+      "capability": "hcl.projection@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "target": "hcl.projection.body@1",
+        "source": "name = \"consema\"\ncount = 42\nratio = 1.50\nbig = 1e3\nsmall = 15e-1\nenabled = true\nnothing = null\ntags = [\"a\", \"b\"]\nlabels = { env = \"prod\" }\ndups = { a = 1, a = 2 }\nnumkeys = { 1 = \"one\", 2 = \"two\" }\nnested = { \"x\" = { y = [1, 2] } }\n"
+      },
+      "expected": {
+        "record": "hcl.body@1",
+        "attributes": [
+          {
+            "name": "name",
+            "kind": "string",
+            "text": "consema"
+          },
+          {
+            "name": "count",
+            "kind": "integer",
+            "value": 42
+          },
+          {
+            "name": "ratio",
+            "kind": "real",
+            "value": 1.5
+          },
+          {
+            "name": "big",
+            "kind": "integer",
+            "value": 1000
+          },
+          {
+            "name": "small",
+            "kind": "real",
+            "value": 1.5
+          },
+          {
+            "name": "enabled",
+            "kind": "boolean",
+            "value": true
+          },
+          {
+            "name": "nothing",
+            "kind": "null"
+          },
+          {
+            "name": "tags",
+            "kind": "tuple",
+            "elements": [
+              "a",
+              "b"
+            ]
+          },
+          {
+            "name": "labels",
+            "kind": "object",
+            "entries": [
+              [
+                "env",
+                "prod"
+              ]
+            ]
+          },
+          {
+            "name": "dups",
+            "kind": "object",
+            "entries": [
+              [
+                "a",
+                1
+              ],
+              [
+                "a",
+                2
+              ]
+            ]
+          },
+          {
+            "name": "numkeys",
+            "kind": "object",
+            "entries": [
+              [
+                "1",
+                "one"
+              ],
+              [
+                "2",
+                "two"
+              ]
+            ]
+          },
+          {
+            "name": "nested",
+            "kind": "object",
+            "entries": [
+              [
+                "x",
+                {
+                  "kind": "object",
+                  "entries": [
+                    [
+                      "y",
+                      {
+                        "kind": "tuple",
+                        "elements": [
+                          1,
+                          2
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              ]
+            ]
+          }
+        ],
+        "blocks": [],
+        "attribute_order_preserved": true,
+        "duplicate_keys_preserved": true,
+        "canonical_decimal": true
+      }
+    },
+    {
+      "id": "hcl.projection.non-literal-expression",
+      "capability": "hcl.projection@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "target": "hcl.projection.body@1",
+        "samples": [
+          {
+            "source": "count = 1 + 2\n"
+          },
+          {
+            "source": "name = var.name\n"
+          },
+          {
+            "source": "msg = \"hi ${name}\"\n"
+          },
+          {
+            "source": "items = [for x in list : x]\n"
+          }
+        ]
+      },
+      "expected": {
+        "codes": [
+          "hcl.projection.non-literal-expression@1",
+          "hcl.projection.non-literal-expression@1",
+          "hcl.projection.non-literal-expression@1",
+          "hcl.projection.non-literal-expression@1"
+        ],
+        "atomic_failure": true,
+        "record": null
+      }
+    },
+    {
+      "id": "hcl.projection.project-expression-policy",
+      "capability": "hcl.projection@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "target": "hcl.projection.body@1",
+        "policy": "ProjectExpression",
+        "source": "count = 1 + 2\nname = var.name\nok = 42\n"
+      },
+      "expected": {
+        "record": "hcl.body@1",
+        "attributes": [
+          {
+            "name": "count",
+            "kind": "expression",
+            "expression": {
+              "record": "hcl.expression@1",
+              "kind": "binary",
+              "text": "1 + 2"
+            }
+          },
+          {
+            "name": "name",
+            "kind": "expression",
+            "expression": {
+              "record": "hcl.expression@1",
+              "kind": "variable",
+              "text": "var.name"
+            }
+          },
+          {
+            "name": "ok",
+            "kind": "integer",
+            "value": 42
+          }
+        ],
+        "transformed_events": 2,
+        "event_provenance": true
+      }
+    },
+    {
+      "id": "hcl.projection.literal-complete-boundary",
+      "capability": "hcl.projection@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "target": "hcl.projection.body@1",
+        "samples": [
+          {
+            "source": "a = -1\n"
+          },
+          {
+            "source": "a = 1 + 2\n"
+          },
+          {
+            "source": "a = {1 = \"a\"}\n"
+          },
+          {
+            "source": "a = \"no interpolation\"\n"
+          },
+          {
+            "source": "a = \"x${y}\"\n"
+          },
+          {
+            "source": "a = <<EOT\nplain\nEOT\n"
+          },
+          {
+            "source": "a = <<EOT\nhi ${x}\nEOT\n"
+          },
+          {
+            "source": "a = (42)\n"
+          },
+          {
+            "source": "a = -x\n"
+          },
+          {
+            "source": "a = [1, \"two\", {k = 3}]\n"
+          },
+          {
+            "source": "a = null\n"
+          },
+          {
+            "source": "a = !true\n"
+          },
+          {
+            "source": "a = max(1, 2)\n"
+          },
+          {
+            "source": "a = 15e-1\n"
+          }
+        ]
+      },
+      "expected": {
+        "literals": [
+          true,
+          false,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true,
+          false,
+          true,
+          true,
+          false,
+          false,
+          true
+        ]
+      }
+    },
+    {
+      "id": "hcl.materialization.canonical-document",
+      "capability": "hcl.materialization@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "style": "hcl.canonical-document@1",
+        "record": {
+          "record": "hcl.body@1",
+          "items": [
+            {
+              "kind": "attribute",
+              "name": "name",
+              "value": {
+                "kind": "string",
+                "text": "hello"
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "escaped",
+              "value": {
+                "kind": "string",
+                "text": "a\nb\t\"c\\d"
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "count",
+              "value": {
+                "kind": "integer",
+                "value": 42
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "ratio",
+              "value": {
+                "kind": "real",
+                "value": 1.5
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "enabled",
+              "value": {
+                "kind": "boolean",
+                "value": true
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "nothing",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "tags",
+              "value": {
+                "kind": "tuple",
+                "elements": [
+                  {
+                    "kind": "string",
+                    "text": "a"
+                  },
+                  {
+                    "kind": "string",
+                    "text": "b"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "labels",
+              "value": {
+                "kind": "object",
+                "entries": [
+                  [
+                    "env",
+                    {
+                      "kind": "string",
+                      "text": "prod"
+                    }
+                  ]
+                ]
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "empty_tuple",
+              "value": {
+                "kind": "tuple",
+                "elements": []
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "empty_obj",
+              "value": {
+                "kind": "object",
+                "entries": []
+              }
+            },
+            {
+              "kind": "block",
+              "type": "server",
+              "labels": [
+                "web",
+                "1"
+              ],
+              "body": {
+                "items": [
+                  {
+                    "kind": "attribute",
+                    "name": "port",
+                    "value": {
+                      "kind": "integer",
+                      "value": 8080
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "render": "name = \"hello\"\nescaped = \"a\\nb\\t\\\"c\\\\d\"\ncount = 42\nratio = 1.5\nenabled = true\nnothing = null\ntags = [\n  \"a\",\n  \"b\"\n]\nlabels = {\n  env = \"prod\"\n}\nempty_tuple = []\nempty_obj = {}\nserver \"web\" \"1\" {\n  port = 8080\n}\n"
+      }
+    },
+    {
+      "id": "hcl.materialization.reparse-closure",
+      "capability": "hcl.materialization@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "style": "hcl.canonical-document@1",
+        "record": {
+          "record": "hcl.body@1",
+          "items": [
+            {
+              "kind": "attribute",
+              "name": "derived",
+              "value": {
+                "kind": "expression",
+                "expression": {
+                  "record": "hcl.expression@1",
+                  "kind": "binary",
+                  "text": "1 + 2"
+                }
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "big",
+              "value": {
+                "kind": "integer",
+                "value": 1000
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "small",
+              "value": {
+                "kind": "real",
+                "value": 1.5
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "render": "derived = 1 + 2\nbig = 1000\nsmall = 1.5\n",
+        "closure": true,
+        "fingerprint_match": true
+      }
+    },
+    {
+      "id": "hcl.materialization.unrepresentable",
+      "capability": "hcl.materialization@1",
+      "input": {
+        "style": "hcl.canonical-document@1",
+        "samples": [
+          {
+            "profile": "hcl.tfvars@1",
+            "record": {
+              "record": "hcl.body@1",
+              "items": [
+                {
+                  "kind": "block",
+                  "type": "server",
+                  "labels": [
+                    "x"
+                  ],
+                  "body": {
+                    "items": [
+                      {
+                        "kind": "attribute",
+                        "name": "a",
+                        "value": {
+                          "kind": "integer",
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "profile": "hcl.native@1",
+            "record": {
+              "record": "hcl.something-else@1",
+              "items": []
+            }
+          },
+          {
+            "profile": "hcl.native@1",
+            "record": {
+              "record": "hcl.body@1",
+              "items": [
+                {
+                  "kind": "block",
+                  "type": "server",
+                  "labels": [
+                    "x"
+                  ],
+                  "body": {
+                    "items": [
+                      {
+                        "kind": "attribute",
+                        "name": "a",
+                        "value": {
+                          "kind": "integer",
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expected": {
+        "renders": [
+          null,
+          null,
+          "server \"x\" {\n  a = 1\n}\n"
+        ],
+        "codes": [
+          "hcl.materialization.unrepresentable@1",
+          "invalid-record",
+          null
+        ]
+      }
+    },
+    {
+      "id": "hcl.materialization.typed-member-form",
+      "capability": "hcl.materialization@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "style": "hcl.canonical-document@1",
+        "record": {
+          "record": "hcl.body@1",
+          "items": [
+            {
+              "kind": "attribute",
+              "name": "name",
+              "value": "hello"
+            },
+            {
+              "kind": "attribute",
+              "name": "count",
+              "value": 42
+            },
+            {
+              "kind": "attribute",
+              "name": "ratio",
+              "value": 1.5
+            },
+            {
+              "kind": "attribute",
+              "name": "enabled",
+              "value": true
+            },
+            {
+              "kind": "attribute",
+              "name": "nothing",
+              "value": null
+            },
+            {
+              "kind": "attribute",
+              "name": "tags",
+              "value": [
+                "a",
+                "b"
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "render": "name = \"hello\"\ncount = 42\nratio = 1.5\nenabled = true\nnothing = null\ntags = [\n  \"a\",\n  \"b\"\n]\n"
+      }
+    },
+    {
+      "id": "hcl.edit.attribute-operations",
+      "capability": "hcl.edit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "region = \"us-east-1\"\ncount = 2\nenabled = true\n",
+        "operations": [
+          {
+            "op": "hcl.edit.insert-attribute@1",
+            "body": "root",
+            "name": "zone",
+            "value": {
+              "kind": "string",
+              "text": "a"
+            },
+            "placement": "First"
+          },
+          {
+            "op": "hcl.edit.set-attribute-value@1",
+            "attribute": "count",
+            "value": {
+              "kind": "integer",
+              "value": 3
+            }
+          },
+          {
+            "op": "hcl.edit.rename-attribute@1",
+            "attribute": "enabled",
+            "name": "active"
+          },
+          {
+            "op": "hcl.edit.remove-attribute@1",
+            "attribute": "region"
+          }
+        ]
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "zone = \"a\"\ncount = 3\nactive = true\n",
+        "reparse_closure": true,
+        "untouched_byte_proof": true,
+        "patch_replays": true
+      }
+    },
+    {
+      "id": "hcl.edit.block-operations",
+      "capability": "hcl.edit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "server \"web\" {\n  port = 8080\n}\n",
+        "operations": [
+          {
+            "op": "hcl.edit.insert-block@1",
+            "body": "root",
+            "type": "server",
+            "labels": [
+              "db"
+            ],
+            "attributes": [
+              {
+                "name": "port",
+                "value": {
+                  "kind": "integer",
+                  "value": 5432
+                }
+              }
+            ],
+            "placement": "Last"
+          },
+          {
+            "op": "hcl.edit.remove-block@1",
+            "node_ref": {
+              "type": "server",
+              "labels": [
+                "web"
+              ]
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "server \"db\" {\n  port = 5432\n}\n",
+        "reparse_closure": true,
+        "untouched_byte_proof": true,
+        "patch_replays": true,
+        "labels_always_quoted": true
+      }
+    },
+    {
+      "id": "hcl.edit.conflicts",
+      "capability": "hcl.edit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "count = 2\n",
+            "operations": [
+              {
+                "op": "hcl.edit.insert-attribute@1",
+                "body": "root",
+                "name": "count",
+                "value": {
+                  "kind": "integer",
+                  "value": 3
+                },
+                "placement": "Last"
+              }
+            ]
+          },
+          {
+            "profile": "hcl.tfvars@1",
+            "source": "region = \"x\"\n",
+            "operations": [
+              {
+                "op": "hcl.edit.insert-block@1",
+                "body": "root",
+                "type": "server",
+                "labels": [
+                  "db"
+                ],
+                "attributes": [],
+                "placement": "Last"
+              }
+            ]
+          },
+          {
+            "source": "count = 2\n",
+            "operations": [
+              {
+                "op": "hcl.edit.set-attribute-value@1",
+                "attribute": "count",
+                "value": {
+                  "kind": "expression",
+                  "expression": {
+                    "record": "hcl.expression@1",
+                    "kind": "binary",
+                    "text": "1 + 2"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "source": "count = 2\n",
+            "operations": [
+              {
+                "op": "hcl.edit.set-attribute-value@1",
+                "attribute": "missing",
+                "value": {
+                  "kind": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          {
+            "source": "count = 2\n",
+            "source_id": "memory:hcl-conformance",
+            "wrong_source": {
+              "profile": "hcl.native@1",
+              "source": "other = 1\n"
+            },
+            "operations": [
+              {
+                "op": "hcl.edit.set-attribute-value@1",
+                "attribute": "count",
+                "value": {
+                  "kind": "integer",
+                  "value": 9
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "codes": [
+          "hcl.edit.duplicate-attribute@1",
+          "hcl.edit.block-in-tfvars@1",
+          "hcl.edit.unrepresentable@1",
+          "core.edit.incomplete-target@1",
+          "core.edit.wrong-snapshot@1"
+        ],
+        "base_unchanged": true
+      }
+    },
+    {
+      "id": "hcl.native-formation.empty-body-eof-termination",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": ""
+          },
+          {
+            "source": "a = 1"
+          },
+          {
+            "source": "b {\n}\n"
+          },
+          {
+            "source": "oneline { y = 2 }"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Complete",
+          "Complete",
+          "Complete",
+          "Complete"
+        ],
+        "diagnostics": [
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.leading-digit-rejection",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "1abc = 1\n"
+          },
+          {
+            "source": "a = 1abc\n"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "hcl.parse.invalid-number@1",
+          "hcl.parse.expression@1"
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.invalid-escapes",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "a = \"bad \\q\"\n"
+          },
+          {
+            "source": "a = \"\\u12\"\n"
+          },
+          {
+            "source": "a = \"\\U00110000\"\n"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Recovered",
+          "Recovered"
+        ],
+        "diagnostics": [
+          "hcl.parse.invalid-escape@1",
+          "hcl.parse.invalid-escape@1",
+          "hcl.parse.invalid-escape@1"
+        ]
+      }
+    },
+    {
+      "id": "hcl.native-formation.directive-strip-markers",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = \"%{~ if x ~}yes%{ endif }\"\nb = \"%{ for k, v in m ~}${k}%{ endfor }\"\n"
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "a = \"%{~ if x ~}yes%{ endif }\"\nb = \"%{ for k, v in m ~}${k}%{ endfor }\"\n"
+      }
+    },
+    {
+      "id": "hcl.native-formation.for-key-ambiguity",
+      "capability": "hcl.native-formation@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "samples": [
+          {
+            "source": "a = { for = 1 }\n"
+          },
+          {
+            "source": "a = { (for) = 1 }\n"
+          },
+          {
+            "source": "a = { \"for\" = 1 }\n"
+          }
+        ]
+      },
+      "expected": {
+        "statuses": [
+          "Recovered",
+          "Complete",
+          "Complete"
+        ],
+        "diagnostics": [
+          "hcl.parse.expression@1",
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "hcl.limit.expression-depth",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = (((1)))\n",
+        "limits": {
+          "max_expression_depth": 3
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.expression-depth@1"
+      }
+    },
+    {
+      "id": "hcl.limit.binary-chain-depth",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = 1 + 1 + 1 + 1 + 1\n",
+        "limits": {
+          "max_expression_depth": 3
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.expression-depth@1"
+      }
+    },
+    {
+      "id": "hcl.limit.body-nesting",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = 1\nb {\nc {\nd = 1\n}\n}\n",
+        "limits": {
+          "max_body_depth": 2
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.body-depth@1"
+      }
+    },
+    {
+      "id": "hcl.limit.number-digits",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = 1e10\n",
+        "limits": {
+          "max_number_digits": 5
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.number-digits@1"
+      }
+    },
+    {
+      "id": "hcl.limit.arithmetic-overflow",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = 1e99999999999999999999\n"
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.number-digits@1"
+      }
+    },
+    {
+      "id": "hcl.limit.attribute-count",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = 1\nb = 2\nc = 3\n",
+        "limits": {
+          "max_attribute_count": 2
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.attribute-count@1"
+      }
+    },
+    {
+      "id": "hcl.limit.block-count",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a {\n}\nb {\n}\n",
+        "limits": {
+          "max_block_count": 1
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.block-count@1"
+      }
+    },
+    {
+      "id": "hcl.limit.body-item-count",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = 1\nb = 2\nc = 3\n",
+        "limits": {
+          "max_body_item_count": 2
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.body-item-count@1"
+      }
+    },
+    {
+      "id": "hcl.limit.label-count",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "b \"x\" \"y\" {\n}\n",
+        "limits": {
+          "max_label_count": 1
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.label-count@1"
+      }
+    },
+    {
+      "id": "hcl.limit.template-size",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = \"xxxxxxxxxxxxxxxxxxxxxxxxxx\"\n",
+        "limits": {
+          "max_template_len": 8
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.template-len@1"
+      }
+    },
+    {
+      "id": "hcl.limit.heredoc-size",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "h = <<E\none\ntwo\nthree\nE\n",
+        "limits": {
+          "max_heredoc_bytes": 12
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.heredoc-bytes@1"
+      }
+    },
+    {
+      "id": "hcl.limit.tuple-elements",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = [1, 2, 3]\n",
+        "limits": {
+          "max_tuple_elements": 2
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.tuple-elements@1"
+      }
+    },
+    {
+      "id": "hcl.limit.object-entries",
+      "capability": "hcl.limit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "a = {x = 1, y = 2, z = 3}\n",
+        "limits": {
+          "max_object_entries": 2
+        }
+      },
+      "expected": {
+        "status": "FatalFormationFailure",
+        "diagnostic": "hcl.limit.object-entries@1"
+      }
+    },
+    {
+      "id": "hcl.materialization.tfvars-canonical",
+      "capability": "hcl.materialization@1",
+      "input": {
+        "profile": "hcl.tfvars@1",
+        "style": "hcl.canonical-document@1",
+        "record": {
+          "record": "hcl.body@1",
+          "items": [
+            {
+              "kind": "attribute",
+              "name": "region",
+              "value": {
+                "kind": "string",
+                "text": "us-east-1"
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "count",
+              "value": {
+                "kind": "integer",
+                "value": 3
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "ratio",
+              "value": {
+                "kind": "real",
+                "value": 0.5
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "tags",
+              "value": {
+                "kind": "tuple",
+                "elements": [
+                  {
+                    "kind": "string",
+                    "text": "a"
+                  },
+                  {
+                    "kind": "string",
+                    "text": "b"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "attribute",
+              "name": "labels",
+              "value": {
+                "kind": "object",
+                "entries": [
+                  [
+                    "env",
+                    {
+                      "kind": "string",
+                      "text": "prod"
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "render": "region = \"us-east-1\"\ncount = 3\nratio = 0.5\ntags = [\n  \"a\",\n  \"b\"\n]\nlabels = {\n  env = \"prod\"\n}\n",
+        "closure": true
+      }
+    },
+    {
+      "id": "hcl.edit.dry-run-equivalence",
+      "capability": "hcl.edit@1",
+      "input": {
+        "profile": "hcl.native@1",
+        "source": "region = \"us-east-1\"\ncount = 2\nenabled = true\n",
+        "operations": [
+          {
+            "op": "hcl.edit.set-attribute-value@1",
+            "body": "root",
+            "attribute": "count",
+            "value": {
+              "kind": "integer",
+              "value": 7
+            }
+          },
+          {
+            "op": "hcl.edit.insert-attribute@1",
+            "body": "root",
+            "name": "zone",
+            "value": {
+              "kind": "string",
+              "text": "b"
+            },
+            "placement": "Last"
+          }
+        ]
+      },
+      "expected": {
+        "status": "Complete",
+        "render": "region = \"us-east-1\"\ncount = 7\nenabled = true\nzone = \"b\"\n",
+        "reparse_closure": true,
+        "dry_run_equivalent": true
+      }
+    }
+  ]
+}

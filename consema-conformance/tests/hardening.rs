@@ -590,22 +590,22 @@ fn bounded_json5_mutation_corpus_never_panics_or_fakes_completion() {
 fn real_project_json_family_fixtures_close_through_strict_json() {
     let fixtures: &[(&[u8], JsonProfile, ProjectionTarget)] = &[
         (
-            include_bytes!("../../../conformance/fixtures/real-world/package.json"),
+            include_bytes!("../../conformance/fixtures/real-world/package.json"),
             JsonProfile::StrictV1,
             ProjectionTarget::BestExactCoreV1,
         ),
         (
-            include_bytes!("../../../conformance/fixtures/real-world/tsconfig.jsonc"),
+            include_bytes!("../../conformance/fixtures/real-world/tsconfig.jsonc"),
             JsonProfile::JsoncBoundedV1,
             ProjectionTarget::BestExactCoreV1,
         ),
         (
-            include_bytes!("../../../conformance/fixtures/real-world/vscode-settings.jsonc"),
+            include_bytes!("../../conformance/fixtures/real-world/vscode-settings.jsonc"),
             JsonProfile::JsoncBoundedV1,
             ProjectionTarget::BestExactCoreV1,
         ),
         (
-            include_bytes!("../../../conformance/fixtures/real-world/application.json5"),
+            include_bytes!("../../conformance/fixtures/real-world/application.json5"),
             JsonProfile::Json5StandardV1,
             ProjectionTarget::Json5BestExactCoreV1,
         ),

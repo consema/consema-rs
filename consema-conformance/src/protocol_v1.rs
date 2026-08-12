@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Embedded language-neutral protocol suite bytes.
 pub const PROTOCOL_V1_VECTORS_JSON: &str =
-    include_str!("../../../conformance/vectors/protocol-v1.json");
+    include_str!("../../conformance/vectors/protocol-v1.json");
 
 /// Parses and runs every embedded `consema.protocol.conformance@1` case.
 #[must_use]
