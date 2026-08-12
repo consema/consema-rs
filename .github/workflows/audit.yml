@@ -46,7 +46,7 @@ concurrency:
 jobs:
   audit:
     if: github.event_name != 'pull_request'
-    name: cargo audit (RustSec advisory DB, daily + manifest push)
+    name: cargo audit (RustSec advisory DB, daily + every push)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -62,7 +62,7 @@ jobs:
 
   pr-audit:
     if: github.event_name == 'pull_request'
-    name: cargo deny check advisories (PR manifest changes)
+    name: cargo deny check advisories (every PR)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
