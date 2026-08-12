@@ -1,0 +1,4 @@
+# CODEOWNERS — consema-rs
+# 当前单一维护者；多维护者时改为 team（如 @consema/consema-rs-maintainers，
+# 需在 GitHub 组织创建 team 后启用）。
+* @franckcl1989

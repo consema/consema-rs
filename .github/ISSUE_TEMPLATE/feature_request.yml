@@ -1,0 +1,45 @@
+name: Feature request
+description: 新能力或行为变更建议
+title: "[Feature]: "
+labels: ["kind: feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        涉及契约（contract / Profile / 语义 / 兼容性）的变更必须走规范仓 RFC 流程（docs/rfcs/），本仓只承接 RFC 批准后的实现；详见[规范仓 CONTRIBUTING.md](https://github.com/consema/consema/blob/main/CONTRIBUTING.md)。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 想解决什么问题 / 现有能力缺口
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 动机
+      description: 使用场景与期望收益
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: 方案
+      description: 建议的实现 / 行为设计
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 备选方案
+      description: 考虑过的其他方案与取舍
+    validations:
+      required: false
+  - type: checkboxes
+    id: rfc
+    attributes:
+      label: RFC 需要性
+      description: 涉及契约变更的须先走规范仓 RFC 流程
+      options:
+        - label: 涉及契约 / Profile / 语义 / 兼容性变更，需要 RFC
+        - label: 不涉及契约变更（纯实现 / 工具 / 文档改进），无需 RFC

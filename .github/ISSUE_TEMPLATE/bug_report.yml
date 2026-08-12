@@ -1,0 +1,91 @@
+name: Bug report
+description: 报告缺陷（请先完成预检）
+title: "[Bug]: "
+labels: ["kind: bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先阅读[规范仓 CONTRIBUTING.md](https://github.com/consema/consema/blob/main/CONTRIBUTING.md) 的「如何报 Bug」。安全漏洞请走披露渠道，不要公开提交 issue。
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 预检
+      description: 请逐项确认后再提交
+      options:
+        - label: 已搜索过现有 issue 与 PR，确认没有重复
+          required: true
+        - label: 已阅读相关文档（本仓 README、规范仓 RFC、SECURITY.md）
+          required: true
+        - label: 确认这是 Consema 自身的问题，而非上游工具或环境问题
+          required: true
+        - label: 已尝试构造最小复现（最小输入 + 明确调用方式）
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么，与预期的差异；请注明涉及的能力契约（如 `core.source-snapshot@1`）
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      placeholder: 描述符合规范的行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      placeholder: 描述观察到的行为，包括错误输出 / 诊断 / 返回码
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 最小复现输入与调用方式
+      placeholder: |
+        1. 准备输入...
+        2. 调用...
+        3. 观察...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: |
+        - `cargo --version`、`rustc --version`（MSRV 1.85；CI 用 stable）
+        - workspace 版本（Cargo.toml `[workspace.package] version`，当前 1.0.0-rc.1）
+        - OS / 平台
+      placeholder: |
+        - cargo: ...
+        - rustc: ...
+        - version: ...
+        - OS: ...
+    validations:
+      required: false
+  - type: checkboxes
+    id: component
+    attributes:
+      label: 影响组件
+      options:
+        - label: consema-core
+        - label: consema-pvce
+        - label: consema-graph
+        - label: consema-document
+        - label: consema-json
+        - label: consema-toml
+        - label: consema-yaml
+        - label: consema-ini
+        - label: consema-properties
+        - label: consema-xml
+        - label: consema-plist
+        - label: consema-hcl
+        - label: consema-protocol
+        - label: consema-conformance
+        - label: consema（CLI facade）
+        - label: 其他
