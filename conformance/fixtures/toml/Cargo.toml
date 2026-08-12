@@ -1,0 +1,50 @@
+[workspace]
+resolver = "3"
+members = [
+    "consema-core",
+    "consema-pvce",
+    "consema-graph",
+    "consema-document",
+    "consema-json",
+    "consema-toml",
+    "consema-yaml",
+    "consema-ini",
+    "consema-properties",
+    "consema-protocol",
+    "consema-xml",
+    "consema-plist",
+    "consema-hcl",
+    "consema-conformance",
+    "consema",
+]
+
+[workspace.dependencies]
+encoding_rs = { version = "=0.8.35", default-features = false, features = ["alloc"] }
+sha2 = { version = "=0.11.0", default-features = false }
+toml_edit = { version = "=0.22.27", default-features = false, features = ["parse"] }
+saphyr-parser = { version = "=0.0.11", default-features = false }
+unicode-id-start = "=1.4.0"
+unicode-ident = "=1.0.24"
+xmlparser = { version = "=0.13.6", default-features = false }
+
+[workspace.package]
+version = "1.0.0-rc.1"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+doc_markdown = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+needless_pass_by_value = "allow"
+too_many_lines = "allow"

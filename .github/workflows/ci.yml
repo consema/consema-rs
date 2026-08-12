@@ -210,6 +210,34 @@ jobs:
   # 11 crates that already existed at v0.8.0 are checked for breaking changes
   # since the baseline; the three crates added after 0.8.0 (consema-xml/
   # plist/hcl) have no baseline and are excluded.
+  #
+  # Baseline mode: the baseline is materialized OUTSIDE the workspace root
+  # (baseline-root). A nested baseline/ inside the checkout duplicates every
+  # package manifest under the scanned root and cargo-semver-checks 0.36+
+  # refuses to run ("package X is ambiguous"); baseline-rev resets the tree
+  # in place and breaks cargo version resolution because the v0.8.0 crates
+  # declare `consema-core = { path = ..., version = "0.8.0" }` against the
+  # 1.0.0-rc.1 workspace (cargo update exit 101). The prepare step extracts
+  # the fbe98b5c tree with git archive into $RUNNER_TEMP/semver-baseline and
+  # writes the 11-member workspace root manifest (v0.8.0 workspace.package /
+  # workspace.dependencies from the monorepo v0.8.0 root Cargo.toml) plus a
+  # generated Cargo.lock, so the baseline resolves its pinned deps.
+  #
+  # Release type: with versions 0.8.0 -> 1.0.0-rc.1 the tool derives a major
+  # change, and a major change satisfies every lint's required update, so
+  # all 254 lints are filtered out and the gate runs 0 checks (verified
+  # locally: "0 checks, 254 unnecessary"). release-type: patch forces the
+  # minor/major-requiring (breaking-change) lints to run, making the gate
+  # real. Local experiment (cargo-semver-checks 0.50.0, 2026-08-12): 223
+  # checks run per crate, and three crates FAIL enum_variant_added on
+  # exhaustive enums (intentional post-0.8.0 additions when the XML/plist/
+  # HCL families landed):
+  #   - consema-core::MatchRole gained XmlErrorRegion/HclErrorRegion
+  #   - consema-document::NodeRole gained XmlErrorRegion/HclErrorRegion
+  #   - consema-json::EditFailure/ProjectionFailure gained RecoveredDocument
+  # The gate is expected to stay red until these breaking changes are
+  # dispositioned (e.g. a semver-checks.toml allowlist for the four known
+  # variants, or acceptance in the 1.0.0 API review).
   semver:
     name: cargo-semver-checks (baseline v0.8.0 crates/ tree)
     runs-on: ubuntu-latest
@@ -218,16 +246,69 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # The baseline is commit fbe98b5c in this repository (see the job
-      # comment above), compared in place via baseline-rev: the checkout
-      # above has fetch-depth: 0, so the commit is present. A nested
-      # baseline/ checkout would put the consema package in two manifests
-      # under the scanned root and cargo-semver-checks 0.36+ refuses to run;
-      # per the action's README, baseline-root is omitted when baseline-rev
-      # is used.
+      - uses: dtolnay/rust-toolchain@stable
+      # Materialize the v0.8.0 baseline outside the workspace root (see the
+      # job comment): the tree of split-history commit fbe98b5c equals the
+      # monorepo v0.8.0 crates/ tree and has no root manifest of its own.
+      - name: prepare semver baseline (fbe98b5c tree + 11-member workspace + lockfile)
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/semver-baseline"
+          mkdir -p "$baseline"
+          git archive fbe98b5cae562087832f5509f25c32dc91fdd990 | tar -x -C "$baseline"
+          cat > "$baseline/Cargo.toml" <<'EOF'
+          [workspace]
+          resolver = "3"
+          members = [
+              "consema",
+              "consema-core",
+              "consema-document",
+              "consema-graph",
+              "consema-ini",
+              "consema-json",
+              "consema-properties",
+              "consema-protocol",
+              "consema-pvce",
+              "consema-toml",
+              "consema-yaml",
+          ]
+
+          [workspace.dependencies]
+          encoding_rs = { version = "=0.8.35", default-features = false, features = ["alloc"] }
+          sha2 = { version = "=0.11.0", default-features = false }
+          toml_edit = { version = "=0.22.27", default-features = false, features = ["parse"] }
+          saphyr-parser = { version = "=0.0.11", default-features = false }
+          unicode-id-start = "=1.4.0"
+
+          [workspace.package]
+          version = "0.8.0"
+          edition = "2024"
+          rust-version = "1.85"
+          license = "MIT"
+
+          [workspace.lints.rust]
+          unsafe_code = "forbid"
+          missing_docs = "warn"
+
+          [workspace.lints.clippy]
+          all = { level = "warn", priority = -1 }
+          pedantic = { level = "warn", priority = -1 }
+          module_name_repetitions = "allow"
+          cast_possible_truncation = "allow"
+          cast_possible_wrap = "allow"
+          doc_markdown = "allow"
+          missing_errors_doc = "allow"
+          missing_panics_doc = "allow"
+          needless_pass_by_value = "allow"
+          too_many_lines = "allow"
+          EOF
+          cargo generate-lockfile --manifest-path "$baseline/Cargo.toml"
+          echo "SEMVER_BASELINE_ROOT=$baseline" >> "$GITHUB_ENV"
       - uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
-          baseline-rev: fbe98b5cae562087832f5509f25c32dc91fdd990
+          baseline-root: ${{ env.SEMVER_BASELINE_ROOT }}
+          release-type: patch
           package: >-
             consema,
             consema-core,
