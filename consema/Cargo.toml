@@ -10,6 +10,10 @@ homepage = "https://github.com/consema/consema-rs"
 documentation = "https://docs.rs/consema"
 
 [dependencies]
+# Real SIGINT/SIGTERM handling for the RFC 0015 §5.4 graceful-shutdown
+# contract (the bin itself stays `unsafe_code = forbid`; ctrlc is a safe
+# crate whose internal unsafe belongs to the dependency layer).
+ctrlc = "3.5"
 consema-core = { path = "../consema-core", version = "1.0.0-rc.1" }
 consema-document = { path = "../consema-document", version = "1.0.0-rc.1" }
 consema-graph = { path = "../consema-graph", version = "1.0.0-rc.1" }

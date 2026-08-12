@@ -298,6 +298,17 @@ pub struct RedactionFacts {
 }
 
 impl RedactionFacts {
+    /// The zero facts of an exempted output (the plan/apply manifest payload
+    /// exemption of RFC 0015 §8.3/§11.4: no matching, no replacement, and
+    /// the protocol record stays `(false, 0)`).
+    #[must_use]
+    pub const fn zero() -> Self {
+        Self {
+            count: 0,
+            keys: Vec::new(),
+        }
+    }
+
     /// Number of values replaced with the `$REDACTED$` placeholder.
     #[must_use]
     pub const fn count(&self) -> u64 {

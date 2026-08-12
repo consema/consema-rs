@@ -22,6 +22,8 @@ use consema::protocol::{
 };
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+#[cfg(unix)]
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 fn run(args: &[&str]) -> Output {
@@ -692,6 +694,109 @@ fn apply_interruption_leaves_pending_manifest_and_rerun_resumes() {
         decode_result(&std::fs::read(&result_path).expect("final manifest")),
         manifest
     );
+    assert_no_temp_residue(&dir.path);
+}
+
+#[test]
+#[cfg(unix)]
+fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
+    // P1 audit: the binary now installs a real SIGINT handler (ctrlc crate;
+    // RFC 0015 §5.4). A genuine `kill -INT` mid-batch must produce the same
+    // graceful shutdown as the env injection: exit 4, the
+    // `cli.interrupted.signal@1` stderr line, zero stdout bytes, the
+    // in-flight file pending in the on-disk manifest — and a re-run resumes
+    // to full completion.
+    //
+    // Windows has no std-only way to deliver Ctrl+C to a child process
+    // (GenerateConsoleCtrlEvent needs raw FFI, which the bin's
+    // `unsafe_code = forbid` excludes), so the subprocess signal test is
+    // Unix-only; the Windows build is verified by compilation, the
+    // env-injection suite, and the portable flag test of apply.rs.
+    let dir = TestDir::new("real-sigint");
+    let mut sources = Vec::new();
+    for index in 0..48 {
+        sources.push(write_source(&dir, &format!("{index}.conf"), source_bytes()));
+    }
+    let plan_path = plan_batch(&dir, &sources.iter().map(String::as_str).collect::<Vec<_>>());
+    let result_path = dir.join("result.json");
+    let result_spelling = result_path.to_str().expect("utf8").to_owned();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_consema"))
+        .args(["apply", &plan_path, "--output", &result_spelling])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn apply");
+    // Wait until the all-pending manifest is on disk (persisted before any
+    // target write, RFC 0015 §9.3 step 3): the signal then lands inside the
+    // per-file loop, after the handler is installed.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !result_path.exists() {
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("the pending manifest never appeared");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let pid = child.id();
+    let signaled = Command::new("sh")
+        .args(["-c", &format!("kill -INT {pid}")])
+        .output()
+        .expect("run kill -INT");
+    assert!(
+        signaled.status.success(),
+        "kill -INT failed: {}",
+        String::from_utf8_lossy(&signaled.stderr)
+    );
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("wait") {
+            break status;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("apply did not exit after SIGINT");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    assert_eq!(
+        status.code(),
+        Some(4),
+        "SIGINT must exit 4 (cli.interrupted.signal@1), not the default signal action"
+    );
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    use std::io::Read as _;
+    child
+        .stdout
+        .take()
+        .expect("stdout")
+        .read_to_string(&mut stdout)
+        .expect("read stdout");
+    child
+        .stderr
+        .take()
+        .expect("stderr")
+        .read_to_string(&mut stderr)
+        .expect("read stderr");
+    assert!(stdout.is_empty(), "interruption writes no stdout bytes: {stdout}");
+    assert!(stderr.contains("cli.interrupted.signal@1"), "{stderr}");
+    // The on-disk manifest is truthfully mid-flight: at least one file stays
+    // pending (its write never started); the re-run resumes to full
+    // completion, exit 0.
+    let manifest = decode_result(&std::fs::read(&result_path).expect("pending manifest"));
+    assert!(
+        result_statuses(&manifest).contains(&BatchResultFileStatus::Pending),
+        "the in-flight file must stay pending: {:?}",
+        result_statuses(&manifest)
+    );
+    let output = run(&["apply", &plan_path, "--output", &result_spelling]);
+    assert_eq!(status(&output), 0, "{}", stderr_text(&output));
+    let manifest = decode_result(&std::fs::read(&result_path).expect("final manifest"));
+    for entry in manifest.files() {
+        assert_eq!(entry.status(), BatchResultFileStatus::Completed);
+    }
+    for source in &sources {
+        assert_eq!(std::fs::read(source).expect("target written"), target_bytes());
+    }
     assert_no_temp_residue(&dir.path);
 }
 

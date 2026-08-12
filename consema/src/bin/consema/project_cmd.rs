@@ -20,6 +20,7 @@
 //! record.
 
 use crate::args::ParsedArgs;
+use crate::edit_cmd::redact_policy;
 use consema::core::{Diagnostic, PortableValue};
 use consema::protocol::{
     CliCommand, Completion, CompletionStatus, ErrorCodeRegistry, ExitClass, LossClassification,
@@ -201,7 +202,9 @@ fn json_target(
 pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8 {
     let request = match read_request_bytes(parsed) {
         Ok(bytes) => bytes,
-        Err(error) => return emit_failure(CliCommand::Project, parsed, &error, stdout, stderr),
+        Err(error) => {
+            return emit_failure(CliCommand::Project, parsed, &error, None, stdout, stderr);
+        }
     };
     run_with_request(parsed, &request, stdout, stderr)
 }
@@ -213,9 +216,26 @@ pub(crate) fn run_with_request(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> u8 {
+    // The presentation redaction policy of RFC 0015 §11 (an invalid
+    // `--redact-keys` pattern is a usage failure, like plan/apply/edit).
+    let policy = match redact_policy(parsed) {
+        Ok(policy) => policy,
+        Err(error) => {
+            return emit_failure(CliCommand::Project, parsed, &error, None, stdout, stderr);
+        }
+    };
     let input = match decode_request(request, parsed, "core.projection-request@1") {
         Ok(input) => input,
-        Err(error) => return emit_failure(CliCommand::Project, parsed, &error, stdout, stderr),
+        Err(error) => {
+            return emit_failure(
+                CliCommand::Project,
+                parsed,
+                &error,
+                Some(&policy),
+                stdout,
+                stderr,
+            );
+        }
     };
     match execute_project(&input) {
         Ok(result) => {
@@ -226,6 +246,7 @@ pub(crate) fn run_with_request(
                     result.to_value(),
                     Vec::new(),
                     parsed,
+                    Some(&policy),
                     stdout,
                 ) {
                     Ok(()) => ExitClass::Success.exit_code(),
@@ -241,7 +262,9 @@ pub(crate) fn run_with_request(
                 }
             }
         }
-        Err(error) => emit_failure(CliCommand::Project, parsed, &error, stdout, stderr),
+        Err(error) => {
+            emit_failure(CliCommand::Project, parsed, &error, Some(&policy), stdout, stderr)
+        }
     }
 }
 

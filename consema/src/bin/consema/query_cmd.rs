@@ -44,6 +44,8 @@
 //! `classify_error_code` (RFC 0015 §5.2) — the bin never invents classes.
 
 use crate::args::ParsedArgs;
+use crate::edit_cmd::redact_policy;
+use crate::redact::{RedactPolicy, redact_text, redact_value};
 use consema::core::{
     BigInteger, CancellationToken, CapabilityId, CapabilitySet, Diagnostic, DiagnosticCategory,
     DiagnosticSeverity, ObjectBuilder, PortableValue, QueryDefinition, QueryDomain, QueryFailure,
@@ -52,7 +54,7 @@ use consema::core::{
 use consema::document::{FatalFormationFailure, FormationStatus, ParseLimits, ProfileId};
 use consema::protocol::{
     CliCommand, CliOutputMessage, Completion, CompletionStatus, DiagnosticMessage,
-    ErrorCodeRegistry, ExitClass, ProtocolError, ProtocolLimits, QueryResultMessage, Redaction,
+    ErrorCodeRegistry, ExitClass, ProtocolError, ProtocolLimits, QueryResultMessage,
     classify_error_code, decode_json, decode_pvce,
 };
 use std::fmt::Write as FmtWrite;
@@ -962,12 +964,22 @@ pub(crate) fn published_record(value: &PortableValue) -> Option<&'static str> {
 /// `--json` this writes nothing and returns success, so envelope-class
 /// failure paths leave stdout at zero bytes while stderr keeps the human
 /// diagnostic and the caller keeps the classified exit code.
+///
+/// Presentation redaction (RFC 0015 §11.1/§11.3): with a `Some(policy)` the
+/// payload is redacted through [`crate::redact::redact_value`] and the
+/// envelope's `redaction` facts are built from the real replacement count
+/// (`redacted == (count > 0)` by construction); `--show-secrets` disables
+/// matching inside the policy (RFC 0015 §11.4). With `None` the payload is
+/// emitted untouched with zero redaction facts — the plan/apply manifest
+/// payload exemption of RFC 0015 §8.3/§11.4 (their records and files are
+/// never redacted).
 pub(crate) fn emit_envelope(
     command: CliCommand,
     exit_class: ExitClass,
     payload: PortableValue,
     diagnostics: Vec<DiagnosticMessage>,
     parsed: &ParsedArgs,
+    redaction: Option<&RedactPolicy>,
     stdout: &mut dyn Write,
 ) -> Result<(), String> {
     if !parsed.json {
@@ -976,13 +988,20 @@ pub(crate) fn emit_envelope(
         // is never written in human mode.
         return Ok(());
     }
+    let (payload, facts) = match redaction {
+        Some(policy) => {
+            let (payload, facts) = redact_value(policy, &payload);
+            (payload, facts)
+        }
+        None => (payload, crate::redact::RedactionFacts::zero()),
+    };
     let envelope = CliOutputMessage::new(
         command,
         exit_class,
         crate::PRODUCT_VERSION,
         payload,
         diagnostics,
-        Redaction::new(false, 0).expect("redaction invariant redacted == (count > 0)"),
+        facts.protocol(),
     )
     .map_err(|error| format!("{} envelope construction failed: {error}", command.name()))?;
     crate::output::emit_envelope(&envelope, parsed.pretty, stdout)
@@ -1018,6 +1037,7 @@ pub(crate) fn emit_failure(
     command: CliCommand,
     parsed: &ParsedArgs,
     error: &FlowError,
+    redaction: Option<&RedactPolicy>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> u8 {
@@ -1041,6 +1061,7 @@ pub(crate) fn emit_failure(
         payload,
         error.diagnostics.clone(),
         parsed,
+        redaction,
         stdout,
     ) {
         Ok(()) => error.exit_code(),
@@ -1062,7 +1083,7 @@ pub(crate) fn internal_failure(command: &str, message: &str, stderr: &mut dyn Wr
 pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8 {
     let request = match read_request_bytes(parsed) {
         Ok(bytes) => bytes,
-        Err(error) => return emit_failure(CliCommand::Query, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Query, parsed, &error, None, stdout, stderr),
     };
     run_with_request(parsed, &request, stdout, stderr)
 }
@@ -1075,9 +1096,19 @@ pub(crate) fn run_with_request(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> u8 {
+    // The presentation redaction policy of RFC 0015 §11 (an invalid
+    // `--redact-keys` pattern is a usage failure, like plan/apply/edit).
+    let policy = match redact_policy(parsed) {
+        Ok(policy) => policy,
+        Err(error) => {
+            return emit_failure(CliCommand::Query, parsed, &error, None, stdout, stderr);
+        }
+    };
     let input = match decode_request(request, parsed, "core.query-definition@1") {
         Ok(input) => input,
-        Err(error) => return emit_failure(CliCommand::Query, parsed, &error, stdout, stderr),
+        Err(error) => {
+            return emit_failure(CliCommand::Query, parsed, &error, Some(&policy), stdout, stderr);
+        }
     };
     match execute_query(&input) {
         Ok(result) => {
@@ -1088,19 +1119,20 @@ pub(crate) fn run_with_request(
                     result.to_value(),
                     Vec::new(),
                     parsed,
+                    Some(&policy),
                     stdout,
                 ) {
                     Ok(()) => ExitClass::Success.exit_code(),
                     Err(message) => internal_failure("query", &message, stderr),
                 }
             } else {
-                match write_query_report(&result, stdout) {
+                match write_query_report(&result, &policy, stdout) {
                     Ok(()) => ExitClass::Success.exit_code(),
                     Err(message) => internal_failure("query", &message, stderr),
                 }
             }
         }
-        Err(error) => emit_failure(CliCommand::Query, parsed, &error, stdout, stderr),
+        Err(error) => emit_failure(CliCommand::Query, parsed, &error, Some(&policy), stdout, stderr),
     }
 }
 
@@ -1195,7 +1227,19 @@ fn failed_query_result(code: &str) -> Option<PortableValue> {
 
 /// Deterministic human query report (same facade result as the machine
 /// payload; RFC 0015 §2.1 human/machine draw from the same call).
-fn write_query_report(result: &QueryResultMessage, stdout: &mut dyn Write) -> Result<(), String> {
+///
+/// Presentation redaction (RFC 0015 §11.1): the value of every match whose
+/// key name matches the policy is replaced by [`crate::redact::PLACEHOLDER`]
+/// via [`crate::redact::redact_text`]; `--show-secrets` disables matching.
+/// For value matches the candidate key is the last object-key path segment
+/// (a value matched through `$.password` redacts under `password`); matches
+/// without a key name (sequence elements, native locators) are never
+/// redacted.
+fn write_query_report(
+    result: &QueryResultMessage,
+    policy: &RedactPolicy,
+    stdout: &mut dyn Write,
+) -> Result<(), String> {
     let matches = result.matches();
     if matches.is_empty() {
         return writeln!(stdout, "no matches").map_err(io_message);
@@ -1204,11 +1248,15 @@ fn write_query_report(result: &QueryResultMessage, stdout: &mut dyn Write) -> Re
         let line = match item {
             consema::protocol::ProtocolQueryMatch::Portable(
                 consema::core::PortableMatch::Value { path, value },
-            ) => format!(
-                "match {index}: {} = {}",
-                render_path(path),
-                render_value(value)
-            ),
+            ) => {
+                let rendered = match value_key(path) {
+                    Some(key) => redact_text(policy, &key, &render_value(value))
+                        .text()
+                        .to_owned(),
+                    None => render_value(value),
+                };
+                format!("match {index}: {} = {rendered}", render_path(path))
+            }
             consema::protocol::ProtocolQueryMatch::Portable(
                 consema::core::PortableMatch::ObjectEntry {
                     key,
@@ -1219,7 +1267,7 @@ fn write_query_report(result: &QueryResultMessage, stdout: &mut dyn Write) -> Re
             ) => format!(
                 "match {index}: {} (key {key}) = {}",
                 render_path(value_path),
-                render_value(value)
+                redact_text(policy, key, &render_value(value)).text()
             ),
             consema::protocol::ProtocolQueryMatch::Portable(
                 consema::core::PortableMatch::EntryMappingEntry {
@@ -1228,11 +1276,18 @@ fn write_query_report(result: &QueryResultMessage, stdout: &mut dyn Write) -> Re
                     value,
                     ..
                 },
-            ) => format!(
-                "match {index}: {} (key {key:?}) = {}",
-                render_path(value_path),
-                render_value(value)
-            ),
+            ) => {
+                let rendered = match key.as_string() {
+                    Some(key) => redact_text(policy, key, &render_value(value))
+                        .text()
+                        .to_owned(),
+                    None => render_value(value),
+                };
+                format!(
+                    "match {index}: {} (key {key:?}) = {rendered}",
+                    render_path(value_path)
+                )
+            }
             consema::protocol::ProtocolQueryMatch::Native(locator) => format!(
                 "match {index}: native {} {}",
                 locator.node_locator(),
@@ -1242,6 +1297,16 @@ fn write_query_report(result: &QueryResultMessage, stdout: &mut dyn Write) -> Re
         writeln!(stdout, "{line}").map_err(io_message)?;
     }
     Ok(())
+}
+
+/// The candidate redaction key of one value match: the last object-key path
+/// segment (the key whose value the match carries), `None` when the path
+/// ends in a sequence or entry-mapping segment.
+fn value_key(path: &ValuePath) -> Option<String> {
+    match path.segments().last() {
+        Some(ValuePathSegment::ObjectValue(key)) => Some(key.clone()),
+        _ => None,
+    }
 }
 
 fn render_role(role: consema::core::MatchRole) -> &'static str {
@@ -1379,7 +1444,7 @@ fn io_message(error: std::io::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use consema::protocol::{ProtocolQueryMatch, encode_json};
+    use consema::protocol::{ProtocolQueryMatch, Redaction, encode_json};
 
     fn parse(args: &[&str]) -> ParsedArgs {
         crate::args::parse_args(&args.iter().map(ToString::to_string).collect::<Vec<_>>())
@@ -1451,6 +1516,28 @@ mod tests {
             .insert("kind", PortableValue::string("Input"))
             .expect("unique");
         input.build()
+    }
+
+    /// `Input.then(core.try-object-entries)`: one ObjectEntry match per
+    /// object entry, in source order.
+    fn object_entries_expression() -> PortableValue {
+        let mut operator = ObjectBuilder::new();
+        operator
+            .insert("id", PortableValue::string("core.try-object-entries"))
+            .expect("unique");
+        operator
+            .insert("version", PortableValue::integer(BigInteger::from(1)))
+            .expect("unique");
+        operator
+            .insert("arguments", ObjectBuilder::new().build())
+            .expect("unique");
+        let mut apply = ObjectBuilder::new();
+        apply
+            .insert("kind", PortableValue::string("Apply"))
+            .expect("unique");
+        apply.insert("input", input_expression()).expect("unique");
+        apply.insert("operator", operator.build()).expect("unique");
+        apply.build()
     }
 
     fn sequence_elements_expression() -> PortableValue {
@@ -1604,6 +1691,102 @@ mod tests {
             })
             .collect();
         assert_eq!(keys, vec!["a".to_owned(), "b".to_owned()]);
+    }
+
+    #[test]
+    fn query_json_redacts_matching_key_values_and_show_secrets_recovers() {
+        // RFC 0015 §11.1/§11.3 (P1 audit): machine output redacts values
+        // under matching key names — the payload carries `$REDACTED$` and the
+        // envelope's redaction facts are real (`redacted == (count > 0)`);
+        // `--show-secrets` is the sole opt-out and restores the plaintext
+        // with zero facts (RFC 0015 §11.4).
+        //
+        // The bare Input expression carries the whole document object as the
+        // match value, so the source's key names survive in the payload tree
+        // and the envelope redaction (redact_value) reaches them; a match
+        // whose source key exists only as the record's `key` string is not a
+        // tree key and is never redacted (redact.rs:534 values-that-look-
+        // like-key-names guard).
+        let request = request_json(
+            "7b2270617373776f7264223a2268756e74657232222c22686f7374223a2264622e696e7465726e616c227d",
+            input_expression(),
+        );
+        let (code, stdout, stderr) =
+            run_request(&["query", "--profile", "json.strict", "--json"], &request);
+        assert_eq!(code, 0, "{}", stderr_text(&stderr));
+        let limits = ProtocolLimits::default();
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], limits).expect("envelope");
+        assert!(envelope.redaction().redacted());
+        assert_eq!(envelope.redaction().count(), 1);
+        // The payload is still a byte-valid `core.query-result@1` record; the
+        // password entry of the match value is the placeholder, the host
+        // entry is intact.
+        let result = QueryResultMessage::from_value(envelope.payload()).expect("query-result");
+        let object = match &result.matches()[0] {
+            ProtocolQueryMatch::Portable(consema::core::PortableMatch::Value {
+                value,
+                ..
+            }) => value.as_object().expect("the whole document object"),
+            other => panic!("unexpected match {other:?}"),
+        };
+        assert_eq!(object[0].key(), "password");
+        assert_eq!(object[0].value().as_string(), Some(crate::redact::PLACEHOLDER));
+        assert_eq!(object[1].key(), "host");
+        assert_eq!(object[1].value().as_string(), Some("db.internal"));
+        // --show-secrets restores the plaintext and zeroes the facts.
+        let (code, stdout, _) = run_request(
+            &[
+                "query",
+                "--profile",
+                "json.strict",
+                "--json",
+                "--show-secrets",
+            ],
+            &request,
+        );
+        assert_eq!(code, 0);
+        let envelope =
+            CliOutputMessage::from_json(&stdout[..stdout.len() - 1], limits).expect("envelope");
+        assert!(!envelope.redaction().redacted());
+        assert_eq!(envelope.redaction().count(), 0);
+        let result = QueryResultMessage::from_value(envelope.payload()).expect("query-result");
+        let object = match &result.matches()[0] {
+            ProtocolQueryMatch::Portable(consema::core::PortableMatch::Value {
+                value,
+                ..
+            }) => value.as_object().expect("the whole document object"),
+            other => panic!("unexpected match {other:?}"),
+        };
+        assert_eq!(
+            object[0].value().as_string(),
+            Some("hunter2"),
+            "the password value is revealed"
+        );
+    }
+
+    #[test]
+    fn query_human_report_redacts_matching_key_values() {
+        // RFC 0015 §11.1: the human report redacts the value of every match
+        // whose key name matches, via redact_text; --show-secrets reveals.
+        let request = request_json(
+            "7b2270617373776f7264223a2268756e74657232222c22686f7374223a2264622e696e7465726e616c227d",
+            object_entries_expression(),
+        );
+        let (code, stdout, stderr) =
+            run_request(&["query", "--profile", "json.strict"], &request);
+        assert_eq!(code, 0, "{}", stderr_text(&stderr));
+        let text = String::from_utf8_lossy(&stdout);
+        assert!(text.contains(crate::redact::PLACEHOLDER), "{text}");
+        assert!(!text.contains("hunter2"), "the secret value is hidden: {text}");
+        assert!(text.contains("db.internal"), "non-matching values stay: {text}");
+        // --show-secrets is the sole opt-out.
+        let (code, stdout, _) =
+            run_request(&["query", "--profile", "json.strict", "--show-secrets"], &request);
+        assert_eq!(code, 0);
+        let text = String::from_utf8_lossy(&stdout);
+        assert!(text.contains("hunter2"), "{text}");
+        assert!(!text.contains(crate::redact::PLACEHOLDER), "{text}");
     }
 
     #[test]

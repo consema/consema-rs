@@ -61,11 +61,11 @@ const DEFAULT_MAX_FILES: u64 = 1000;
 pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8 {
     let policy = match redact_policy(parsed) {
         Ok(policy) => policy,
-        Err(error) => return emit_failure(CliCommand::Plan, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr),
     };
     let request = match read_request_bytes(parsed) {
         Ok(bytes) => bytes,
-        Err(error) => return emit_failure(CliCommand::Plan, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr),
     };
     run_with_request(parsed, &request, &policy, stdout, stderr)
 }
@@ -81,7 +81,7 @@ pub(crate) fn run_with_request(
 ) -> u8 {
     let input = match decode_edit_request(request, parsed) {
         Ok(input) => input,
-        Err(error) => return emit_failure(CliCommand::Plan, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr),
     };
     let cap = parsed.max_files.unwrap_or(DEFAULT_MAX_FILES);
     if u64::try_from(parsed.positionals.len()).expect("usize fits u64") > cap {
@@ -92,7 +92,7 @@ pub(crate) fn run_with_request(
                 parsed.positionals.len()
             ),
         );
-        return emit_failure(CliCommand::Plan, parsed, &error, stdout, stderr);
+        return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr);
     }
     let mut entries: Vec<BatchPlanFileEntry> = Vec::new();
     let mut render_items: Vec<PlanRenderItem> = Vec::new();
@@ -108,7 +108,7 @@ pub(crate) fn run_with_request(
                 let entry = match failed_entry(path, &failure) {
                     Ok(entry) => entry,
                     Err(error) => {
-                        return emit_failure(CliCommand::Plan, parsed, &error, stdout, stderr);
+                        return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr);
                     }
                 };
                 entries.push(entry);
@@ -124,7 +124,7 @@ pub(crate) fn run_with_request(
         let entry = match planned_entry(path, &outcome.plan) {
             Ok(entry) => entry,
             Err(error) => {
-                return emit_failure(CliCommand::Plan, parsed, &error, stdout, stderr);
+                return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr);
             }
         };
         render_items.push(plan_render_item(&input, &entry, policy));
@@ -145,11 +145,11 @@ pub(crate) fn run_with_request(
     // same record without envelope wrapping; byte-identical).
     let bytes = match manifest::encode_manifest(&manifest) {
         Ok(bytes) => bytes,
-        Err(error) => return emit_failure(CliCommand::Plan, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr),
     };
     if let Some(path) = &parsed.output {
         if let Err(error) = manifest::persist_manifest(path, &bytes) {
-            return emit_failure(CliCommand::Plan, parsed, &error, stdout, stderr);
+            return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr);
         }
     }
     let value = match manifest.to_value() {
@@ -169,6 +169,10 @@ pub(crate) fn run_with_request(
             value,
             Vec::new(),
             parsed,
+            // RFC 0015 §8.3/§11.4: the plan manifest payload is exempt from
+            // presentation redaction (the record and the --output file are
+            // byte-identical and never redacted).
+            None,
             stdout,
         ) {
             Ok(()) => ExitClass::Success.exit_code(),
@@ -502,6 +506,7 @@ mod tests {
             CliCommand::Plan,
             &parsed,
             &error,
+            None,
             &mut stdout,
             &mut stderr,
         );

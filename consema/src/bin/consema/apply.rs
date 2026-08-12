@@ -47,14 +47,18 @@
 //!
 //! # Interruption (RFC 0015 §5.4/§9.4)
 //!
-//! The binary is std-only with `unsafe_code = forbid` (workspace lint), so a
-//! real OS signal handler cannot be installed; the graceful-shutdown
-//! sequence is therefore reachable through the **documented injection point**
-//! `CONSEMA_APPLY_INTERRUPT_AFTER=<n>` (0-based file index), which fires at
-//! the exact code point a SIGINT/SIGTERM would be handled: after the pending
-//! manifest of file `n` is persisted (step 3) and before its target write
-//! (step 4). The sequence writes no further bytes to stdout (RFC 0015 §4.2:
-//! interruption never produces an envelope), emits
+//! A real OS signal handler (SIGINT/SIGTERM on Unix, Ctrl+C on Windows) is
+//! installed at process start through the `ctrlc` crate (`main.rs`; the bin
+//! itself keeps `unsafe_code = forbid` — the crate's internal unsafe belongs
+//! to the dependency layer). While the state machine runs, the handler only
+//! sets an interruption flag ([`crate::ApplyActiveGuard`]); the state
+//! machine polls it at the exact code point: after the pending manifest of
+//! the in-flight file is persisted (step 3) and before its target write
+//! (step 4). The documented injection point
+//! `CONSEMA_APPLY_INTERRUPT_AFTER=<n>` (0-based file index) remains and
+//! fires at the same code point, deterministically, for tests and embedded
+//! callers without OS signals. The sequence writes no further bytes to
+//! stdout (RFC 0015 §4.2: interruption never produces an envelope), emits
 //! `cli.interrupted.signal@1` on stderr, and exits 4, leaving the in-flight
 //! file pending in the on-disk manifest. The shell-convention code 130 is
 //! not adopted (RFC 0015 §5.4; §17).
@@ -122,7 +126,7 @@ const WRITE_FAILURE_ENV: &str = "CONSEMA_APPLY_WRITE_FAILURE";
 pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8 {
     let policy = match redact_policy(parsed) {
         Ok(policy) => policy,
-        Err(error) => return emit_failure(CliCommand::Apply, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Apply, parsed, &error, None, stdout, stderr),
     };
     let plan_path = &parsed.positionals[0];
     let cap = parsed
@@ -130,11 +134,11 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
         .unwrap_or_else(|| u64::try_from(ProtocolLimits::default().max_bytes).expect("fits u64"));
     let plan_bytes = match read_plan_file(plan_path, cap) {
         Ok(bytes) => bytes,
-        Err(error) => return emit_failure(CliCommand::Apply, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Apply, parsed, &error, None, stdout, stderr),
     };
     let plan = match manifest::decode_plan_manifest(&plan_bytes) {
         Ok(plan) => plan,
-        Err(error) => return emit_failure(CliCommand::Apply, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Apply, parsed, &error, None, stdout, stderr),
     };
     let file_cap = parsed.max_files.unwrap_or(DEFAULT_MAX_FILES);
     if u64::try_from(plan.files().len()).expect("usize fits u64") > file_cap {
@@ -145,7 +149,7 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
                 plan.files().len()
             ),
         );
-        return emit_failure(CliCommand::Apply, parsed, &error, stdout, stderr);
+        return emit_failure(CliCommand::Apply, parsed, &error, None, stdout, stderr);
     }
     let result_path = parsed
         .output
@@ -154,7 +158,7 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
     let injections = Injections::from_env();
     let outcome = match run_batch(&plan, &result_path, cap, &policy, &injections, stderr) {
         Ok(outcome) => outcome,
-        Err(error) => return emit_failure(CliCommand::Apply, parsed, &error, stdout, stderr),
+        Err(error) => return emit_failure(CliCommand::Apply, parsed, &error, None, stdout, stderr),
     };
     if outcome.interrupted {
         // RFC 0015 §5.4/§4.2: after interruption stdout receives no further
@@ -175,7 +179,7 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
     let message = match result_message(&outcome.entries) {
         Ok(message) => message,
         Err(error) => {
-            return emit_failure(CliCommand::Apply, parsed, &error, stdout, stderr);
+            return emit_failure(CliCommand::Apply, parsed, &error, None, stdout, stderr);
         }
     };
     if parsed.json {
@@ -185,6 +189,10 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
             message.to_value(),
             Vec::new(),
             parsed,
+            // RFC 0015 §8.3/§11.4: the result-manifest payload is exempt
+            // from presentation redaction (the record and the --output file
+            // are byte-identical and never redacted).
+            None,
             stdout,
         ) {
             Ok(()) => exit_class.exit_code(),
@@ -282,6 +290,10 @@ fn run_batch(
     injections: &Injections,
     stderr: &mut dyn Write,
 ) -> Result<BatchOutcome, FlowError> {
+    // RFC 0015 §5.4: while the state machine runs, the OS signal handler
+    // defers the graceful shutdown to the interruption code point below
+    // (Go apply_cmd.go applyActive mirror).
+    let _active = crate::ApplyActiveGuard::begin();
     let mut entries: Vec<EntryState> = plan
         .files()
         .iter()
@@ -389,10 +401,12 @@ fn run_batch(
         entries[index].failure_code = None;
         entries[index].target_digest = None;
         persist_entries(&entries, result_path)?;
-        // The documented interruption injection point: SIGINT/SIGTERM would
-        // be handled exactly here, after the pending manifest and before the
-        // write (RFC 0015 §5.4; the graceful-shutdown sequence).
-        if injections.interrupt_after == Some(index) {
+        // The interruption code point: a real SIGINT/SIGTERM (the flag set
+        // by the `ctrlc` handler of main.rs, which defers to the state
+        // machine while it runs) or the documented env injection seam fires
+        // exactly here, after the pending manifest and before the write
+        // (RFC 0015 §5.4; the graceful-shutdown sequence).
+        if injections.interrupt_after == Some(index) || crate::interrupt_requested() {
             let _ = writeln!(
                 stderr,
                 "consema: error: apply: interrupted by SIGINT/SIGTERM: the result \
@@ -663,8 +677,15 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Mutex;
 
     static NEXT_TEST_DIR: AtomicU64 = AtomicU64::new(0);
+
+    /// Serializes every machine test that runs the state machine: the real
+    /// signal-flag test mutates the process-global `INTERRUPT_REQUESTED`, so
+    /// no other `run_batch` may poll it concurrently (parallel cargo test
+    /// threads would consume the flag mid-run and interrupt the wrong test).
+    static MACHINE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     struct TestDir {
         path: PathBuf,
@@ -763,6 +784,7 @@ mod tests {
         dir: &TestDir,
         injections: Injections,
     ) -> (BatchOutcome, Vec<u8>, Vec<u8>) {
+        let _guard = MACHINE_TEST_LOCK.lock().expect("test lock");
         let result_path = dir.join("result.json");
         let mut stderr = Vec::new();
         let outcome = run_batch(
@@ -981,6 +1003,60 @@ mod tests {
             );
         }
         assert_eq!(std::fs::read(&b).expect("b written"), target_bytes());
+    }
+
+    #[test]
+    fn machine_real_signal_flag_fires_the_interruption_sequence() {
+        // P1 audit: a real SIGINT/SIGTERM sets the handler flag of main.rs
+        // (`INTERRUPT_REQUESTED`), which the state machine polls at the same
+        // code point as the env injection — setting the flag mid-batch must
+        // produce the identical graceful-shutdown outcome (pending manifest
+        // on disk, interrupted outcome, no write of the in-flight file).
+        //
+        // The lock serializes against every other machine test: the flag is
+        // process-global, so a parallel `run_batch` could otherwise consume
+        // it mid-run.
+        let _guard = MACHINE_TEST_LOCK.lock().expect("test lock");
+        let dir = TestDir::new("signal-flag");
+        let a = write_source(&dir, "a.conf", source_bytes());
+        let b = write_source(&dir, "b.conf", source_bytes());
+        let plan = plan_of(vec![planned_entry(&a, false), planned_entry(&b, false)]);
+        let result_path = dir.join("result.json");
+        let mut stderr = Vec::new();
+        crate::INTERRUPT_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
+        let outcome = run_batch(
+            &plan,
+            &result_path.to_string_lossy(),
+            u64::try_from(ProtocolLimits::default().max_bytes).expect("fits"),
+            &RedactPolicy::conservative(),
+            &Injections::default(),
+            &mut stderr,
+        )
+        .unwrap_or_else(|error| panic!("machine failed: {}", error.message));
+        crate::INTERRUPT_REQUESTED.store(false, std::sync::atomic::Ordering::SeqCst);
+        let manifest = std::fs::read(&result_path).expect("result manifest");
+        assert!(outcome.interrupted, "the signal flag defers to the state machine");
+        let text = String::from_utf8_lossy(&stderr);
+        assert!(text.contains("cli.interrupted.signal@1"), "{text}");
+        // The flag fires at the very first interruption code point: file 0 is
+        // the in-flight file (pending before its write), so no target write
+        // happened at all — both sources stay untouched.
+        let decoded = decode_result(&manifest);
+        assert_eq!(decoded.files()[0].status(), BatchResultFileStatus::Pending);
+        assert_eq!(decoded.files()[1].status(), BatchResultFileStatus::Pending);
+        assert_eq!(std::fs::read(&a).expect("a untouched"), source_bytes());
+        assert_eq!(std::fs::read(&b).expect("b untouched"), source_bytes());
+        // The flag is consumed by the poll: a re-run without a new signal
+        // completes normally (Go pollInterrupt channel-receive parity).
+        // The lock is released first: run_machine re-acquires it.
+        drop(_guard);
+        let (outcome, manifest, stderr) = run_machine(&plan, &dir, Injections::default());
+        assert!(!outcome.interrupted);
+        assert!(stderr.is_empty());
+        let decoded = decode_result(&manifest);
+        for entry in decoded.files() {
+            assert_eq!(entry.status(), BatchResultFileStatus::Completed);
+        }
     }
 
     #[test]

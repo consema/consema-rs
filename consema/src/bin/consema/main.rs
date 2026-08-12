@@ -1,20 +1,30 @@
 //! The official `consema` CLI binary.
 //!
 //! Entry point, command dispatch, exit-code wiring, and stdout/stderr
-//! separation. The binary is std-only and sits inside the facade crate, so
-//! it can reach format semantics only through the facade public API (hard
-//! gate 1 of RFC 0015 §2.3; implementation plan §0.3). All 11 formal
-//! commands are wired (milestones M3-M8); `consema conformance` lives in
-//! `conformance_cmd.rs` (milestone M9): the embedded self-check subset of
-//! RFC 0015 §16.4, with the full language-neutral
-//! `consema.cli.conformance@1` suite staying repository-level
-//! (`cargo test -p consema-conformance`).
+//! separation. The binary sits inside the facade crate, so it can reach
+//! format semantics only through the facade public API (hard gate 1 of RFC
+//! 0015 §2.3; implementation plan §0.3). All 11 formal commands are wired
+//! (milestones M3-M8); `consema conformance` lives in `conformance_cmd.rs`
+//! (milestone M9): the embedded self-check subset of RFC 0015 §16.4, with
+//! the full language-neutral `consema.cli.conformance@1` suite staying
+//! repository-level (`cargo test -p consema-conformance`).
 //!
 //! Exit-code wiring: every error path maps through
 //! `protocol::classify_error_code` (RFC 0015 §5); the process exits with
 //! the classified code, never a hand-picked number. Under `--json`, stdout
 //! carries exactly one line of canonical `core.cli-output@1` envelope and
 //! nothing else; all diagnostics and progress go to stderr (RFC 0015 §3.3).
+//!
+//! Interruption (RFC 0015 §5.4): SIGINT/SIGTERM (Unix) and Ctrl+C (Windows)
+//! trigger graceful shutdown through the `ctrlc` crate's real OS handler
+//! (the bin itself keeps `unsafe_code = forbid`; the crate's internal unsafe
+//! belongs to the dependency layer). The apply command's state machine
+//! handles the signal at the exact code point (after the pending manifest,
+//! before the target write) through the documented
+//! `CONSEMA_APPLY_INTERRUPT_AFTER` injection seam and the real handler; all
+//! other commands exit 4 with `cli.interrupted.signal@1` on stderr and no
+//! further stdout bytes (RFC 0015 §4.2: interruption never produces an
+//! envelope).
 
 mod apply;
 mod args;
@@ -46,12 +56,85 @@ use args::ParseError;
 use consema::protocol::{CliCommand, ExitClass, classify_error_code};
 use std::ffi::OsString;
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The release product version string (RFC 0015 §3.3: the workspace version,
 /// without git hashes or build metadata).
 const PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// The frozen interruption code of RFC 0015 §13.1 (Go main.go mirror).
+const INTERRUPTED_CODE: &str = "cli.interrupted.signal@1";
+
+/// Whether a SIGINT/SIGTERM was delivered (RFC 0015 §5.4; Go `main.go`
+/// mirror): the apply state machine polls this at the interruption code
+/// point (after the pending manifest, before the target write); every other
+/// command has no state to preserve, so the handler writes the interruption
+/// diagnostic on stderr and exits 4 without further stdout bytes (RFC 0015
+/// §4.2: interruption never produces an envelope).
+static INTERRUPT_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the apply state machine is running (set by [`ApplyActiveGuard`]):
+/// while it is, the handler defers the graceful shutdown to the state
+/// machine so the pending manifest is written first (RFC 0015 §9.3 step 3).
+static APPLY_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Installs the real OS signal handler (SIGINT/SIGTERM on Unix, Ctrl+C on
+/// Windows) through the `ctrlc` crate — the RFC 0015 §5.4 graceful-shutdown
+/// contract, now honored with real signals instead of the std-only claim
+/// (audit P1). The `ctrlc` handler runs on a dedicated thread, so the stderr
+/// write and `process::exit` in the handler are safe. A failed installation
+/// (e.g. the embedding process already set a handler) leaves the default OS
+/// action; the documented `CONSEMA_APPLY_INTERRUPT_AFTER` injection seam
+/// stays as the deterministic fallback for tests and embedded callers.
+fn install_signal_handler() {
+    let _ = ctrlc::set_handler(|| {
+        INTERRUPT_REQUESTED.store(true, Ordering::SeqCst);
+        if !APPLY_ACTIVE.load(Ordering::SeqCst) {
+            // Go main.go:138-139: the apply state machine owns the graceful
+            // shutdown; every other command exits 4 immediately.
+            let _ = writeln!(
+                std::io::stderr(),
+                "consema: error: interrupted by SIGINT/SIGTERM (code {INTERRUPTED_CODE})"
+            );
+            std::process::exit(i32::from(
+                classify_error_code(INTERRUPTED_CODE).exit_code(),
+            ));
+        }
+    });
+}
+
+/// Whether a signal was requested at the interruption code point (RFC 0015
+/// §5.4); the apply state machine checks it after the pending manifest and
+/// before the target write (Go `pollInterrupt` mirror). The flag is
+/// consumed by the poll, like the Go channel receive.
+#[must_use]
+pub(crate) fn interrupt_requested() -> bool {
+    INTERRUPT_REQUESTED.swap(false, Ordering::SeqCst)
+}
+
+/// Marks the apply state machine as active while alive (Go `applyActive`
+/// mirror): the signal handler defers the graceful shutdown to the state
+/// machine during an apply run, so the pending manifest is persisted before
+/// the exit.
+pub(crate) struct ApplyActiveGuard;
+
+impl ApplyActiveGuard {
+    /// Begins the apply-active region.
+    #[must_use]
+    pub(crate) fn begin() -> Self {
+        APPLY_ACTIVE.store(true, Ordering::SeqCst);
+        Self
+    }
+}
+
+impl Drop for ApplyActiveGuard {
+    fn drop(&mut self) {
+        APPLY_ACTIVE.store(false, Ordering::SeqCst);
+    }
+}
+
 fn main() {
+    install_signal_handler();
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let exit_code = match collect_args(std::env::args_os().skip(1)) {
