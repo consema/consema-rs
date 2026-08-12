@@ -24,8 +24,7 @@ const TRIVIA_AND_STRINGS: &[u8] =
     include_bytes!("../../conformance/fixtures/toml/trivia-and-strings.toml");
 const INVALID_DUPLICATE: &[u8] =
     include_bytes!("../../conformance/fixtures/toml/invalid-duplicate.toml");
-const CARGO_MANIFEST: &[u8] =
-    include_bytes!("../../conformance/fixtures/toml/Cargo.toml");
+const CARGO_MANIFEST: &[u8] = include_bytes!("../../conformance/fixtures/toml/Cargo.toml");
 const PYPROJECT: &[u8] = include_bytes!("../../conformance/fixtures/toml/pyproject.toml");
 
 /// Parses and runs every embedded `consema.toml.conformance@1` case.
