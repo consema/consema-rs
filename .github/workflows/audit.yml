@@ -1,0 +1,63 @@
+# Dependency audit, dual-track (schedule/push + PR). The standing security
+# gate in ci.yml (deny + audit jobs) runs on every push/PR; this workflow
+# adds the two tracks that ci.yml cannot express:
+#
+#   - audit: daily cron (03:37 UTC, non-standard minute to spread load) plus
+#     push to main when Cargo.toml/Cargo.lock change. Same no-fetch RustSec
+#     check as the ci.yml audit job (rustsec/audit-check pins the advisory
+#     database through the action instead of letting cargo-audit fetch it).
+#   - pr-audit: pull requests touching Cargo.toml/Cargo.lock run the same
+#     cargo-deny advisories command as the ci.yml deny job (the PR path uses
+#     advisories only; the full bans/licenses/sources gate stays in ci.yml).
+#
+# Both jobs keep the exact gates of ci.yml so the scheduled, push and PR
+# paths share one bar. No repository secrets are required (automatic
+# GITHUB_TOKEN only; the audit job needs checks: write because
+# rustsec/audit-check posts a check run, identical to the ci.yml audit job).
+name: Dependency audit
+
+on:
+  schedule:
+    - cron: '37 3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    if: github.event_name != 'pull_request'
+    name: cargo audit (RustSec advisory DB, daily + manifest push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-audit:
+    if: github.event_name == 'pull_request'
+    name: cargo deny check advisories (PR manifest changes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: embarkstudios/cargo-deny-action@v2
+        with:
+          command: check
+          command-arguments: advisories

@@ -1,0 +1,17 @@
+# Dependabot version updates: cargo ecosystem at the workspace root
+# (Cargo.lock is committed). Weekly cadence, at most 5 open PRs, minor and
+# patch updates grouped into a single PR per week. Update PRs run the full
+# CI gate (ci.yml) plus the path-filtered dependency audit (audit.yml).
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
