@@ -676,8 +676,8 @@ mod tests {
     use consema::protocol::{EditOperationSummaryMessage, ErrorCodeRegistry};
     use std::collections::BTreeMap;
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_TEST_DIR: AtomicU64 = AtomicU64::new(0);
 
@@ -1035,7 +1035,10 @@ mod tests {
         .unwrap_or_else(|error| panic!("machine failed: {}", error.message));
         crate::INTERRUPT_REQUESTED.store(false, std::sync::atomic::Ordering::SeqCst);
         let manifest = std::fs::read(&result_path).expect("result manifest");
-        assert!(outcome.interrupted, "the signal flag defers to the state machine");
+        assert!(
+            outcome.interrupted,
+            "the signal flag defers to the state machine"
+        );
         let text = String::from_utf8_lossy(&stderr);
         assert!(text.contains("cli.interrupted.signal@1"), "{text}");
         // The flag fires at the very first interruption code point: file 0 is

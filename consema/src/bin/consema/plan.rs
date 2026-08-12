@@ -108,7 +108,14 @@ pub(crate) fn run_with_request(
                 let entry = match failed_entry(path, &failure) {
                     Ok(entry) => entry,
                     Err(error) => {
-                        return emit_failure(CliCommand::Plan, parsed, &error, None, stdout, stderr);
+                        return emit_failure(
+                            CliCommand::Plan,
+                            parsed,
+                            &error,
+                            None,
+                            stdout,
+                            stderr,
+                        );
                     }
                 };
                 entries.push(entry);

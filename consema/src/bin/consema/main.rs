@@ -96,9 +96,7 @@ fn install_signal_handler() {
                 std::io::stderr(),
                 "consema: error: interrupted by SIGINT/SIGTERM (code {INTERRUPTED_CODE})"
             );
-            std::process::exit(i32::from(
-                classify_error_code(INTERRUPTED_CODE).exit_code(),
-            ));
+            std::process::exit(i32::from(classify_error_code(INTERRUPTED_CODE).exit_code()));
         }
     });
 }

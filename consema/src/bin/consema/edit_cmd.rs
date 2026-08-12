@@ -1040,7 +1040,14 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
     let request = match read_request_bytes(parsed) {
         Ok(bytes) => bytes,
         Err(error) => {
-            return emit_failure(CliCommand::Edit, parsed, &error, Some(&policy), stdout, stderr);
+            return emit_failure(
+                CliCommand::Edit,
+                parsed,
+                &error,
+                Some(&policy),
+                stdout,
+                stderr,
+            );
         }
     };
     run_with_request(parsed, &request, &policy, stdout, stderr)
@@ -1065,7 +1072,14 @@ pub(crate) fn run_with_request(
             "flag '--write' is not available in this build: edit is dry-run only \
              (the commit path lands with fsio in milestone M8)",
         );
-        return emit_failure(CliCommand::Edit, parsed, &error, Some(policy), stdout, stderr);
+        return emit_failure(
+            CliCommand::Edit,
+            parsed,
+            &error,
+            Some(policy),
+            stdout,
+            stderr,
+        );
     }
     if parsed.output.is_some() {
         let error = FlowError::usage(
@@ -1073,12 +1087,26 @@ pub(crate) fn run_with_request(
             "flag '--output' is not available for edit: the dry-run result is \
              emitted to stdout only",
         );
-        return emit_failure(CliCommand::Edit, parsed, &error, Some(policy), stdout, stderr);
+        return emit_failure(
+            CliCommand::Edit,
+            parsed,
+            &error,
+            Some(policy),
+            stdout,
+            stderr,
+        );
     }
     let input = match decode_edit_request(request, parsed) {
         Ok(input) => input,
         Err(error) => {
-            return emit_failure(CliCommand::Edit, parsed, &error, Some(policy), stdout, stderr);
+            return emit_failure(
+                CliCommand::Edit,
+                parsed,
+                &error,
+                Some(policy),
+                stdout,
+                stderr,
+            );
         }
     };
     let path = &parsed.positionals[0];

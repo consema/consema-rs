@@ -262,9 +262,14 @@ pub(crate) fn run_with_request(
                 }
             }
         }
-        Err(error) => {
-            emit_failure(CliCommand::Project, parsed, &error, Some(&policy), stdout, stderr)
-        }
+        Err(error) => emit_failure(
+            CliCommand::Project,
+            parsed,
+            &error,
+            Some(&policy),
+            stdout,
+            stderr,
+        ),
     }
 }
 

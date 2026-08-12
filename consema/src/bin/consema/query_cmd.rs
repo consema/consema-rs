@@ -1107,7 +1107,14 @@ pub(crate) fn run_with_request(
     let input = match decode_request(request, parsed, "core.query-definition@1") {
         Ok(input) => input,
         Err(error) => {
-            return emit_failure(CliCommand::Query, parsed, &error, Some(&policy), stdout, stderr);
+            return emit_failure(
+                CliCommand::Query,
+                parsed,
+                &error,
+                Some(&policy),
+                stdout,
+                stderr,
+            );
         }
     };
     match execute_query(&input) {
@@ -1132,7 +1139,14 @@ pub(crate) fn run_with_request(
                 }
             }
         }
-        Err(error) => emit_failure(CliCommand::Query, parsed, &error, Some(&policy), stdout, stderr),
+        Err(error) => emit_failure(
+            CliCommand::Query,
+            parsed,
+            &error,
+            Some(&policy),
+            stdout,
+            stderr,
+        ),
     }
 }
 
@@ -1724,14 +1738,16 @@ mod tests {
         // entry is intact.
         let result = QueryResultMessage::from_value(envelope.payload()).expect("query-result");
         let object = match &result.matches()[0] {
-            ProtocolQueryMatch::Portable(consema::core::PortableMatch::Value {
-                value,
-                ..
-            }) => value.as_object().expect("the whole document object"),
+            ProtocolQueryMatch::Portable(consema::core::PortableMatch::Value { value, .. }) => {
+                value.as_object().expect("the whole document object")
+            }
             other => panic!("unexpected match {other:?}"),
         };
         assert_eq!(object[0].key(), "password");
-        assert_eq!(object[0].value().as_string(), Some(crate::redact::PLACEHOLDER));
+        assert_eq!(
+            object[0].value().as_string(),
+            Some(crate::redact::PLACEHOLDER)
+        );
         assert_eq!(object[1].key(), "host");
         assert_eq!(object[1].value().as_string(), Some("db.internal"));
         // --show-secrets restores the plaintext and zeroes the facts.
@@ -1752,10 +1768,9 @@ mod tests {
         assert_eq!(envelope.redaction().count(), 0);
         let result = QueryResultMessage::from_value(envelope.payload()).expect("query-result");
         let object = match &result.matches()[0] {
-            ProtocolQueryMatch::Portable(consema::core::PortableMatch::Value {
-                value,
-                ..
-            }) => value.as_object().expect("the whole document object"),
+            ProtocolQueryMatch::Portable(consema::core::PortableMatch::Value { value, .. }) => {
+                value.as_object().expect("the whole document object")
+            }
             other => panic!("unexpected match {other:?}"),
         };
         assert_eq!(
@@ -1773,16 +1788,23 @@ mod tests {
             "7b2270617373776f7264223a2268756e74657232222c22686f7374223a2264622e696e7465726e616c227d",
             object_entries_expression(),
         );
-        let (code, stdout, stderr) =
-            run_request(&["query", "--profile", "json.strict"], &request);
+        let (code, stdout, stderr) = run_request(&["query", "--profile", "json.strict"], &request);
         assert_eq!(code, 0, "{}", stderr_text(&stderr));
         let text = String::from_utf8_lossy(&stdout);
         assert!(text.contains(crate::redact::PLACEHOLDER), "{text}");
-        assert!(!text.contains("hunter2"), "the secret value is hidden: {text}");
-        assert!(text.contains("db.internal"), "non-matching values stay: {text}");
+        assert!(
+            !text.contains("hunter2"),
+            "the secret value is hidden: {text}"
+        );
+        assert!(
+            text.contains("db.internal"),
+            "non-matching values stay: {text}"
+        );
         // --show-secrets is the sole opt-out.
-        let (code, stdout, _) =
-            run_request(&["query", "--profile", "json.strict", "--show-secrets"], &request);
+        let (code, stdout, _) = run_request(
+            &["query", "--profile", "json.strict", "--show-secrets"],
+            &request,
+        );
         assert_eq!(code, 0);
         let text = String::from_utf8_lossy(&stdout);
         assert!(text.contains("hunter2"), "{text}");

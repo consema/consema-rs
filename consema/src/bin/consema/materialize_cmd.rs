@@ -42,12 +42,26 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
             "flag '--output' is not available in this build: materialize writes only to stdout \
              (file writing lands with fsio in milestone M6)",
         );
-        return emit_failure(CliCommand::Materialize, parsed, &error, None, stdout, stderr);
+        return emit_failure(
+            CliCommand::Materialize,
+            parsed,
+            &error,
+            None,
+            stdout,
+            stderr,
+        );
     }
     let request = match read_request_bytes(parsed) {
         Ok(bytes) => bytes,
         Err(error) => {
-            return emit_failure(CliCommand::Materialize, parsed, &error, None, stdout, stderr);
+            return emit_failure(
+                CliCommand::Materialize,
+                parsed,
+                &error,
+                None,
+                stdout,
+                stderr,
+            );
         }
     };
     run_with_request(parsed, &request, stdout, stderr)
@@ -66,14 +80,28 @@ pub(crate) fn run_with_request(
             "flag '--output' is not available in this build: materialize writes only to stdout \
              (file writing lands with fsio in milestone M6)",
         );
-        return emit_failure(CliCommand::Materialize, parsed, &error, None, stdout, stderr);
+        return emit_failure(
+            CliCommand::Materialize,
+            parsed,
+            &error,
+            None,
+            stdout,
+            stderr,
+        );
     }
     // The presentation redaction policy of RFC 0015 §11 (an invalid
     // `--redact-keys` pattern is a usage failure, like plan/apply/edit).
     let policy = match redact_policy(parsed) {
         Ok(policy) => policy,
         Err(error) => {
-            return emit_failure(CliCommand::Materialize, parsed, &error, None, stdout, stderr);
+            return emit_failure(
+                CliCommand::Materialize,
+                parsed,
+                &error,
+                None,
+                stdout,
+                stderr,
+            );
         }
     };
     let input = match decode_request(request, parsed, "core.materialization-request@2") {
@@ -111,16 +139,14 @@ pub(crate) fn run_with_request(
                 }
             }
         }
-        Err(error) => {
-            emit_failure(
-                CliCommand::Materialize,
-                parsed,
-                &error,
-                Some(&policy),
-                stdout,
-                stderr,
-            )
-        }
+        Err(error) => emit_failure(
+            CliCommand::Materialize,
+            parsed,
+            &error,
+            Some(&policy),
+            stdout,
+            stderr,
+        ),
     }
 }
 

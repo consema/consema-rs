@@ -21,9 +21,9 @@ use consema::protocol::{
     ExitClass, ProtocolLimits,
 };
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
 #[cfg(unix)]
 use std::process::Stdio;
+use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 fn run(args: &[&str]) -> Output {
@@ -717,7 +717,10 @@ fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
     for index in 0..48 {
         sources.push(write_source(&dir, &format!("{index}.conf"), source_bytes()));
     }
-    let plan_path = plan_batch(&dir, &sources.iter().map(String::as_str).collect::<Vec<_>>());
+    let plan_path = plan_batch(
+        &dir,
+        &sources.iter().map(String::as_str).collect::<Vec<_>>(),
+    );
     let result_path = dir.join("result.json");
     let result_spelling = result_path.to_str().expect("utf8").to_owned();
     let mut child = Command::new(env!("CARGO_BIN_EXE_consema"))
@@ -747,9 +750,11 @@ fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
         "kill -INT failed: {}",
         String::from_utf8_lossy(&signaled.stderr)
     );
-    let status = loop {
-        if let Some(status) = child.try_wait().expect("wait") {
-            break status;
+    // Note: the local binding is not named `status` — the file-level helper
+    // `status(&Output)` must stay reachable for the resume assertion below.
+    let exit_status = loop {
+        if let Some(exit_status) = child.try_wait().expect("wait") {
+            break exit_status;
         }
         if std::time::Instant::now() > deadline {
             let _ = child.kill();
@@ -758,7 +763,7 @@ fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     };
     assert_eq!(
-        status.code(),
+        exit_status.code(),
         Some(4),
         "SIGINT must exit 4 (cli.interrupted.signal@1), not the default signal action"
     );
@@ -777,7 +782,10 @@ fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
         .expect("stderr")
         .read_to_string(&mut stderr)
         .expect("read stderr");
-    assert!(stdout.is_empty(), "interruption writes no stdout bytes: {stdout}");
+    assert!(
+        stdout.is_empty(),
+        "interruption writes no stdout bytes: {stdout}"
+    );
     assert!(stderr.contains("cli.interrupted.signal@1"), "{stderr}");
     // The on-disk manifest is truthfully mid-flight: at least one file stays
     // pending (its write never started); the re-run resumes to full
@@ -795,7 +803,10 @@ fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
         assert_eq!(entry.status(), BatchResultFileStatus::Completed);
     }
     for source in &sources {
-        assert_eq!(std::fs::read(source).expect("target written"), target_bytes());
+        assert_eq!(
+            std::fs::read(source).expect("target written"),
+            target_bytes()
+        );
     }
     assert_no_temp_residue(&dir.path);
 }
