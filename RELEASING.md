@@ -22,9 +22,8 @@ consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的�
    强制两者一致，bump 漏改 README 会让 CI 红）。
 2. **CHANGELOG 策展**：在仓库 CHANGELOG（若有）记录本版本变更；跨语言变更
    同步到 consema 仓库 `docs/CHANGELOG.md`（组织纪律见 consema 仓 RELEASING.md）。
-3. **质量门禁全绿**：main 分支 CI `check (all gates green)` 必须通过
-   （lint/test/coverage/msrv/conformance/deny/audit/semver/package/
-   check-version-consistency；其中 `package` job 已常设证明 14 个发布归档
+3. **质量门禁全绿**：main 分支 CI `check (all gates green)` 全绿
+   （清单见各仓 ci 配置；其中 `package` job 已常设证明 14 个发布归档
    可从干净环境重建，发布前无需重复打包）。
 4. **打 tag 并推送**（发布动作的唯一触发点；语义版本号规范见
    consema 仓 RELEASING.md）：
@@ -32,8 +31,10 @@ consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的�
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
-   推送后 `.github/workflows/release.yml` 自动发布；**不要**在 tag 之外手动
-   执行 cargo publish（除非处置失败重试）。
+   推送后 `.github/workflows/release.yml` 自动发布；发布 workflow 首先校验
+   tag↔版本一致（tag 去掉 `v` 前缀必须等于 Cargo.toml
+   `[workspace.package] version`，不一致即 exit 1 中止），校验通过才进入
+   发布步骤；**不要**在 tag 之外手动执行 cargo publish（除非处置失败重试）。
 
 ## 2. 凭证配置（用户侧一次性动作）
 
