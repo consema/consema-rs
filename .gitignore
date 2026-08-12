@@ -1,4 +1,5 @@
 /target/
+/semver-checks/
 *.pyc
 __pycache__/
 .venv/

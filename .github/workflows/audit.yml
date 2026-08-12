@@ -1,14 +1,21 @@
 # Dependency audit, dual-track (schedule/push + PR). The standing security
 # gate in ci.yml (deny + audit jobs) runs on every push/PR; this workflow
-# adds the two tracks that ci.yml cannot express:
+# adds the tracks that ci.yml cannot express:
 #
 #   - audit: daily cron (03:37 UTC, non-standard minute to spread load) plus
-#     push to main when Cargo.toml/Cargo.lock change. Same no-fetch RustSec
-#     check as the ci.yml audit job (rustsec/audit-check pins the advisory
-#     database through the action instead of letting cargo-audit fetch it).
-#   - pr-audit: pull requests touching Cargo.toml/Cargo.lock run the same
-#     cargo-deny advisories command as the ci.yml deny job (the PR path uses
-#     advisories only; the full bans/licenses/sources gate stays in ci.yml).
+#     every push to main (unconditional — no path filter). Same no-fetch
+#     RustSec check as the ci.yml audit job (rustsec/audit-check pins the
+#     advisory database through the action instead of letting cargo-audit
+#     fetch it).
+#   - pr-audit: every pull request runs the same cargo-deny advisories
+#     command as the ci.yml deny job (the PR path uses advisories only; the
+#     full bans/licenses/sources gate stays in ci.yml).
+#
+# The push/PR tracks used to be path-filtered to Cargo.toml/Cargo.lock
+# changes; the filters are gone so this workflow is a constantly-running
+# check that branch protection can require. The cost is acceptable: the
+# workspace has a small dependency surface (8 direct dependencies) and a
+# cargo-audit run is ~1 minute.
 #
 # Both jobs keep the exact gates of ci.yml so the scheduled, push and PR
 # paths share one bar. No repository secrets are required (automatic
@@ -30,13 +37,7 @@ on:
     - cron: '37 3 * * *'
   push:
     branches: [main]
-    paths:
-      - Cargo.toml
-      - Cargo.lock
   pull_request:
-    paths:
-      - Cargo.toml
-      - Cargo.lock
 
 concurrency:
   group: audit-${{ github.ref }}
