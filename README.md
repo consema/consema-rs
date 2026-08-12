@@ -7,6 +7,9 @@ materialization 与结构编辑）的 **Rust 参考实现**。
 conformance suites）在 [github.com/consema/consema](https://github.com/consema/consema)；
 本仓只承载 Rust 实现与编译期嵌入的 conformance 数据。
 
+Workspace version: 1.0.0-rc.1（`Cargo.toml` `[workspace.package] version`；CI
+check-version-consistency job 断言与 README 一致）。
+
 ## Workspace（15 crates）
 
 - `consema-core`：PortableValue、诊断、Capability 和类型化查询协议；
