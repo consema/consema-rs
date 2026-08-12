@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Portable values and common protocols for Consema"
+repository = "https://github.com/consema/consema-rs"
+homepage = "https://github.com/consema/consema-rs"
+documentation = "https://docs.rs/consema-core"
 
 [lints]
 workspace = true

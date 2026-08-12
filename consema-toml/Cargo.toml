@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Lossless TOML 1.0 implementation for Consema"
+repository = "https://github.com/consema/consema-rs"
+homepage = "https://github.com/consema/consema-rs"
+documentation = "https://docs.rs/consema-toml"
 
 [dependencies]
 consema-core = { path = "../consema-core", version = "1.0.0-rc.1" }

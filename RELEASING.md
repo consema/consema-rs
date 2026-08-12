@@ -1,0 +1,92 @@
+# Consema Rust 发布流程（crates.io）
+
+本文件是 consema-rs 仓库的发布操作手册（六仓统一纪律见 consema 仓库根
+`RELEASING.md`；发布供应链的签名/SBOM/checksum 流程见
+consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的：
+版本 bump、CHANGELOG、tag 由人完成；tag 推送后 `.github/workflows/release.yml`
+自动把 14 个可发布 crate 按依赖序发布到 crates.io。
+
+- 14 个可发布 crate：`consema-core` `consema-document` `consema-graph`
+  `consema-pvce` `consema-json` `consema-toml` `consema-yaml` `consema-ini`
+  `consema-properties` `consema-xml` `consema-plist` `consema-hcl`
+  `consema-protocol` `consema`（`consema-conformance` 为 `publish = false`，
+  只进仓库不打进发布归档，与 verify-package-archives.ps1 语义一致）。
+- 发布顺序即依赖拓扑序（core → document → graph → pvce → json → toml →
+  yaml → ini → properties → xml → plist → hcl → protocol → consema），
+  workflow 中任一 crate 失败即中止，人工处置后重推 tag（或手动补发剩余 crate）。
+
+## 1. 发布步骤（人执行的部分）
+
+1. **版本 bump**：改根 `Cargo.toml` `[workspace.package] version`，同时改
+   `README.md` 的 `Workspace version:` 行（`check-version-consistency` 门禁
+   强制两者一致，bump 漏改 README 会让 CI 红）。
+2. **CHANGELOG 策展**：在仓库 CHANGELOG（若有）记录本版本变更；跨语言变更
+   同步到 consema 仓库 `docs/CHANGELOG.md`（组织纪律见 consema 仓 RELEASING.md）。
+3. **质量门禁全绿**：main 分支 CI `check (all gates green)` 必须通过
+   （lint/test/coverage/msrv/conformance/deny/audit/semver/package/
+   check-version-consistency；其中 `package` job 已常设证明 14 个发布归档
+   可从干净环境重建，发布前无需重复打包）。
+4. **打 tag 并推送**（发布动作的唯一触发点；语义版本号规范见
+   consema 仓 RELEASING.md）：
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+   推送后 `.github/workflows/release.yml` 自动发布；**不要**在 tag 之外手动
+   执行 cargo publish（除非处置失败重试）。
+
+## 2. 凭证配置（用户侧一次性动作）
+
+crates.io **trusted publishing**（OIDC）于 2025-07 GA（RFC #3691），
+是本仓库的推荐路径：无长期 token，GitHub Actions 的 `id-token: write`
+交换 30 分钟短期 publish token，workflow 结束自动吊销。`release.yml`
+已按该机制编写（`rust-lang/crates-io-auth-action@v1`）。
+
+### 2.1 首次发布（必须手动，一次即可）
+
+crates.io 要求 crate 先存在才能挂 trusted publisher，因此 14 个 crate 的
+**第一次**发布必须手动：
+
+```bash
+# 需要本机 crates.io API token（账号 → Account settings → API tokens）
+cargo login
+# 按依赖序逐个发布（--locked 与 CI 一致）
+cargo publish --locked -p consema-core
+# …依序发布其余 13 个 crate
+```
+
+手动首发的替代方案：在 GitHub 仓库 Settings → Secrets and variables →
+Actions 配置 `CARGO_REGISTRY_TOKEN`（crates.io API token），直接推 tag 让
+workflow 用 fallback 路径发布；发布成功后建议删除该 secret，切换 trusted
+publishing。
+
+### 2.2 配置 trusted publisher（每个 crate 一次）
+
+1. 登录 crates.io，进入每个 crate 的 Settings → Trusted Publishers →
+   Add GitHub trusted publisher：
+   - **Repository owner/name**：`consema/consema-rs`（区分大小写）
+   - **Workflow file name**：`release.yml`（必须与本文件精确一致；
+     `pull_request_target` / `workflow_run` 触发不被支持）
+   - Environment 留空（workflow 未声明 environment）
+2. 全部 14 个 crate 配置完后，可删除 `CARGO_REGISTRY_TOKEN` secret，
+   并在 crate 设置启用 "Trusted Publishing Only"。
+3. 验证：推送 tag 后，workflow 的 OIDC 交换步骤应成功（不产生
+   `continue-on-error` 警告），后续 `cargo publish` 步骤用
+   `steps.auth.outputs.token`。
+
+### 2.3 回退路径（trusted publishing 未配置时）
+
+`release.yml` 的每个 publish 步骤读
+`CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}`：
+OIDC 交换未配置时自动回退到仓库 secret。两路凭证都缺失时发布步骤明确失败
+（cargo 401/403），不会静默跳过。
+
+## 3. 发布后核对
+
+1. crates.io 各 crate 页面确认版本可见（14 个 crate 逐个）。
+2. GitHub Actions 中 release workflow 全部步骤成功。
+3. docs.rs 构建（crates.io 自动触发）成功后，crate 页 documentation 链接
+   生效（每个 crate 的 Cargo.toml 已声明
+   `documentation = https://docs.rs/<crate>`）。
+4. 跨语言同步：按 consema 仓 RELEASING.md 的检查单核对其他语言仓的发布
+   状态（版本同步发布为 P1 记录，1.0.0 首发时做最终决策）。

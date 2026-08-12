@@ -1,0 +1,105 @@
+# Consema Rust release: tag-triggered publishing of the 14 publishable
+# crates to crates.io, in dependency order (top-tier bar: 半自动发布,
+# pydantic precedent; crates.io trusted publishing GA 2025-07, RFC #3691).
+#
+# Credentials, primary path — crates.io trusted publishing (OIDC):
+#   - The rust-lang/crates-io-auth-action exchanges the GitHub OIDC token
+#     for a short-lived crates.io token (30 min, auto-revoked).
+#   - User-side one-time setup per crate (see RELEASING.md §凭证配置):
+#     crates.io → crate settings → Trusted Publishers, with
+#     repository = consema/consema-rs and workflow file = release.yml
+#     (the file name must match exactly; pull_request_target/workflow_run
+#     triggers are not supported for trusted publishing).
+#   - crates.io requires the first publication of a crate to be manual
+#     (cargo login + cargo publish, or a one-off token), because the crate
+#     must already exist before a trusted publisher can be attached.
+#
+# Fallback path: if the trusted publisher is not configured yet, the
+# workflow falls back to the CARGO_REGISTRY_TOKEN repository secret
+# (set it in Settings → Secrets and variables → Actions; see RELEASING.md).
+# Either path ends in plain `cargo publish --locked -p <crate>`; the
+# 14-crate order is the topological dependency order
+# (core → document → graph → pvce → json → toml → yaml → ini → properties
+# → xml → plist → hcl → protocol → consema), publishing stops at the first
+# failure (no retry, no best-effort).
+name: Release to crates.io
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: cargo publish (14 crates, dependency order)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: exchange OIDC token for a short-lived crates.io token (trusted publishing)
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+        # Not configured yet (or first manual publication): fall back to the
+        # CARGO_REGISTRY_TOKEN secret. The publish steps fail clearly if
+        # neither path has credentials.
+        continue-on-error: true
+      - name: cargo publish consema-core
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-core
+      - name: cargo publish consema-document
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-document
+      - name: cargo publish consema-graph
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-graph
+      - name: cargo publish consema-pvce
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-pvce
+      - name: cargo publish consema-json
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-json
+      - name: cargo publish consema-toml
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-toml
+      - name: cargo publish consema-yaml
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-yaml
+      - name: cargo publish consema-ini
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-ini
+      - name: cargo publish consema-properties
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-properties
+      - name: cargo publish consema-xml
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-xml
+      - name: cargo publish consema-plist
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-plist
+      - name: cargo publish consema-hcl
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-hcl
+      - name: cargo publish consema-protocol
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema-protocol
+      - name: cargo publish consema
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p consema
