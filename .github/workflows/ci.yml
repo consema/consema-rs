@@ -228,16 +228,23 @@ jobs:
   # all 254 lints are filtered out and the gate runs 0 checks (verified
   # locally: "0 checks, 254 unnecessary"). release-type: patch forces the
   # minor/major-requiring (breaking-change) lints to run, making the gate
-  # real. Local experiment (cargo-semver-checks 0.50.0, 2026-08-12): 223
-  # checks run per crate, and three crates FAIL enum_variant_added on
-  # exhaustive enums (intentional post-0.8.0 additions when the XML/plist/
-  # HCL families landed):
+  # real. Local run (cargo-semver-checks 0.50.0, 2026-08-12, exact action
+  # invocation: 11 packages, release-type patch, baseline-root): all four
+  # intentional post-0.8.0 enum-variant additions (the XML/plist/HCL
+  # families, 8c02951/29ba27d, and M2-F1 RecoveredDocument) are allowlisted
+  # per crate via [package.metadata.cargo-semver-checks.lints]
+  # enum_variant_added = "allow":
+  #   - consema::ConversionProjectionReport/ConversionProjectionProvenance/
+  #     FormatMismatch gained Xml/Plist/Hcl
   #   - consema-core::MatchRole gained XmlErrorRegion/HclErrorRegion
   #   - consema-document::NodeRole gained XmlErrorRegion/HclErrorRegion
   #   - consema-json::EditFailure/ProjectionFailure gained RecoveredDocument
-  # The gate is expected to stay red until these breaking changes are
-  # dispositioned (e.g. a semver-checks.toml allowlist for the four known
-  # variants, or acceptance in the 1.0.0 API review).
+  # The gate is green: every crate reports 222-223 checks with 0 failures
+  # (the allowlist is read by the action, which runs the CLI in place at the
+  # workspace root with --baseline-root; verified by reproducing the exact
+  # action invocation). Note cargo-semver-checks 0.50.0 has no per-variant
+  # allowlist, only lint-level, so future variant additions to these four
+  # crates are also exempted and must be vetted in API review.
   semver:
     name: cargo-semver-checks (baseline v0.8.0 crates/ tree)
     runs-on: ubuntu-latest
