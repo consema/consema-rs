@@ -841,4 +841,95 @@ name = "two"
             document.lossless_structural_index().pieces().len()
         );
     }
+
+    // The parse-error classification matrix (parser.rs): every syntax
+    // error is Fatal with the frozen `toml.parse.syntax@1` code and its
+    // `parser_reason` argument; no syntax error ever forms a Recovered
+    // document or a partial native model. The resource limits stay a
+    // distinct fatal class (`core.parse.resource-limit@1` with the stable
+    // `name` argument) and source construction failures a third class
+    // (`core.source.*@1`).
+    #[test]
+    fn syntax_error_matrix_is_always_fatal_never_recovered() {
+        let cases: &[&[u8]] = &[
+            b"key",                        // bare token with no `=`
+            b"= 1",                        // missing key
+            b"key = ",                     // missing value
+            b"key = \"unterminated",       // unterminated basic string
+            b"key = 'unterminated",        // unterminated literal string
+            b"key = 1 2",                  // trailing value on one line
+            b"key = [1, 2",                // unclosed array
+            b"key = {x = 1",               // unclosed inline table
+            b"[table",                     // unclosed table header
+            b"[[a]",                       // unclosed array-of-tables header
+            b"a = 01",                     // leading zero integer
+            b"a = 1__0",                   // repeated underscore
+            b"a = 1_",                     // trailing underscore
+            b"a = 0x",                     // empty hex integer
+            b"a = 0b2",                    // invalid binary digit
+            b"a = \"\\u{110000}\"",        // out-of-range escape
+            b"a = \"\\q\"",                // unknown escape
+            b"a = \"x\x01y\"",             // control character in string
+            b"a = truefalse",              // bare token in value position
+            b"a = 2020-13-01",             // invalid calendar month
+            b"a = 1\na = 2",               // duplicate key
+            b"[a]\n[a]",                   // duplicate table
+            b"a.b = 1\na = 2",             // dotted redefinition
+        ];
+        for source in cases {
+            let error = parse(
+                *source,
+                TomlProfile::Toml10V1,
+                ParseLimits::default(),
+            )
+            .expect_err("syntax error must fail atomically");
+            assert_eq!(
+                error.diagnostics()[0].code, "toml.parse.syntax@1",
+                "{source:?}: {:?}",
+                error.diagnostics()
+            );
+            assert!(
+                error.diagnostics()[0].arguments.contains_key("parser_reason"),
+                "{source:?}: the syntax failure must carry parser_reason"
+            );
+        }
+    }
+
+    #[test]
+    fn resource_limits_stay_a_distinct_fatal_class() {
+        let limits = ParseLimits {
+            max_source_bytes: 3,
+            ..ParseLimits::default()
+        };
+        let error = parse(b"x = 1".as_slice(), TomlProfile::Toml10V1, limits)
+            .expect_err("source limit");
+        assert_eq!(error.diagnostics()[0].code, "core.parse.resource-limit@1");
+        assert_eq!(error.diagnostics()[0].arguments["name"], "source_bytes");
+
+        let limits = ParseLimits {
+            max_token_count: 3,
+            ..ParseLimits::default()
+        };
+        let error = parse(b"x = 1".as_slice(), TomlProfile::Toml10V1, limits)
+            .expect_err("token limit");
+        assert_eq!(error.diagnostics()[0].code, "core.parse.resource-limit@1");
+        assert_eq!(error.diagnostics()[0].arguments["name"], "token_count");
+
+        let limits = ParseLimits {
+            max_nesting_depth: 2,
+            ..ParseLimits::default()
+        };
+        let error = parse(b"value = [[[[[".as_slice(), TomlProfile::Toml10V1, limits)
+            .expect_err("preflight nesting limit");
+        assert_eq!(error.diagnostics()[0].code, "core.parse.resource-limit@1");
+        assert_eq!(error.diagnostics()[0].arguments["name"], "nesting_depth");
+
+        let error = parse(
+            &b"x = \xFF"[..],
+            TomlProfile::Toml10V1,
+            ParseLimits::default(),
+        )
+        .expect_err("invalid UTF-8");
+        assert_eq!(error.diagnostics()[0].code, "core.source.invalid-utf8@1");
+    }
 }
