@@ -1016,7 +1016,7 @@ mod tests {
         // The lock serializes against every other machine test: the flag is
         // process-global, so a parallel `run_batch` could otherwise consume
         // it mid-run.
-        let _guard = MACHINE_TEST_LOCK.lock().expect("test lock");
+        let guard = MACHINE_TEST_LOCK.lock().expect("test lock");
         let dir = TestDir::new("signal-flag");
         let a = write_source(&dir, "a.conf", source_bytes());
         let b = write_source(&dir, "b.conf", source_bytes());
@@ -1049,7 +1049,7 @@ mod tests {
         // The flag is consumed by the poll: a re-run without a new signal
         // completes normally (Go pollInterrupt channel-receive parity).
         // The lock is released first: run_machine re-acquires it.
-        drop(_guard);
+        drop(guard);
         let (outcome, manifest, stderr) = run_machine(&plan, &dir, Injections::default());
         assert!(!outcome.interrupted);
         assert!(stderr.is_empty());
