@@ -1,0 +1,33 @@
+# PR label gate (viper checks.yaml pattern): every pull request must carry
+# at least one `kind:` label (kind: bug / kind: feature / kind: docs / kind:
+# chore / kind: release — the taxonomy is documented in .github/LABELS.md)
+# before it can be merged. The workflow re-evaluates on every label change
+# and on new commits, so adding a label flips the check green without a
+# rebase. Only the automatic GITHUB_TOKEN is used; pull-requests: read is
+# enough to read the PR labels (no comment posting).
+name: PR Labels
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  require-kind-label:
+    name: "Require a kind: label"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: "Check minimum labels (at least one kind: label)"
+        uses: mheap/github-action-required-labels@23e10fde7e062233401931a0eece796cd9bf3177 # v5.6.0
+        with:
+          mode: minimum
+          count: 1
+          labels: |
+            kind: bug
+            kind: feature
+            kind: docs
+            kind: chore
+            kind: release
