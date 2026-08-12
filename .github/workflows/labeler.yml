@@ -1,0 +1,28 @@
+# Auto-label pull requests from changed-file paths (actions/labeler, tokio
+# labeler pattern). Adds the path-derived `area:` taxonomy (area: core /
+# area: ci / area: docs, documented in .github/LABELS.md); the mandatory
+# `kind:` labels stay human/PR-template driven and are enforced by
+# pr-labels.yml. sync-labels: true keeps the area: labels truthful when a
+# PR's file set changes (labels this action manages are removed once they no
+# longer match).
+name: Labeler
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  labeler:
+    name: "Apply area: labels"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: "Label the PR from changed paths"
+        uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: true
