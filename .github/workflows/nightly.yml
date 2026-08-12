@@ -1,0 +1,74 @@
+# Nightly toolchain cron (serde ci.yml pattern, dtolnay): two informational
+# jobs on the latest nightly toolchain, run daily (04:13 UTC, non-standard
+# minute to spread load) and on demand via workflow_dispatch:
+#
+#   - minimal-versions: regenerate the lockfile at MINIMAL versions and
+#     check the whole workspace against it. The workspace pins every direct
+#     external dependency with `=` in [workspace.dependencies] (Cargo.toml),
+#     so the minimal-versions resolution cannot move them; it still lowers
+#     every transitive range dependency of those pinned crates (e.g.
+#     toml_edit -> winnow), which is exactly the surface this job exists to
+#     verify: a crate whose declared minimum versions do not actually
+#     compile together fails here instead of at a user's first build.
+#     Implementation (serde's exact pattern): `cargo generate-lockfile -Z
+#     minimal-versions` regenerates Cargo.lock in the clean CI checkout
+#     (the committed lockfile is never touched — CI checkouts are fresh and
+#     the generated minimal lockfile is not committed), then `cargo check
+#     --locked --workspace` verifies the workspace against that resolution.
+#     `-Z minimal-versions` is nightly-only, hence the nightly toolchain.
+#   - nightly-matrix: the full `cargo test --workspace --locked` suite on
+#     the latest nightly, surfacing nightly regressions in this workspace
+#     the day they land upstream (latest-nightly coverage).
+#
+# Both jobs are deliberately NOT part of the required `check (all gates
+# green)` branch-protection gate: nightly and minimal-versions are moving
+# targets, so failures here are triaged on the cron/dispatch run rather than
+# blocking merges. No repository secrets are required.
+name: Nightly (minimal versions + latest nightly)
+
+on:
+  schedule:
+    - cron: '13 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  minimal-versions:
+    name: minimal versions (cargo check --workspace, nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # nightly
+        with:
+          toolchain: nightly
+      - name: cargo generate-lockfile -Z minimal-versions
+        run: cargo generate-lockfile -Z minimal-versions
+      - name: cargo check --locked --workspace
+        run: cargo check --locked --workspace
+
+  nightly-matrix:
+    name: cargo test --workspace (latest nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # nightly
+        with:
+          toolchain: nightly
+      - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: cargo test --workspace --locked
+        run: cargo test --workspace --locked

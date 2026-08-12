@@ -14,6 +14,15 @@
 # paths share one bar. No repository secrets are required (automatic
 # GITHUB_TOKEN only; the audit job needs checks: write because
 # rustsec/audit-check posts a check run, identical to the ci.yml audit job).
+#
+# Local (dev-machine) toolchain versions for vulnerability scanning, as of
+# 2026-08-12: cargo-audit 0.22.2, cargo-deny 0.20.2 (cargo install). The
+# workflow itself deliberately does not pin cargo-audit/cargo-deny: the
+# rustsec/audit-check action pins the RustSec advisory database, and the
+# cargo-deny-action ships its own pinned binaries, so CI never fetches the
+# advisory database at runtime. Local runs use the same gates
+# (`cargo audit` / `cargo deny check advisories bans licenses sources`)
+# against the same committed Cargo.lock.
 name: Dependency audit
 
 on:
@@ -44,6 +53,8 @@ jobs:
       checks: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -57,6 +68,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: embarkstudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check

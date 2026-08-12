@@ -1,0 +1,55 @@
+# API reference (rustdoc) build + artifact — preparation for docs.rs /
+# GitHub Pages publishing. docs.rs builds are triggered automatically by
+# crates.io publishes (each crate's Cargo.toml declares
+# `documentation = https://docs.rs/<crate>`); this workflow proves the full
+# workspace rustdoc tree builds clean (-D warnings, identical to the ci.yml
+# lint job's rustdoc step) on every push to main and every PR, and uploads
+# the rendered docs as a downloadable artifact so the API reference can be
+# reviewed/previewed before a release. A later release batch may attach
+# Pages deployment on top of this job; nothing here publishes anywhere.
+#
+# The artifact contains only rustdoc HTML (target/doc, no .git, no
+# repository contents beyond the rendered docs); no repository secrets are
+# required.
+name: Docs (rustdoc artifact)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rustdoc:
+    name: cargo doc --workspace --no-deps (-D warnings) + artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # upload-artifact writes to the artifact service, which requires the
+    # actions scope in addition to the global contents: read (same as the
+    # ci.yml coverage job).
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - name: cargo doc --workspace --no-deps --locked (-D warnings)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --locked
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rustdoc-api
+          path: target/doc
+          if-no-files-found: error
+          retention-days: 7
