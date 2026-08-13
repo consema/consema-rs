@@ -1,7 +1,7 @@
 //! Deterministic in-process mutational fuzz harness (0.13.0 gate plan M2).
 //!
 //! The 0.13.0 gate plan (consema repository,
-//! https://github.com/consema/consema/blob/main/docs/0.13.0-gate-plan.md,
+//! <https://github.com/consema/consema/blob/main/docs/0.13.0-gate-plan.md>,
 //! M2 and §15.3) requires a per-format fuzz target set for
 //! parser/decoder/query/projection/materialization/edit entry points with
 //! resource limits pinned to the production profile defaults, plus a
