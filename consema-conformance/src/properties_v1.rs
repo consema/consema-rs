@@ -343,7 +343,7 @@ fn formation_malformed_escape_in_key(case: &VectorCase<'_>) -> Result<(), String
             && document
                 .error_lines()
                 .first()
-                .map(|line| line.code().as_ref())
+                .map(properties::PropertiesErrorLine::code)
                 == Some(expected_string(case, "code")?),
         "malformed escape in key facts differed",
     )
