@@ -158,7 +158,12 @@ $rustcVersion = (& rustc --version).Trim()
 $cargoVersion = (& $cargo --version).Trim()
 $llvmCovVersion = (& cargo llvm-cov --version).Trim()
 $hostName = $env:COMPUTERNAME
-$osInfo = @(if ($IsWindows) { Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue })
+# $IsWindows is a PowerShell Core 6+ automatic variable; the script header
+# promises Windows PowerShell 5.1 (`powershell -File scripts/coverage.ps1`),
+# which has no such variable and would throw under Set-StrictMode. $env:OS
+# is set on every Windows host (5.1 and Core alike) and unset on non-Windows,
+# so this expression keeps the Core behavior and works on 5.1 too.
+$osInfo = @(if ($env:OS -eq 'Windows_NT') { Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue })
 $osCaption = if ($osInfo.Count -gt 0) {
     $osInfo[0].Caption
 } else {
@@ -245,8 +250,16 @@ $totals = @{
 foreach ($fileEntry in $fileEntries) {
     $filePath = [string]$fileEntry.filename
     $summaryBlock = $fileEntry.summary
+    # Attribution must match a workspace member directory segment, not just
+    # any directory whose name starts with "consema": the broad pattern
+    # `consema[^\\/]*` also matched the repository root directory itself
+    # (consema-rs in the six-repo layout), collapsing every file into one
+    # fake "consema-rs" crate row. The pattern below is the explicit member
+    # list -- the facade crate `consema` plus the 14 `consema-*` members --
+    # followed by a path separator.
     $crateMarker = [regex]::Match(
-        $filePath, '(?:^|[\\/])(consema[^\\/]*)[\\/]'
+        $filePath,
+        '(?:^|[\\/])(consema(?:-(?:conformance|core|document|graph|hcl|ini|json|plist|properties|protocol|pvce|toml|xml|yaml))?)[\\/]'
     )
     $crateName = $null
     if ($crateMarker.Success) { $crateName = $crateMarker.Groups[1].Value }
@@ -488,7 +501,7 @@ $($otherNote -join "`n")## 方法与范围
   全部 test target 都计入。
 - 语料复用：conformance vectors 与 fixtures 通过 ``include_str!``/``include_bytes!``
   编译进 ``consema-conformance`` 的 lib 与集成测试（``consema-conformance/src/*_v1.rs``、
-  ``tests/*_fixtures.rs``），因此本测量天然执行 18 套 suite / 508 case、fixtures、
+  ``tests/*_fixtures.rs``），因此本测量天然执行 18 套 suite / 519 case、fixtures、
   hardening 与 encoding corpus，无需额外接线。
 - 百分比从 ``llvm-cov export --summary-only``（JSON）的每文件 covered/total 求和
   重算（与 llvm-cov TOTAL 行同一聚合语义）；region 列即 llvm-cov 的 Region 指标
