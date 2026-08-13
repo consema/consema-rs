@@ -14,7 +14,11 @@
 # authoritative copy in the consema repository:
 #   C:\Users\franck\Documents\consema\docs\fuzz-evidence-0.13.0-logs\
 # (runs.csv, waves.log and the per-process .out.log/.err.log files, all
-# referenced by fc-manifest). -LedgerDir defaults to that absolute path; the
+# referenced by fc-manifest). -LedgerDir overrides; otherwise the
+# CONSEMA_LEDGER_DIR environment variable wins; when that is unset too, the
+# hard-coded default path in the param block below applies. That default is
+# machine-specific (the original machine's consema repository checkout), so
+# set CONSEMA_LEDGER_DIR or pass -LedgerDir on any other machine; the
 # original pre-split run_waves.ps1 is preserved untouched in the consema repo
 # as evidence of the frozen protocol.
 #
@@ -56,7 +60,11 @@ param(
     [int]$Waves = 16,
     [int]$Copies = 2,
     [int]$WaveTimeoutSec = 1800,
-    [string]$LedgerDir = 'C:\Users\franck\Documents\consema\docs\fuzz-evidence-0.13.0-logs'
+    # -LedgerDir: the evidence ledger directory. When omitted, the
+    # CONSEMA_LEDGER_DIR environment variable wins; when that is unset too,
+    # the hard-coded default below applies (machine-specific; see the
+    # header comment).
+    [string]$LedgerDir = $env:CONSEMA_LEDGER_DIR
 )
 
 $ErrorActionPreference = 'Continue'
@@ -66,6 +74,11 @@ $scriptDir = $PSScriptRoot
 # Post-split (2026-08-12): this driver lives at the consema-rs repository root,
 # so the workspace root is the script directory itself (pre-split the script
 # lived in docs\fuzz-evidence-0.13.0-logs and climbed two levels).
+# LedgerDir resolution: explicit -LedgerDir > $env:CONSEMA_LEDGER_DIR > the
+# hard-coded default (the original machine's consema repository path).
+if (-not $LedgerDir) {
+    $LedgerDir = 'C:\Users\franck\Documents\consema\docs\fuzz-evidence-0.13.0-logs'
+}
 $root = $scriptDir
 $logs = $LedgerDir
 $runsCsv = Join-Path $logs 'runs.csv'
