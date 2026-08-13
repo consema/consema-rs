@@ -1,6 +1,6 @@
 #![no_main]
 //! libFuzzer target: consema-properties formation-to-operation gate
-//! (0.13.0 gate plan M2). See crates/consema-json/fuzz/fuzz_targets/parse.rs
+//! (0.13.0 gate plan M2). See consema-json/fuzz/fuzz_targets/parse.rs
 //! for the harness equivalence statement.
 
 use libfuzzer_sys::fuzz_target;

@@ -28,9 +28,9 @@
 //!   `conformance/corpora/mutation-v1.json`.
 //!
 //! Each format's target logic lives in one file under
-//! `crates/<format>/fuzz/fuzz_logic/` and is the single source of truth
+//! `<format>/fuzz/fuzz_logic/` and is the single source of truth
 //! included both by the in-tree drivers here and by the cargo-fuzz wrappers
-//! under `crates/<format>/fuzz/fuzz_targets/` (which run unmodified on a
+//! under `<format>/fuzz/fuzz_targets/` (which run unmodified on a
 //! libFuzzer-capable host, e.g. the Linux machine used for the 72 CPU-hours
 //! milestone M8).
 //!

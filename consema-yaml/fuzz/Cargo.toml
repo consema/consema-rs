@@ -1,5 +1,5 @@
 # cargo-fuzz manifest for consema-yaml (0.13.0 gate plan M2).
-# See crates/consema-json/fuzz/Cargo.toml for the layout rationale.
+# See consema-json/fuzz/Cargo.toml for the layout rationale.
 
 [package]
 name = "consema-yaml-fuzz"

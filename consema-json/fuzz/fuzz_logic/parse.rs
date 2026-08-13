@@ -1,10 +1,10 @@
 // Fuzz-target logic: consema-json parser entry point (0.13.0 gate plan M2).
 //
 // Single source of truth for both harnesses:
-// * in-process: `crates/consema-conformance/tests/parse_fuzz.rs` includes
+// * in-process: `consema-conformance/tests/parse_fuzz.rs` includes
 //   this file and runs it under the deterministic mutation engine
 //   (`consema_conformance::fuzz`), wired into `cargo test`;
-// * libFuzzer: `crates/consema-json/fuzz/fuzz_targets/parse.rs` wraps it
+// * libFuzzer: `consema-json/fuzz/fuzz_targets/parse.rs` wraps it
 //   with `libfuzzer_sys::fuzz_target!`.
 //
 // Resource limits are pinned to the production profile defaults

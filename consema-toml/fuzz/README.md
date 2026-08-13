@@ -9,7 +9,7 @@ points with resource limits pinned to the production profile defaults.
 The target **logic** is in `fuzz_logic/` and is the single source of truth:
 
 * **In-process deterministic harness (this machine, CI):** the files under
-  `fuzz_logic/` are `include!`d by `crates/consema-conformance/tests/parse_fuzz.rs`
+  `fuzz_logic/` are `include!`d by `consema-conformance/tests/parse_fuzz.rs`
   and `tests/operation_fuzz.rs`, which run the same assertions under `cargo test`
   with a seed-based bounded mutational engine (`consema_conformance::fuzz`:
   flip/truncate/insert/delete/repeat/splice over committed seeds). This is the

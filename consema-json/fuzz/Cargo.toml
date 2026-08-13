@@ -7,7 +7,7 @@
 # builds.
 #
 # The target LOGIC lives in fuzz_logic/*.rs and is the single source of
-# truth: the in-process harness (crates/consema-conformance/tests/
+# truth: the in-process harness (consema-conformance/tests/
 # parse_fuzz.rs and operation_fuzz.rs) includes those files directly, so the
 # exact same assertions run under `cargo test` on this Windows/MSVC machine
 # (which cannot link libFuzzer: no clang is installed). On a libFuzzer-capable

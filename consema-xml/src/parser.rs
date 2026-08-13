@@ -2328,7 +2328,7 @@ mod tests {
     }
 
     // Entity amplification and expansion limits are covered by
-    // crates/consema-conformance/tests/xml_hardening.rs
+    // consema-conformance/tests/xml_hardening.rs
     // (`billion_laughs_variants_are_bounded_by_document_wide_accounting` and
     // `deep_reference_nesting_hits_the_depth_limit`), which keeps the
     // stronger billion-laughs and linear-amplification closure.
@@ -2347,7 +2347,7 @@ mod tests {
     }
 
     // UTF-16 BOM round-trip coverage (LE and BE, non-BMP content and names)
-    // lives in crates/consema-conformance/tests/xml_encoding_corpus.rs
+    // lives in consema-conformance/tests/xml_encoding_corpus.rs
     // (`utf16le_and_be_bom_documents_round_trip`), which keeps the stronger
     // both-endianness version; this module only retains unit-level UTF-16
     // facts such as utf16_single_quoted_attribute_is_detected below.
@@ -2604,7 +2604,7 @@ mod tests {
     }
 
     // The mixed-content item budget is covered by
-    // crates/consema-conformance/tests/xml_hardening.rs
+    // consema-conformance/tests/xml_hardening.rs
     // (`mixed_content_limit_publishes_diagnostics_for_every_drop`), which
     // asserts a diagnostic for every dropped item on a stronger input.
 

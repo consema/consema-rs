@@ -2,10 +2,10 @@
 //! (0.13.0 gate plan M2).
 //!
 //! The per-format targets are the single-source files under
-//! `crates/<format>/fuzz/fuzz_logic/`, included here verbatim and wrapped by
+//! `<format>/fuzz/fuzz_logic/`, included here verbatim and wrapped by
 //! the cargo-fuzz targets in the same directories; see
-//! `crates/consema-conformance/src/fuzz.rs` for the harness equivalence
-//! statement and `crates/consema-json/fuzz/README.md` for the target
+//! `consema-conformance/src/fuzz.rs` for the harness equivalence
+//! statement and `consema-json/fuzz/README.md` for the target
 //! contract.
 //!
 //! Bounded runs (this file, default `cargo test`) keep CI fast; the

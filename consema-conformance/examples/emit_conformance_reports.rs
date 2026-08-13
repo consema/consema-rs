@@ -20,7 +20,7 @@
 //! all 18 suites — the cargo-test pins assert whole-suite
 //! conformant/not-conformant only, and the `consema conformance` CLI
 //! command is the embedded self-check subset, not the 18 shared suites
-//! (crates/consema/src/bin/consema/conformance_cmd.rs). This example reuses
+//! (consema/src/bin/consema/conformance_cmd.rs). This example reuses
 //! the published `run_*` entry points and consema-json materialization only
 //! — no new execution or encoding logic — and adds no dependency.
 //!

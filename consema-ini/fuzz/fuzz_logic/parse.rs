@@ -1,8 +1,8 @@
 // Fuzz-target logic: consema-ini parser entry point (0.13.0 gate plan M2).
 //
 // Single source of truth for both harnesses: the in-process engine
-// (`crates/consema-conformance/tests/parse_fuzz.rs`) and the libFuzzer
-// wrapper (`crates/consema-ini/fuzz/fuzz_targets/parse.rs`). Resource
+// (`consema-conformance/tests/parse_fuzz.rs`) and the libFuzzer
+// wrapper (`consema-ini/fuzz/fuzz_targets/parse.rs`). Resource
 // limits are the production profile defaults; a limit failure is a fatal
 // formation error and therefore a pass, never a crash.
 

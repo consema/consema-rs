@@ -437,7 +437,7 @@ fn object_string<'a>(entries: &'a [consema_core::ObjectEntry], key: &str) -> &'a
 }
 
 /// Reads one field of an object (the runner's `object_field`,
-/// crates/consema-conformance/src/lib.rs:195-203).
+/// consema-conformance/src/lib.rs:195-203).
 fn object_field<'a>(
     entries: &'a [consema_core::ObjectEntry],
     key: &str,
@@ -449,7 +449,7 @@ fn object_field<'a>(
 }
 
 /// Lowercase hex of the bytes (the runner's `hex`,
-/// crates/consema-conformance/src/lib.rs:377-386).
+/// consema-conformance/src/lib.rs:377-386).
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().fold(String::new(), |mut output, octet| {
         write!(output, "{octet:02x}").expect("String write");

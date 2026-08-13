@@ -1,8 +1,8 @@
 // Fuzz-target logic: consema-plist parser entry point (0.13.0 gate plan M2).
 //
 // Single source of truth for both harnesses: the in-process engine
-// (`crates/consema-conformance/tests/parse_fuzz.rs`) and the libFuzzer
-// wrapper (`crates/consema-plist/fuzz/fuzz_targets/parse.rs`). Resource
+// (`consema-conformance/tests/parse_fuzz.rs`) and the libFuzzer
+// wrapper (`consema-plist/fuzz/fuzz_targets/parse.rs`). Resource
 // limits are the production profile defaults; a limit failure is a fatal
 // formation error and therefore a pass, never a crash. Both profiles
 // (`plist.xml@1` and `plist.binary@1`) run: the binary profile drives the

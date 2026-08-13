@@ -1,5 +1,5 @@
 // Fuzz-target logic: consema-hcl formation-to-operation gate
-// (0.13.0 gate plan M2). See crates/consema-json/fuzz/fuzz_logic/
+// (0.13.0 gate plan M2). See consema-json/fuzz/fuzz_logic/
 // operations.rs for the full gate description.
 
 use consema_core::{

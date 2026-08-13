@@ -10,8 +10,8 @@
 // a limit failure is a pass.
 //
 // Single source of truth included by the in-process harness
-// (`crates/consema-conformance/tests/operation_fuzz.rs`) and wrapped by
-// `crates/consema-json/fuzz/fuzz_targets/operations.rs`.
+// (`consema-conformance/tests/operation_fuzz.rs`) and wrapped by
+// `consema-json/fuzz/fuzz_targets/operations.rs`.
 
 use consema_core::{
     CancellationToken, CapabilityId, CapabilitySet, ExecutableQuery, PortableValue,

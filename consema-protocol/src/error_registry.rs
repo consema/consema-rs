@@ -1795,7 +1795,7 @@ mod tests {
     #[test]
     fn json_projection_incomplete_document_is_registered_in_v7() {
         // The 0.13.0 json Recovered-document gate emits this code
-        // (crates/consema-json/src/projection.rs:756); the CLI's failed
+        // (consema-json/src/projection.rs:756); the CLI's failed
         // `core.projection-result@1` record registry-validates the code
         // (execution.rs `Completion::new_with_registry`), so an unregistered
         // code would panic `project_cmd::projection_attempt_failure`

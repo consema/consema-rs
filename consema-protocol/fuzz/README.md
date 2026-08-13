@@ -11,7 +11,7 @@ The target **logic** is in `fuzz_logic/decode.rs` and is the single source of
 truth:
 
 * **In-process deterministic harness (this machine, CI):** `fuzz_logic/decode.rs`
-  is `include!`d by `crates/consema-conformance/tests/protocol_fuzz.rs`, which
+  is `include!`d by `consema-conformance/tests/protocol_fuzz.rs`, which
   runs the same assertions under `cargo test` with a seed-based bounded
   mutational engine (`consema_conformance::fuzz`). This is the equivalent
   harness the gate plan allows ("cargo-fuzz 或等价 harness"): this

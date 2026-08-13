@@ -4,9 +4,9 @@
 //! Drives the high-risk decoder entry points (canonical JSON transport,
 //! PVCE varint transport, PGCE graph transport) with mutated bytes under
 //! the production default limits. Target logic is
-//! `crates/consema-protocol/fuzz/fuzz_logic/decode.rs`, included verbatim
+//! `consema-protocol/fuzz/fuzz_logic/decode.rs`, included verbatim
 //! here and wrapped by the cargo-fuzz target; see
-//! `crates/consema-conformance/src/fuzz.rs` for the harness equivalence
+//! `consema-conformance/src/fuzz.rs` for the harness equivalence
 //! statement.
 
 use consema_conformance::fuzz;

@@ -1,5 +1,5 @@
 // Fuzz-target logic: consema-toml formation-to-operation gate
-// (0.13.0 gate plan M2). See crates/consema-json/fuzz/fuzz_logic/
+// (0.13.0 gate plan M2). See consema-json/fuzz/fuzz_logic/
 // operations.rs for the full gate description; the recovered-document gate
 // (recovered documents never reach project/materialize/edit) is asserted
 // here identically.

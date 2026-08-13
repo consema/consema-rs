@@ -1,5 +1,5 @@
 // Fuzz-target logic: consema-plist formation-to-operation gate
-// (0.13.0 gate plan M2). See crates/consema-json/fuzz/fuzz_logic/
+// (0.13.0 gate plan M2). See consema-json/fuzz/fuzz_logic/
 // operations.rs for the full gate description. The binary profile drives
 // the binary-structure query domain; the XML profile drives the native and
 // syntax query domains.

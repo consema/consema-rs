@@ -1,6 +1,6 @@
 //! Library-level CLI protocol e2e (implementation plan §6 M9, §7 agent I).
 //!
-//! The process-level e2e (`crates/consema/tests/cli_*.rs`, agent H) covers
+//! The process-level e2e (`consema/tests/cli_*.rs`, agent H) covers
 //! process behavior — exit codes, fsio, interruption recovery — through the
 //! binary; this file drives the same protocol semantics through the lib API
 //! surface only (never the bin), per the plan's non-interchangeable split:

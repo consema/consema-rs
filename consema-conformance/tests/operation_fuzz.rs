@@ -8,9 +8,9 @@
 //! query stays legitimate over recovered documents (the CLI inspect path).
 //!
 //! Target logic is the single-source files under
-//! `crates/<format>/fuzz/fuzz_logic/operations.rs`, included verbatim here
+//! `<format>/fuzz/fuzz_logic/operations.rs`, included verbatim here
 //! and wrapped by the cargo-fuzz targets; see
-//! `crates/consema-conformance/src/fuzz.rs` for the harness equivalence
+//! `consema-conformance/src/fuzz.rs` for the harness equivalence
 //! statement.
 
 use consema_conformance::fuzz;
@@ -122,7 +122,7 @@ fn assert_clean(result: Result<(), fuzz::FuzzFinding>, target: &str) {
 fn json_operation_fuzz_bounded() {
     // Finding M2-F1 fixed: consema-json rejects recovered documents at
     // project and commit with typed failures, so the strict assertions in
-    // crates/consema-json/fuzz/fuzz_logic/operations.rs are the gate.
+    // consema-json/fuzz/fuzz_logic/operations.rs are the gate.
     assert_clean(
         run_target(
             &[JSON_SEED, JSON_SEED ^ 0x51],
