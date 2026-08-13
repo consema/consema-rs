@@ -5,6 +5,9 @@
 # and on new commits, so adding a label flips the check green without a
 # rebase. Only the automatic GITHUB_TOKEN is used; pull-requests: read is
 # enough to read the PR labels (no comment posting).
+# Dependabot PRs are exempt: their kind is chore by construction (labeler
+# already applies dependencies/github_actions/area labels) and the alls-green
+# aggregate gate still guards merges.
 name: PR Labels
 
 on:
@@ -16,6 +19,7 @@ permissions:
 
 jobs:
   require-kind-label:
+    if: github.actor != 'dependabot[bot]'
     name: "Require a kind: label"
     runs-on: ubuntu-latest
     timeout-minutes: 5
