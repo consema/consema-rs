@@ -15,6 +15,19 @@ $targetDirectory = if ($env:CARGO_TARGET_DIR) {
 } else {
     Join-Path $workspaceRoot 'target'
 }
+# git-bash GNU tar misparses Windows drive paths when it wins the PATH lookup
+# (`/usr/bin/tar: Cannot connect to C: resolve failed`), so on Windows resolve
+# the system bsdtar explicitly and keep the PATH lookup elsewhere (CI ubuntu
+# unchanged). $env:OS is set on every Windows host (PowerShell 5.1 and Core
+# alike) and unset on non-Windows, so the test is false there.
+$tarCommand = if (
+    $env:OS -eq 'Windows_NT' -and
+    (Test-Path -LiteralPath "$env:SystemRoot\System32\tar.exe" -PathType Leaf)
+) {
+    "$env:SystemRoot\System32\tar.exe"
+} else {
+    'tar'
+}
 
 function Invoke-Cargo {
     param([string[]]$Arguments)
@@ -209,7 +222,7 @@ try {
     New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
 
     foreach ($artifact in $artifacts) {
-        $entries = @(& tar -tf $artifact.Archive)
+        $entries = @(& $tarCommand -tf $artifact.Archive)
         if ($LASTEXITCODE -ne 0) {
             throw "cannot list package archive: $($artifact.Archive)"
         }
@@ -226,7 +239,7 @@ try {
             }
         }
 
-        & tar -xzf $artifact.Archive -C $temporaryRoot
+        & $tarCommand -xzf $artifact.Archive -C $temporaryRoot
         if ($LASTEXITCODE -ne 0) {
             throw "cannot extract package archive: $($artifact.Archive)"
         }
