@@ -1,4 +1,11 @@
-//! Compiles the exact JSON5 example published in README.md.
+//! JSON5 (json5.standard@1) → strict-JSON conversion chain example:
+//! parse → best-exact projection → canonical-compact materialization,
+//! with byte-exact assertions (the README quick-start example keeps
+//! finite JSON5 exactly representable as strict JSON).
+//!
+//! (The README.md quick-start code fence is compile-gated by
+//! consema/examples/quickstart.rs; this test covers the same
+//! parse → project → convert shape for the JSON5 profile.)
 
 use consema::document::{
     MaterializationRequest, MaterializationStyleId, NewlinePolicy, ParseLimits, ProfileId,
@@ -7,7 +14,7 @@ use consema::json::{JsonProfile, ProjectionRequestBuilder, ProjectionTarget, par
 use consema::{ConversionResult, convert_json};
 
 #[test]
-fn readme_json5_example_is_exact() {
+fn json5_to_strict_conversion_is_exact() {
     let source = br"{service:'catalog',limit:0x100,retry:.25,enabled:true,}";
     let document = parse(
         source.as_slice(),

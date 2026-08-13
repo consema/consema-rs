@@ -1,4 +1,11 @@
-//! Compiles the exact XML example published in README.md.
+//! XML (xml.1.0-safe@1) safe-canonical chain example: parse → element-tree
+//! projection → canonical materialization → structure edit (insert), with
+//! byte-exact assertions (the README quick-start example's edit/render
+//! shape, applied to a namespaced XML document).
+//!
+//! (The README.md quick-start code fence is compile-gated by
+//! consema/examples/quickstart.rs; this test covers the XML format
+//! family's safe-canonical chain.)
 
 use consema::document::{
     MaterializationRequest, MaterializationResult, MaterializationStyleId, ProfileId,
@@ -9,7 +16,7 @@ use consema::xml::{
 };
 
 #[test]
-fn readme_xml_example_is_exact() {
+fn xml_safe_canonical_chain_is_exact() {
     let source = br#"<service xmlns:cfg="urn:cfg" cfg:port="8080"><name>catalog</name></service>"#;
     let document = parse(
         source.as_slice(),

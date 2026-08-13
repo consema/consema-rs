@@ -73,9 +73,13 @@ jobs:
         with:
           toolchain: stable
       - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      # cargo test --workspace runs the crate doc tests (doctests) by
-      # default, so the doc-example gate (README/crate-doc examples) is part
-      # of this step — no separate `cargo test --doc` invocation is needed.
+      # cargo test --workspace compiles every example target of the
+      # workspace (examples are built by `cargo test`, not executed), so
+      # the README quick-start gate (consema/examples/quickstart.rs, kept
+      # byte-identical to the README.md code fence) and sdk_chain.rs are
+      # compile-gated on every OS leg in this step. Doctests run by default
+      # too, but the 15 crates currently declare no runnable doc examples
+      # (0 doctests), so crate-doc examples are not an active gate today.
       - name: cargo test --workspace --locked
         run: cargo test --workspace --locked
 
@@ -428,17 +432,19 @@ jobs:
           }
           echo "README version consistent with Cargo.toml: $version"
 
-  # SDK examples gate: consema/examples/sdk_chain.rs is the committed
-  # five-language SDK chain example (parse -> native query -> best-exact
-  # projection -> semantic edit -> canonical materialization -> TOML
-  # conversion; language-neutral contract reference: consema repository
-  # docs/cookbook.md). It must stay compilable. The doc-example gate
-  # (README/crate-doc examples) already runs inside the test job
-  # (`cargo test --workspace` runs doctests by default), so this job only
-  # checks the example target. The example is a pure SDK chain (no
-  # conformance data), so no provision step is needed.
+  # SDK examples gate: every example target under consema/examples/ must
+  # stay compilable. The test job also compiles them (`cargo test
+  # --workspace` builds example targets on every OS leg), and this job
+  # re-checks the same set by name so example breakage is surfaced
+  # directly. sdk_chain.rs is the committed five-language SDK chain example
+  # (parse -> native query -> best-exact projection -> semantic edit ->
+  # canonical materialization -> TOML conversion; language-neutral contract
+  # reference: consema repository docs/cookbook.md). quickstart.rs is the
+  # compile gate for the README.md quick-start code fence (kept in sync
+  # with it by hand; the example is the copy that is compiled). Both are
+  # pure SDK chains (no conformance data), so no provision step is needed.
   examples:
-    name: examples (cargo check sdk_chain)
+    name: examples (cargo check --examples)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -451,8 +457,8 @@ jobs:
         with:
           toolchain: stable
       - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - name: cargo check -p consema --example sdk_chain --locked
-        run: cargo check -p consema --example sdk_chain --locked
+      - name: cargo check -p consema --examples --locked
+        run: cargo check -p consema --examples --locked
 
   # Alls-green aggregate gate (tokio/pydantic pattern): `check (all gates
   # green)` is the SINGLE required check for branch protection on this

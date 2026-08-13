@@ -21,7 +21,9 @@ check-version-consistency job 断言与 README 一致）。
 consema = "1.0.0-rc.1"
 ```
 
-把下面代码放进 `src/main.rs`（一个 JSON 文档走完 parse → query → edit → render 四条链）：
+把下面代码放进 `src/main.rs`（一个 JSON 文档走完 parse → query → edit → render 四条链；
+该示例主体与 [`consema/examples/quickstart.rs`](consema/examples/quickstart.rs) 逐字一致，
+由 workspace 编译（`cargo test --workspace` 编译全部 example target）与 CI `examples` job 门禁）：
 
 ```rust
 use std::sync::Arc;
@@ -45,11 +47,14 @@ fn member<'a>(value: JsonValue<'a>, name: &str) -> JsonValue<'a> {
         .value()
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     let source: Arc<[u8]> = Arc::from(br#"{"a":1,"b":{"c":2}}"#.as_slice());
     // 1. parse：json.strict 无损解析，render() 与源字节逐字节一致
-    let document = parse_document(source, &ProfileId::new("json.strict", 1))?;
-    let json = document.as_json()?;
+    let document = parse_document(source, &ProfileId::new("json.strict", 1))
+        .expect("well-formed strict JSON parses");
+    let json = document
+        .as_json()
+        .expect("a json.strict document is a JSON document");
     // 2. query：原生语义树读 `b.c`
     let c = member(member(json.root(), "b"), "c");
     // 3. edit：`b.c` 语义替换为 42（CanonicalForProfile），编辑外字节原样保留
@@ -59,10 +64,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         PortableValue::integer(BigInteger::from(42)),
         RepresentationPolicy::CanonicalForProfile,
     );
-    let edited = json.commit(&builder.build())?.document;
+    let edited = json
+        .commit(&builder.build())
+        .expect("edit commits on a complete document")
+        .document;
     // 4. render：输出 `{"a":1,"b":{"c":42}}`
     println!("{}", String::from_utf8_lossy(edited.render()));
-    Ok(())
 }
 ```
 
@@ -131,7 +138,7 @@ semver baseline 为拆分前的 v0.8.0 crates/ 树，见 ci.yml 注释）。
 - **与 serde 的关系？** 无依赖关系：serde 是 Rust 类型序列化框架，Consema 是格式内容处理引擎（无损文档、公共值、类型化查询、显式投影、原子编辑、跨格式转换），二者可共存。契约是语言中立的（RFC 0016），五个语言实现同等地位、互不调用。
 - **性能如何？** 解析/渲染基准、硬化语料与基准工具见规范仓 `docs/BENCHMARKS-0.13.0.md`（consema-conformance 基准工具）；CI 带 coverage 硬下限 + 趋势门禁与 deny/audit/semver 门禁。
 - **零依赖吗？** 发布 crates 的 7 个 workspace 外部依赖全部精确固定版本（`=x.y.z`）：encoding_rs、sha2、toml_edit、saphyr-parser、unicode-id-start、unicode-ident、xmlparser；此外 CLI facade（consema crate）依赖 `ctrlc = "3.5"`（非精确固定，Cargo.lock 当前为 3.5.2）。
-- **跨语言一致性如何保证？** 18 套语言无关 conformance suite 共 519/519 cases（聚合 digest `cfd6e296…`）由规范仓维护、五仓共享；CI 多仓 checkout 跑 conformance runner 与跨语言差分（byte parity / normalized differential / protocol-exchange）门禁。
+- **跨语言一致性如何保证？** 18 套语言无关 conformance suite 共 519/519 cases（聚合 digest `cfd6e296…`）由规范仓维护、五仓共享；跨语言差分门禁（多仓 checkout 跑 conformance runner 与 byte parity / normalized differential / protocol-exchange）由 consema / consema-go 仓 CI 承担——本仓 ci.yml 无多仓 checkout job（见 ci.yml 头部自述），只跑 vendored conformance 快照与 suite-count 断言。
 - **兼容承诺？** 语义化版本；`check-version-consistency` 门禁断言 README 版本行与 `Cargo.toml` 一致；semver-check 基线为拆分前 v0.8.0 树；兼容与支持政策见 RFC 0020。
 - **如何贡献？** 见本仓 [CONTRIBUTING.md](CONTRIBUTING.md)（规范仓为权威版）；conformance 向量/夹具/oracle/差分数据权威在规范仓——向量变更是五仓同步事件，必须先回规范仓提交再同步五个语言仓。
 - **"默认拒绝信息损失"是什么意思？** 投影/转换/编辑中的任何 loss（如 YAML 共享结构展开、Properties 重复键折叠、数值舍入）必须显式授权；未授权时操作原子失败（`ConversionResult::Failed(ConversionFailure::UnauthorizedLoss)`；fidelity 三档：Exact / Transformed / Lossy）。
