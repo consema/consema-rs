@@ -14,6 +14,7 @@ use consema_graph::{
 };
 use consema_yaml::{YamlProfile, parse};
 use proptest::prelude::*;
+use proptest::test_runner::RngSeed;
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -24,7 +25,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 ///
 /// Finding M2-F2 (2026-08-07, first property run, fixed 2026-08-07): a
 /// double-quoted YAML scalar `"~"` was decoded as empty content instead of
-/// the string `"~"`. Root cause: `crates/consema-yaml/src/native.rs`
+/// the string `"~"`. Root cause: `consema-yaml/src/native.rs`
 /// `exact_empty_scalar` rewrote decoded `"~"` to an empty string whenever
 /// the raw presentation was not literally `~` — but per YAML 1.2 a quoted
 /// `"~"` is a string, never null; only the plain-style empty-scalar
@@ -89,7 +90,14 @@ fn graph_strategy() -> impl Strategy<Value = consema_graph::PortableGraph> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    // Committed seed (evidence standard, parse_fuzz.rs: unseeded runs do
+    // not count): a fixed seed makes the generated input set reproducible
+    // across runs and machines.
+    #![proptest_config(ProptestConfig {
+        failure_persistence: None,
+        rng_seed: RngSeed::Fixed(0x7072_6F70_0000_0011),
+        ..ProptestConfig::default()
+    })]
 
     /// PGCE round trip: encode → decode is the identity, re-encoding the
     /// decoded bytes is byte-identical (canonical fixed point).
@@ -122,7 +130,14 @@ fn anchor_document(values: &[String]) -> String {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    // Committed seed (evidence standard, parse_fuzz.rs: unseeded runs do
+    // not count): a fixed seed makes the generated input set reproducible
+    // across runs and machines.
+    #![proptest_config(ProptestConfig {
+        failure_persistence: None,
+        rng_seed: RngSeed::Fixed(0x7072_6F70_0000_0012),
+        ..ProptestConfig::default()
+    })]
 
     /// Every alias resolves to its anchor's exact scalar content, with the
     /// documented alias count and names; the graph projection of the

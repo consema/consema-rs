@@ -25,6 +25,7 @@ use consema_document::{
 };
 use consema_protocol::{ProtocolLimits, decode_json, decode_pvce, encode_json, encode_pvce};
 use proptest::prelude::*;
+use proptest::test_runner::RngSeed;
 
 /// Canonical base-ten integer (covers varint widths 1..=10 for large
 /// magnitudes).
@@ -187,7 +188,14 @@ fn arbitrary_value() -> impl Strategy<Value = PortableValue> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    // Committed seed (evidence standard, parse_fuzz.rs: unseeded runs do
+    // not count): a fixed seed makes the generated input set reproducible
+    // across runs and machines.
+    #![proptest_config(ProptestConfig {
+        failure_persistence: None,
+        rng_seed: RngSeed::Fixed(0x7072_6F70_0000_0021),
+        ..ProptestConfig::default()
+    })]
 
     #[test]
     fn canonical_json_transport_round_trips(value in arbitrary_value()) {

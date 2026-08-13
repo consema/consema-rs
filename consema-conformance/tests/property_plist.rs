@@ -14,6 +14,7 @@ use consema_plist::{
     BinaryOffsetFact, PlistEncodingSelection, PlistParseLimits, PlistProfile, parse, parse_binary,
 };
 use proptest::prelude::*;
+use proptest::test_runner::RngSeed;
 use std::sync::Arc;
 
 /// One generated object seed; refs are resolved deterministically to
@@ -190,7 +191,14 @@ fn generated_file() -> impl Strategy<Value = GeneratedFile> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    // Committed seed (evidence standard, parse_fuzz.rs: unseeded runs do
+    // not count): a fixed seed makes the generated input set reproducible
+    // across runs and machines.
+    #![proptest_config(ProptestConfig {
+        failure_persistence: None,
+        rng_seed: RngSeed::Fixed(0x7072_6F70_0000_0013),
+        ..ProptestConfig::default()
+    })]
 
     /// Decoded offset facts must exactly match the builder's offset table,
     /// in object-table order, every ref must resolve, and a formed binary
