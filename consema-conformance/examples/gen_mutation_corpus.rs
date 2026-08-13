@@ -567,9 +567,7 @@ fn generate(regressions: &str) -> String {
     output.push_str("{\n");
     output.push_str("  \"suite\": \"consema.mutation-corpus@1\",\n");
     output.push_str("  \"generator\": {\n");
-    output.push_str(
-        "    \"tool\": \"consema-conformance/examples/gen_mutation_corpus.rs\",\n",
-    );
+    output.push_str("    \"tool\": \"consema-conformance/examples/gen_mutation_corpus.rs\",\n");
     let _ = writeln!(output, "    \"seed\": {BASE_SEED},");
     output.push_str("    \"classes\": [\"flip\", \"truncate\", \"insert\", \"delete\", \"repeat\", \"splice\"],\n");
     output.push_str(
