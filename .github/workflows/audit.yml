@@ -3,10 +3,11 @@
 # adds the tracks that ci.yml cannot express:
 #
 #   - audit: daily cron (03:37 UTC, non-standard minute to spread load) plus
-#     every push to main (unconditional — no path filter). Same no-fetch
-#     RustSec check as the ci.yml audit job (rustsec/audit-check pins the
-#     advisory database through the action instead of letting cargo-audit
-#     fetch it).
+#     every push to main (unconditional — no path filter). Same RustSec
+#     check as the ci.yml audit job (rustsec/audit-check is SHA-pinned;
+#     honest scope per G136: the action installs cargo-audit from its latest
+#     GitHub release and fetches the RustSec advisory database at runtime —
+#     the database is not snapshotted or pinned).
 #   - pr-audit: every pull request runs the same cargo-deny advisories
 #     command as the ci.yml deny job (the PR path uses advisories only; the
 #     full bans/licenses/sources gate stays in ci.yml).
@@ -30,10 +31,13 @@
 #
 # Local (dev-machine) toolchain versions for vulnerability scanning, as of
 # 2026-08-12: cargo-audit 0.22.2, cargo-deny 0.20.2 (cargo install). The
-# workflow itself deliberately does not pin cargo-audit/cargo-deny: the
-# rustsec/audit-check action pins the RustSec advisory database, and the
-# cargo-deny-action ships its own pinned binaries, so CI never fetches the
-# advisory database at runtime. Local runs use the same gates
+# workflow itself deliberately does not pin cargo-audit/cargo-deny (G136,
+# honest scope): the actions are SHA-pinned, but rustsec/audit-check
+# installs the latest cargo-audit release and fetches the RustSec advisory
+# database from GitHub at runtime, and cargo-deny-action's `deny check
+# advisories` fetches the same database at runtime — CI therefore does
+# resolve the live advisory database on every run; the advisory-database
+# claim is not a snapshot pin. Local runs use the same gates
 # (`cargo audit` / `cargo deny check advisories bans licenses sources`)
 # against the same committed Cargo.lock.
 name: Dependency audit

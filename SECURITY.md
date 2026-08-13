@@ -15,7 +15,7 @@ Consema 将资源上限作为执行策略，不把截断包装成成功：
 
 超限分别返回 `FatalFormationFailure`、`DecodeError::ResourceLimit`、`QueryFailure::ResourceLimitExceeded` 或 failed projection。取消不会被报告为完成。
 
-解析器和 decoder 禁止 `unsafe`，严格检查 UTF‑8、长度溢出、非最短 varint、非规范整数/Decimal、容器计数和嵌套深度。`consema-conformance` 包含 55 个恶意/边界 property tests（hardening.rs 12 个、yaml_hardening.rs 5 个、line_formats_hardening.rs 6 个、xml_hardening.rs 10 个、xml_encoding_corpus.rs 7 个、plist_hardening.rs 7 个、hcl_hardening.rs 8 个）；如果发现 panic、无界分配或规范绕过，请附最小输入与触发的 capability contract 报告。
+解析器和 decoder 禁止 `unsafe`，严格检查 UTF‑8、长度溢出、非最短 varint、非规范整数/Decimal、容器计数和嵌套深度。`consema-conformance` 包含 63 个恶意/边界对抗测试（hardening.rs 12 个、yaml_hardening.rs 5 个、line_formats_hardening.rs 6 个、xml_hardening.rs 10 个、xml_encoding_corpus.rs 7 个、plist_hardening.rs 7 个、hcl_hardening.rs 8 个、cli_hardening.rs 8 个）与 4 个 `proptest!` 属性块（property_graph.rs 2、property_plist.rs 1、property_protocol.rs 1）；如果发现 panic、无界分配或规范绕过，请附最小输入与触发的 capability contract 报告。
 
 canonical protocol JSON 拒绝空白、替代 escape、重排/未知字段和非最短数字表示；PVCE 继续拒绝非规范 varint 与整数。默认协议任意精度整数 magnitude 上限为 1 KiB，避免十进制转换的 CPU 放大；调用方提高上限时必须同时评估输入可信度和工作预算。任何 v1-v6 envelope payload 都会进入对应 typed decoder，不能只靠匹配 `schema` 绕过字段与交叉约束。v1-v5 registry 保持冻结；JSON5 专属 diagnostic 从 semantic-model v4 起可外部化（92/132/166-code registry 均含对应代码）。
 
@@ -43,8 +43,8 @@ raw `NodeRef`、snapshot handle、cursor 与 `CancellationToken` 不可序列化
 
 安全披露、响应时间与支持窗口（路线图 §19.4 的"安全披露联系方式和支持周期"；缺陷等级沿用 §18.4，P0/P1 在 1.0.0 前不允许未解决，P2 必须逐项公开评审）。
 
-**披露渠道。** 首选渠道是仓库的 GitHub Security Advisory（私有漏洞报告；仓库公开后启用）。直接渠道是发布记录中的维护者身份（git 标签记录：franckcl1989 &lt;franckcl@icloud.com&gt;）。报告请包含：受影响的版本与 Profile/contract、触发问题的 capability contract（如 `core.source-snapshot@1`）、最小复现输入、以及你观察到的行为。发现 panic、无界分配或规范绕过时，也请携带上述信息报告（见上文 hardening 段）。披露遵循协调披露：收到报告后先确认再公开，不会在修复可用前公开细节；不承诺任何形式的赏金。供应链问题（依赖、SBOM、签名、CI）同样走此渠道。
+**披露渠道。** 首选渠道是仓库的 GitHub Security Advisory（私有漏洞报告；仓库公开后启用）。直接渠道是发布记录中的维护者身份（GitHub 提交签名记录：franckcl1989 &lt;franckcl@icloud.com&gt;；本仓库尚未打发布 tag，发布记录以签名提交为载体）。报告请包含：受影响的版本与 Profile/contract、触发问题的 capability contract（如 `core.source-snapshot@1`）、最小复现输入、以及你观察到的行为。发现 panic、无界分配或规范绕过时，也请携带上述信息报告（见上文 hardening 段）。披露遵循协调披露：收到报告后先确认再公开，不会在修复可用前公开细节；不承诺任何形式的赏金。供应链问题（依赖、SBOM、签名、CI）同样走此渠道。
 
 **响应 SLA（按缺陷等级）。** P0（数据破坏、静默损失、RCE/外部访问、错误写文件、跨快照误编辑）：24 小时内确认，7 天内给出修复或缓解方案。P1（panic/crash/hang、错误完成状态、明显语义不一致、limit bypass）：72 小时内确认，14 天内修复。P2（有安全替代路径的功能缺陷、非核心性能回退、诊断位置错误）：随下一个发布窗口修复，发布判断逐项记录。P3（文档、易用性、非稳定 message、低风险边角）：尽力而为。任何等级都不得用降级测试或截断包装来"修复"；资源上限与完成状态语义是安全边界（见本文档开头部分），不能因披露而放松。
 
-**支持窗口。** 1.0.0 发布前，安全修复只承诺两个窗口：最新稳定版本与其上一 minor（当前为最新发布 tag 与其前一版本）；更早版本不承诺修复，除非影响面证明必须回移。正式支持的目标是 CI 矩阵（windows-latest / ubuntu-latest / macos-latest，x86_64）；MSRV 窗口为 manifest 声明的 `rust-version`（当前 1.85）起的所有版本，MSRV 提升必须走 manifest 变更记录。Go 实现（0.14.0 起）的版本窗口在 Go RC 时按当时稳定生态冻结。公共 API 与 CLI 命令的弃用期至少一个 minor；contract/Profile 退役必须走 RFC 进程，已冻结的 v1-v6 registry 永不删除 code，退役只改变新输入的接受行为并在发布记录中列明。
+**支持窗口。** 1.0.0 发布前，安全修复只承诺两个窗口：最新稳定版本与其上一 minor（当前为最新发布 tag 与其前一版本）；更早版本不承诺修复，除非影响面证明必须回移。正式支持的目标是 CI 矩阵（windows-latest / ubuntu-latest / macos-latest，x86_64 + arm64——macOS runner 自 2024 起为 arm64）；MSRV 窗口为 manifest 声明的 `rust-version`（当前 1.85）起的所有版本，MSRV 提升必须走 manifest 变更记录。Go 实现（0.14.0 起）的版本窗口在 Go RC 时按当时稳定生态冻结。公共 API 与 CLI 命令的弃用期至少一个 minor；contract/Profile 退役必须走 RFC 进程，已冻结的 v1-v6 registry 永不删除 code，退役只改变新输入的接受行为并在发布记录中列明。

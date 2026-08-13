@@ -18,7 +18,7 @@ check-version-consistency job 断言与 README 一致）。
 
 ```toml
 [dependencies]
-consema = "1.0.0-rc.1"
+consema = "1.0.0-rc.1"  # 1.0.0-rc.1 发布到 crates.io 后可用
 ```
 
 把下面代码放进 `src/main.rs`（一个 JSON 文档走完 parse → query → edit → render 四条链；
@@ -77,7 +77,7 @@ fn main() {
 
 ## API 摘要
 
-核心面一行式（完整签名见源码 doc；八个格式家族各有独立的 `parse_*` / `execute_*_query` / `project` / `materialize` / `convert_*` 入口）：
+核心面一行式（完整签名见源码 doc；parse / query / project / materialize 在各格式家族模块内，convert 面为根级统一入口，见下表）：
 
 | 操作 | facade 入口 |
 | --- | --- |
@@ -87,7 +87,7 @@ fn main() {
 | edit | `json::EditTransactionBuilder::new(&json::Document)` + `json::Document::commit(&EditTransaction) -> Result<EditCommit, EditFailure>`（`commit.document` 为编辑后文档） |
 | materialize | `consema::json::materialize(&PortableValue, &MaterializationRequest) -> document::MaterializationResult` |
 | convert | `consema::convert_json(&json::Document, &json::ProjectionRequest, &MaterializationRequest) -> ConversionResult`（另有 convert_toml / convert_yaml / convert_ini / convert_properties / convert_xml / convert_plist / convert_hcl） |
-| registry | `registry::format_families()` / `registry::profiles()` / `registry::query_domains()` / `registry::operation_registry(&ProfileId)`（8 家族 / 16 profiles / 21 查询域 / 16 操作注册表） |
+| registry | `registry::format_families()` / `registry::profiles()` / `registry::query_domains()` / `registry::operation_registry(&ProfileId)`（8 家族 / 16 profiles / 21 查询域 / 16 操作注册表（按 profile 计）/ 56 操作） |
 
 ## Workspace（15 crates）
 
@@ -121,9 +121,9 @@ MSRV 1.85（workspace `rust-version`；CI msrv job 真实验证）。
   单独运行：`cargo test -p consema-conformance --locked`。
 - `conformance/` 是从规范仓（consema）vendored 的快照副本（编译期 include
   需要），含 vectors / fixtures / oracles / corpora / differential；权威在
-  规范仓。本仓 CI 的 conformance job 断言 suite-count（18 套 / 519 case）；
-  共享 conformance 的聚合 digest 校验在 Go 仓与规范仓 fc-manifest。任何
-  改动必须回到规范仓提交后再同步。
+  规范仓。本仓 CI 的 conformance job 断言 suite-count（18 套 / 519 case）
+  与聚合 digest（`cfd6e296…`，五仓共享冻结值；算法见 fc-manifest
+  conformance_suite note）。任何改动必须回到规范仓提交后再同步。
 
 ## CI
 
@@ -136,9 +136,9 @@ semver baseline 为拆分前的 v0.8.0 crates/ 树，见 ci.yml 注释）。
 
 - **支持哪些配置格式？** 八个格式家族、16 个 profiles：JSON（`json.strict@1` / `jsonc.bounded@1` / `json5.standard@1`）、TOML（`toml.1.0@1`）、YAML（`yaml.1.2-core@1` / `yaml.1.1-compat@1`）、INI（`ini.portable@1` / `ini.windows@1` / `ini.python-configparser@1`）、Java Properties（`java-properties.reader@1` / `java-properties.latin1@1`）、XML（`xml.1.0-safe@1`）、Property List（`plist.xml@1` / `plist.binary@1`）、HCL（`hcl.native@1` / `hcl.tfvars@1`）。完整面枚举见 `registry::profiles()`。
 - **与 serde 的关系？** 无依赖关系：serde 是 Rust 类型序列化框架，Consema 是格式内容处理引擎（无损文档、公共值、类型化查询、显式投影、原子编辑、跨格式转换），二者可共存。契约是语言中立的（RFC 0016），五个语言实现同等地位、互不调用。
-- **性能如何？** 解析/渲染基准、硬化语料与基准工具见规范仓 `docs/BENCHMARKS-0.13.0.md`（consema-conformance 基准工具）；CI 带 coverage 硬下限 + 趋势门禁与 deny/audit/semver 门禁。
+- **性能如何？** 解析/渲染基准、硬化语料与基准工具见规范仓 `docs/BENCHMARKS-0.13.0.md`（consema-conformance 基准工具）；CI 带 coverage 硬下限 + 趋势门禁与 deny/audit/semver 门禁。趋势门禁基线在 Windows 本机实测、CI 在 ubuntu 复测（平台耦合事实与 wall-clock 断言的环境耦合说明见 `docs/COVERAGE-0.13.0.md` "CI 环境耦合事实" 节）。
 - **零依赖吗？** 发布 crates 的 7 个 workspace 外部依赖全部精确固定版本（`=x.y.z`）：encoding_rs、sha2、toml_edit、saphyr-parser、unicode-id-start、unicode-ident、xmlparser；此外 CLI facade（consema crate）依赖 `ctrlc = "3.5"`（非精确固定，Cargo.lock 当前为 3.5.2）。
-- **跨语言一致性如何保证？** 18 套语言无关 conformance suite 共 519/519 cases（聚合 digest `cfd6e296…`）由规范仓维护、五仓共享；跨语言差分门禁（多仓 checkout 跑 conformance runner 与 byte parity / normalized differential / protocol-exchange）由 consema / consema-go 仓 CI 承担——本仓 ci.yml 无多仓 checkout job（见 ci.yml 头部自述），只跑 vendored conformance 快照与 suite-count 断言。
+- **跨语言一致性如何保证？** 18 套语言无关 conformance suite 共 519/519 cases（聚合 digest `cfd6e296…`）由规范仓维护、五仓共享；跨语言差分门禁（多仓 checkout 跑 conformance runner 与 byte parity / normalized differential / protocol-exchange）由 go / ts / py / kt 各语言仓 CI 承担——本仓 ci.yml 无多仓 checkout job（见 ci.yml 头部自述），只跑 vendored conformance 快照与 suite-count + 聚合 digest 断言。
 - **兼容承诺？** 语义化版本；`check-version-consistency` 门禁断言 README 版本行与 `Cargo.toml` 一致；semver-check 基线为拆分前 v0.8.0 树；兼容与支持政策见 RFC 0020。
 - **如何贡献？** 见本仓 [CONTRIBUTING.md](CONTRIBUTING.md)（规范仓为权威版）；conformance 向量/夹具/oracle/差分数据权威在规范仓——向量变更是五仓同步事件，必须先回规范仓提交再同步五个语言仓。
 - **"默认拒绝信息损失"是什么意思？** 投影/转换/编辑中的任何 loss（如 YAML 共享结构展开、Properties 重复键折叠、数值舍入）必须显式授权；未授权时操作原子失败（`ConversionResult::Failed(ConversionFailure::UnauthorizedLoss)`；fidelity 三档：Exact / Transformed / Lossy）。

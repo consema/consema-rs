@@ -74,7 +74,7 @@ Rust runner 为：
 
 上述 18 套语言无关向量合计 519 个 case。独立外部 gate 包括 JSON5 83 项（门禁口径 = corpus 43 valid + 39 invalid + 1 个完整真实夹具）、YAML 官方 402 项（307 valid、94 invalid、1 个显式 Profile exclusion）、TOML 官方 679 项，以及 INI/Properties 五套固定运行时 oracle 合计 36 项。每个 runner 固定校验 suite/schema/semantic-model、case ID 唯一性与未知 action 拒绝；向量或 manifest 中的 input/expected 会实际驱动执行，防止把预期值硬编码进 runner。官方参考 gate 只继承其 manifest 明示的公开行为，不继承第三方 loader 的数值降精度、未声明 duplicate collapse、implicit merge、provider layering 或语言对象构造行为。
 
-未来 Go 实现必须直接消费相同向量和 fixture。任何实现不得用序列化本地 AST、异常对象或第三方 parser 私有类型来替代向量中的公共字段。
+Go 实现（0.14.0-0.19.0，G0.1-G5.6 全部交付）与 TypeScript/Python/Kotlin 实现（L0-L5 全部交付）均已直接消费相同向量和 fixture——五语言 conformance runner 全绿（18/519，聚合 digest cfd6e296 共钉；2026-08-12，five-language-ci-design.md §10）。任何实现不得用序列化本地 AST、异常对象或第三方 parser 私有类型来替代向量中的公共字段。
 
 新增或修改行为时，必须遵循：
 

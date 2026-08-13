@@ -15,6 +15,10 @@ use consema::protocol::{
 };
 use std::collections::BTreeMap;
 
+/// Fixture product_version: derived from the crate manifest so the test
+/// fixtures can never silently lag the real version (G120).
+const FIXTURE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// The canonical RFC 0015 §4.4 envelope bytes (the canonical form; the
 /// published example carries one spurious `}` and is rejected).
 fn canonical_envelope() -> Vec<u8> {
@@ -22,7 +26,7 @@ fn canonical_envelope() -> Vec<u8> {
     let envelope = CliOutputMessage::new(
         consema::protocol::CliCommand::Inspect,
         ExitClass::Success,
-        "0.12.0",
+        FIXTURE_VERSION,
         payload,
         Vec::new(),
         Redaction::new(false, 0).unwrap(),
@@ -226,7 +230,7 @@ fn malformed_envelopes_reject_with_documented_codes() {
     for version in ["0.12", "0.12.0.1", "0.12.01", "00.1.0", "0.12.a"] {
         let bad_version = String::from_utf8(canonical_envelope())
             .unwrap()
-            .replace("\"0.12.0\"", &format!("\"{version}\""));
+            .replace(&format!("\"{FIXTURE_VERSION}\""), &format!("\"{version}\""));
         let error = CliOutputMessage::from_json(bad_version.as_bytes(), limits).unwrap_err();
         assert_eq!(error.kind(), ProtocolErrorKind::InvalidValue, "{version}");
         assert_eq!(error.path(), "$.product_version");
@@ -272,7 +276,7 @@ fn malformed_envelopes_reject_with_documented_codes() {
     let error = CliOutputMessage::new(
         consema::protocol::CliCommand::Inspect,
         ExitClass::Success,
-        "0.12.0",
+        FIXTURE_VERSION,
         reordered_payload.build(),
         Vec::new(),
         Redaction::new(false, 0).unwrap(),
@@ -287,7 +291,7 @@ fn pvce_envelopes_never_panic_on_garbage() {
     let envelope = CliOutputMessage::new(
         consema::protocol::CliCommand::Conformance,
         ExitClass::Success,
-        "0.12.0",
+        FIXTURE_VERSION,
         object(vec![
             ("schema", PortableValue::string("cli.conformance@1")),
             ("suite", PortableValue::string("consema.cli.conformance@1")),
@@ -338,7 +342,8 @@ fn pvce_envelopes_never_panic_on_garbage() {
 
 #[test]
 fn pathological_batch_plans_never_panic() {
-    let plan = BatchPlanMessage::new("0.12.0", vec![planned_entry(), failed_entry()]).unwrap();
+    let plan =
+        BatchPlanMessage::new(FIXTURE_VERSION, vec![planned_entry(), failed_entry()]).unwrap();
     let value = plan.to_value().unwrap();
     // Unknown status spellings are rejected at the documented path.
     let mut unknown_status = ObjectBuilder::new();
@@ -475,7 +480,7 @@ fn pathological_batch_plans_never_panic() {
 #[test]
 fn pathological_batch_results_never_panic() {
     let result = BatchResultMessage::new(
-        "0.12.0",
+        FIXTURE_VERSION,
         vec![
             BatchResultFileEntry::new(
                 "app.conf",
@@ -604,7 +609,7 @@ fn huge_manifests_never_panic_and_stay_bounded() {
             .unwrap(),
         );
     }
-    let result = BatchResultMessage::new("0.12.0", entries).unwrap();
+    let result = BatchResultMessage::new(FIXTURE_VERSION, entries).unwrap();
     let value = result.to_value();
     let limits = ProtocolLimits::default();
     let json = encode_json(&value, limits).unwrap();
@@ -710,7 +715,7 @@ fn envelope_field_order_and_presence_are_strict() {
     let envelope = CliOutputMessage::from_value(&value).unwrap();
     assert_eq!(envelope.command(), consema::protocol::CliCommand::Inspect);
     assert_eq!(envelope.exit_class(), ExitClass::Success);
-    assert_eq!(envelope.product_version(), "0.12.0");
+    assert_eq!(envelope.product_version(), FIXTURE_VERSION);
     assert_eq!(envelope.diagnostics().len(), 0);
     assert!(!envelope.redaction().redacted());
     assert_eq!(envelope.redaction().count(), 0);

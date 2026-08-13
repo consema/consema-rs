@@ -32,7 +32,9 @@ jobs:
     timeout-minutes: 60
     # upload-artifact writes to the artifact service, which requires the
     # actions scope in addition to the global contents: read (same as the
-    # ci.yml coverage job).
+    # ci.yml coverage job). Fork PRs get a read-only GITHUB_TOKEN (the
+    # job-level actions: write is not honored), so the upload is skipped
+    # there (G043); the cargo doc gate itself still runs for forks.
     permissions:
       contents: read
       actions: write
@@ -47,7 +49,8 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps --locked
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - if: ${{ !github.event.pull_request.head.repo.fork }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rustdoc-api
           path: target/doc

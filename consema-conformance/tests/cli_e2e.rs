@@ -21,6 +21,10 @@ use consema::protocol::{
 use consema_conformance::{CLI_V1_VECTORS_JSON, run_cli_v1};
 use std::collections::BTreeMap;
 
+/// Fixture product_version: derived from the crate manifest so the test
+/// fixtures can never silently lag the real version (G120).
+const FIXTURE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 fn object(entries: Vec<(&str, PortableValue)>) -> PortableValue {
     let mut builder = ObjectBuilder::new();
     for (key, value) in entries {
@@ -122,7 +126,7 @@ fn envelope_round_trips_are_byte_deterministic_on_both_transports() {
     let envelope = CliOutputMessage::new(
         CliCommand::Conformance,
         ExitClass::Success,
-        "0.12.0",
+        env!("CARGO_PKG_VERSION"),
         conformance_payload(
             &["cli.envelope@1", "cli.exit-code@1", "cli.redaction@1"],
             &[],
@@ -148,7 +152,7 @@ fn envelope_round_trips_are_byte_deterministic_on_both_transports() {
     let redacted = CliOutputMessage::new(
         CliCommand::Inspect,
         ExitClass::Success,
-        "0.12.0",
+        FIXTURE_VERSION,
         object(vec![
             ("schema", PortableValue::string("cli.inspect@1")),
             ("password", PortableValue::string("hunter2")),
@@ -171,7 +175,8 @@ fn envelope_round_trips_are_byte_deterministic_on_both_transports() {
 fn the_batch_state_machine_plan_to_result_holds_through_the_lib() {
     let limits = ProtocolLimits::default();
     // plan: one planned file (with its patch) and one failed file.
-    let plan = BatchPlanMessage::new("0.12.0", vec![planned_entry(), failed_entry()]).unwrap();
+    let plan =
+        BatchPlanMessage::new(FIXTURE_VERSION, vec![planned_entry(), failed_entry()]).unwrap();
     let plan_value = plan.to_value().unwrap();
     let plan_bytes = encode_json(&plan_value, limits).unwrap();
     let decoded_plan =
@@ -211,7 +216,7 @@ fn the_batch_state_machine_plan_to_result_holds_through_the_lib() {
     // apply: the result carries the same order, the completed entry holds
     // the plan's own target digest, and the per-file facts stay truthful.
     let result = BatchResultMessage::new(
-        "0.12.0",
+        FIXTURE_VERSION,
         vec![
             BatchResultFileEntry::new(
                 "app.conf",
@@ -285,7 +290,7 @@ fn interruption_recovery_semantics_hold_at_the_record_level() {
     // are closed, and the recovery branch statuses carry exactly their
     // documented fields.
     let manifest = BatchResultMessage::new(
-        "0.12.0",
+        FIXTURE_VERSION,
         vec![
             BatchResultFileEntry::new(
                 "app.conf",

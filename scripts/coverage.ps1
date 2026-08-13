@@ -465,9 +465,10 @@ $report = @"
 - 报告体例：由 ``scripts/coverage.ps1`` 整体生成（政策文本也在脚本内；禁止手改数字块）。
   本文件是 0.13.0 门禁 M3 的“报告数值入库”载体（gate plan §4 M3、§7 验收表：
   “coverage 可复现报告”）。
-- 取代一次性数字：CHANGELOG.md:133 与 RELEASE-0.8.0.md:98 的 84.65% regions /
-  82.73% functions / 86.59% lines 是单次辅助报告，无脚本、无工件、不可复现；自本
-  报告起 coverage 由常设脚本在固定 commit 上产出，任何数字变化都来自脚本运行。
+- 取代一次性数字：规范仓（github.com/consema/consema）CHANGELOG.md:219 与
+  docs/RELEASE-0.8.0.md:98 记录的 84.65% regions / 82.73% functions / 86.59%
+  lines 是单次辅助报告，无脚本、无工件、不可复现；自本报告起 coverage 由
+  常设脚本在固定 commit 上产出，任何数字变化都来自脚本运行。
 
 $gateBanner
 
@@ -506,19 +507,38 @@ $($otherNote -join "`n")## 方法与范围
 - 百分比从 ``llvm-cov export --summary-only``（JSON）的每文件 covered/total 求和
   重算（与 llvm-cov TOTAL 行同一聚合语义）；region 列即 llvm-cov 的 Region 指标
   （Rust stable 上由 ``-C instrument-coverage`` 的 region counter 给出）。
-- 行/函数/region 均为“至少执行一次”计数；doctest 与测试二进制自身代码随 cargo
-  test 默认包含。
+- 行/函数/region 均为“至少执行一次”计数；测试二进制自身代码随
+  ``--all-targets`` 计入。doctest 不经 llvm-cov 插桩（rustdoc 单独编译，不参与
+  本测量），不在本报告覆盖内。
 - 未归属到任何 crate 的文件会在上方列出（如有）；当前仓库无 workspace
   ``[features]``（gate plan §0.1），故无 ``--all-features`` 腿；若将来引入 features，
   需在本节补记。
+
+## CI 环境耦合事实（2026-08-13 记录，G154 文档化处置）
+
+1. **趋势门禁的平台耦合。** 本报告的基线数字在本机（FRANCK-PC / Windows 11，
+   rustc 1.97.1 stable-msvc）实测；ci.yml 的 coverage job 在 ubuntu-latest 上
+   重新测量并跑 ``-Trend`` 对比本报告。Windows 与 ubuntu 的覆盖率数值存在
+   平台差异（编译器 codegen 与标准库内联行为不同），趋势门禁因此存在设计级
+   环境耦合：本地无法逐字复现 CI 的测量。**风险**：跨平台差异可能造成 CI 红
+   而本地绿（或相反），趋势比较不是纯代码回归探测器。**缓解**：门槛余量
+   （跌幅严格超过 1.0 pp 才失败）远大于实测平台差异；CI 与发布里程碑测量
+   均以同一脚本同参数执行；任何趋势失败都以 CI 数字为准并在发布记录中
+   disposition。
+2. **wall-clock 断言。** ``consema-yaml/src/materialization.rs`` 的 B-7/B-8
+   回归测试含两处墙钟断言（``elapsed < 8.0s``，debug 构建，2026-08-13 实测
+   两条链路余量均在 20x 以上）。**风险**：墙钟断言环境耦合（慢机/负载抖动
+   可能误红）。**缓解**：断言值针对修复前 O(n²) 实现的耗时（~30-60 s debug /
+   ~6.7 s release）设上限，固定实现余量极宽；误红时按修复前基线人工复核，
+   不降低断言值。
 
 ## Coverage 政策（路线图 §18.3 落地）
 
 1. **Coverage 不替代语义证明。** 本报告的百分比只是回归探测器。质量证据的权威
    来源是 conformance 519/519 向量、byte-exact round-trip 证明、hardening 测试、
    差分 oracle、fuzz（0.13.0 M2/M8）与 API 审查（M4）；任何发布记录都不得把单一
-   coverage 百分比当作质量证明引用。本报告取代 CHANGELOG.md:133 的一次性数字，
-   也不再制造新的单次数字。
+   coverage 百分比当作质量证明引用。本报告取代规范仓 CHANGELOG.md:219 记录的
+   一次性数字，也不再制造新的单次数字。
 2. **硬下限（每次运行都强制）。** ``scripts/coverage.ps1`` 每次运行都带
    ``--fail-under-*``，workspace 总 coverage 低于 regions ≥ $hardFloorRegions% /
    functions ≥ $hardFloorFunctions% / lines ≥ $hardFloorLines% 即失败（exit 1）。

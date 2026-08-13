@@ -1,9 +1,11 @@
 //! emit_normalized_results — cross-language normalized-result differential
 //! harness support (milestone 0.15.0 G1.5; docs/go-implementation-plan.md
-//! §4.4 and §2.2; roadmap §16.2 line 1488 and §11.2 lines 849-861).
+//! §4.4 and §2.2; roadmap §16.2 line 1481 and §11.2 lines 849-861).
 //!
 //! Reads the differential case file
-//! (`go/conformance/differential/normalized/cases.json`) and executes every
+//! (`conformance/differential/normalized/cases.json`, the vendored copy of
+//! the single-authority case set in the consema repository) and executes
+//! every
 //! case with the public Rust SDK, emitting the Rust side's normalized
 //! results as one `<outdir>/<case-id>.txt` evidence file per case
 //! (line-oriented `key=value` facts). Orchestration:
@@ -21,7 +23,7 @@
 //! participate in the comparison.
 //!
 //! Since milestone 0.19.0 G5.2 the comparison is bidirectional (roadmap
-//! §16.6 line 1548; docs/go-implementation-plan.md §2.6): the Go test
+//! §16.6 line 1554; docs/go-implementation-plan.md §2.6): the Go test
 //! driver also emits its evidence files for the same input set
 //! (CONSEMA_DIFFERENTIAL_NORMALIZED_GO_DIR), and this example's consume
 //! mode (`--consume <evidence-dir>`) reads them, computes the Rust side

@@ -1,7 +1,8 @@
 name: stale
 
-# Zod 模式：只处理带 needs-info 标签的 issue/PR——7 天未补充信息则标记，
-# 再 5 天仍未回复则自动关闭；PR 不标记（stale-pr-message 为空）。
+# Zod 模式：只处理带 needs-info 标签的 issue——7 天未补充信息则标记，
+# 再 5 天仍未回复则自动关闭；PR 完全禁用（days-before-pr-stale: -1）——
+# 空的 stale-pr-message 只抑制评论，并不抑制标记/关闭（G119）。
 on:
   schedule:
     - cron: '30 1 * * *'
@@ -20,6 +21,8 @@ jobs:
           only-labels: needs-info
           days-before-stale: 7
           days-before-close: 5
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
           stale-issue-message: |-
             该 issue 已 7 天未收到所需补充信息。请回复必要信息（复现步骤、版本、期望行为或相关日志），否则本 issue 将在 5 天后自动关闭。
           close-issue-message: |-

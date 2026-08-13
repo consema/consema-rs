@@ -90,8 +90,10 @@ jobs:
   # (regions >= 70 / functions >= 70 / lines >= 80, --fail-under-* on every
   # invocation). -Trend additionally compares the workspace totals against
   # the report committed at HEAD (docs/COVERAGE-0.13.0.md) and fails when any
-  # metric drops >= 1.0 pp -- the standing executor for the frozen trend
-  # gate. The measured report is uploaded as an artifact (also on gate
+  # metric drops by more than 1.0 pp (the implementation is
+  # `$delta -lt -$trendGatePercentPoints`, so a drop of exactly 1.0 pp
+  # passes; a larger drop fails) -- the standing executor for the frozen
+  # trend gate. The measured report is uploaded as an artifact (also on gate
   # failure, per the script's "evidence for the disposition" rule) and the
   # committed report is then restored, so this job gates regressions without
   # ever rewriting the committed numbers; per the script's own policy the
@@ -130,14 +132,20 @@ jobs:
           $code = $LASTEXITCODE
           # Preserve the measured report for the artifact, then restore the
           # committed report: this job measures and gates only, it never
-          # rewrites the numbers committed at HEAD.
-          if (Test-Path -LiteralPath $report) {
+          # rewrites the numbers committed at HEAD. The script writes the
+          # measured report only on exit 0/1; on exit 2/3 (precondition or
+          # execution failure) no measured report exists, so the committed
+          # file must never be uploaded as if it were measured evidence.
+          if ($code -le 1 -and (Test-Path -LiteralPath $report)) {
             Copy-Item -LiteralPath $report -Destination (Join-Path $artifactDir 'COVERAGE-0.13.0.md') -Force
           }
           git -C $env:GITHUB_WORKSPACE checkout -- docs/COVERAGE-0.13.0.md
           exit $code
       - name: upload measured coverage report (also on gate failure)
-        if: always()
+        # Fork PRs get a read-only GITHUB_TOKEN (the job-level actions: write
+        # is not honored), so upload-artifact v4 fails with 403 there; the
+        # artifact is evidence for non-fork runs only (G043).
+        if: always() && !github.event.pull_request.head.repo.fork
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
@@ -175,9 +183,12 @@ jobs:
   # 519/519 cases (README.md "18 套语言无关 conformance suite 共 519/519
   # cases"). The explicit job runs the crate's full test set (lib suites +
   # per-format hardening/fixtures/publication integration tests) and then
-  # asserts the frozen counts from the vector files so a vector added or
-  # removed without updating the record fails CI. The suites are the vendored
-  # snapshot in conformance/ (authority: the consema repository).
+  # asserts the frozen counts AND the aggregate digest of the vendored
+  # vectors (frozen value cfd6e296..., shared with the go/ts/py/kt runners),
+  # so a vector added or removed without updating the record, or a same-count
+  # byte drift that leaves the verdicts unchanged, fails CI. The suites are
+  # the vendored snapshot in conformance/ (authority: the consema
+  # repository).
   conformance:
     name: conformance + hardening + fixtures (18 suites / 519 cases)
     runs-on: ubuntu-latest
@@ -192,7 +203,7 @@ jobs:
       - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: cargo test -p consema-conformance --locked
         run: cargo test -p consema-conformance --locked
-      - name: suite-count assertions
+      - name: suite-count + aggregate digest assertions
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -211,6 +222,40 @@ jobs:
             throw "suite-count mismatch: expected 18 suites / 519 cases, got $suites suites / $cases cases"
           }
           Write-Output "suite-count: $suites suites, $cases cases"
+          # Aggregate digest assertion (G047): the vendored snapshot must
+          # hash to the frozen five-repo-shared value. Algorithm is the
+          # authority's (fc-manifest conformance_suite.note; identical to
+          # consema-go/scripts/go-verify-shared-conformance.ps1 step [1/6]):
+          # file-name byte-order sort, per-file sha256 lowercase hex, lines
+          # `{basename}:{digest}` joined with '\n' without a trailing
+          # newline, then sha256 of that UTF-8 string, over the canonical LF
+          # checkout bytes (this repo's .gitattributes is `eol=lf`).
+          $names = @(Get-ChildItem -LiteralPath $vectorDir -Filter '*.json' | ForEach-Object { $_.Name })
+          [System.Array]::Sort($names, [System.StringComparer]::Ordinal)
+          $lines = @()
+          foreach ($name in $names) {
+            $digest = (Get-FileHash -LiteralPath (Join-Path $vectorDir $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            $lines += "$name`:$digest"
+          }
+          $aggregateText = [string]::Join("`n", $lines)
+          $sha = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $aggregateBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($aggregateText))
+          } finally {
+            $sha.Dispose()
+          }
+          $computed = ([System.BitConverter]::ToString($aggregateBytes)).Replace('-', '').ToLowerInvariant()
+          $expected = 'cfd6e296da5b22b62d37b076d35bf6bbf58b0678ceddb37eea51a8b47200ab6a'
+          if ($computed -ne $expected) {
+            throw "aggregate digest mismatch: computed $computed, expected $expected (vendored snapshot drifted from the frozen inventory)"
+          }
+          Write-Output "aggregate digest: $computed (frozen value, $suites suites / $cases cases)"
+      # G155: the mutation corpus `-- --check` generator-sync gate was
+      # documented (conformance/README.md) but never executed anywhere;
+      # this step makes the check a real standing gate — a stale corpus
+      # fails CI.
+      - name: mutation corpus --check (generator sync gate)
+        run: cargo run -p consema-conformance --example gen_mutation_corpus --locked -- --check
 
   deny:
     name: cargo deny check
@@ -225,8 +270,10 @@ jobs:
           command: check
           command-arguments: advisories bans licenses sources
 
-  # No-fetch cargo audit: rustsec/audit-check pins the RustSec advisory
-  # database through the action instead of letting cargo-audit fetch it.
+  # cargo audit via the SHA-pinned rustsec/audit-check action. Honest scope
+  # (G136): the action is pinned, but cargo-audit itself is installed by the
+  # action from its latest GitHub release and the RustSec advisory database
+  # is fetched from GitHub at runtime — it is not snapshotted or pinned.
   audit:
     name: cargo audit (RustSec advisory DB)
     runs-on: ubuntu-latest
@@ -249,9 +296,13 @@ jobs:
   # subtree split, so the v0.8.0 tag itself does not exist here; commit
   # fbe98b5c is the split-history commit whose tree is identical to the
   # monorepo v0.8.0 crates/ tree, so it is the exact semantic baseline. The
-  # 11 crates that already existed at v0.8.0 are checked for breaking changes
-  # since the baseline; the three crates added after 0.8.0 (consema-xml/
-  # plist/hcl) have no baseline and are excluded.
+  # v0.8.0 tree has 12 crate directories; the 11 published crates that
+  # already existed at v0.8.0 are checked for breaking changes since the
+  # baseline, consema-conformance (also present at v0.8.0) is excluded as a
+  # test/verification crate that is not part of the published API surface
+  # (the gate protects the published crates), and the three crates added
+  # after 0.8.0 (consema-xml/plist/hcl) have no baseline and are excluded
+  # (G170).
   #
   # Baseline mode: the baseline is materialized OUTSIDE the workspace root
   # (baseline-root). A nested baseline/ inside the checkout duplicates every
@@ -426,10 +477,20 @@ jobs:
             echo "::error::no 'version' found in Cargo.toml [workspace.package]"
             exit 1
           fi
-          grep -qF "Workspace version: $version" README.md || {
-            echo "::error::README.md does not declare 'Workspace version: $version'"
+          # G116: exact token comparison — a substring grep would let the
+          # rc -> GA direction slip through (1.0.0 is a prefix of
+          # "1.0.0-rc.1", so a stale README still matches). The README line
+          # may carry a trailing annotation after the version, so extract
+          # the first whitespace/full-width-paren-delimited token.
+          readme_version=$(sed -n 's/^Workspace version: \([^ （]*\).*/\1/p' README.md | head -n 1)
+          if [ -z "$readme_version" ]; then
+            echo "::error::README.md has no 'Workspace version:' line"
             exit 1
-          }
+          fi
+          if [ "$readme_version" != "$version" ]; then
+            echo "::error::README.md declares 'Workspace version: $readme_version', Cargo.toml has $version"
+            exit 1
+          fi
           echo "README version consistent with Cargo.toml: $version"
 
   # SDK examples gate: every example target under consema/examples/ must

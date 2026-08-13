@@ -10,8 +10,9 @@
 #   $env:CONSEMA_CARGO convention of the other scripts; it reads the
 #   committed Cargo.lock via cargo metadata and emits SPDX 2.3 JSON
 #   (default) or CycloneDX 1.4/1.6 JSON, so the license inventory the
-#   dependency gate (§19.3, deny.toml: MIT/Apache-2.0/Unicode-3.0) audits
-#   is attested in SPDX license expressions. cyclonedx-bom is CycloneDX-
+#   dependency gate (§19.3, deny.toml: Apache-2.0/BSD-3-Clause/MIT/
+#   Unicode-3.0) audits is attested in SPDX license expressions.
+#   cyclonedx-bom is CycloneDX-
 #   only, carries a heavier dependency tree, and adds nothing that
 #   cargo-sbom does not provide, since CycloneDX output is available as
 #   --output-format cyclone_dx_json_1_6 when a consumer requires it.
@@ -121,9 +122,16 @@ if ($LASTEXITCODE -ne 0) {
     exit 2
 }
 $sbomVersion = ($sbomVersionOutput | Select-Object -First 1).Trim()
-if ($sbomVersion -notmatch [regex]::Escape($pinnedSbomVersion)) {
+# Exact version comparison (G041): the old substring match
+# (`-notmatch '0.10.0'`) let 1.0.10.0, 0.10.0-rc.1 or 0.10.01 drift
+# through; the pin must match on the full SemVer core (major.minor.patch
+# plus any prerelease suffix) of the first version token in the output.
+$versionToken = [regex]::Match($sbomVersion, '\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?')
+if (-not $versionToken.Success -or $versionToken.Value -ne $pinnedSbomVersion) {
     Write-Output "error: cargo-sbom version mismatch: found '$sbomVersion',"
-    Write-Output "  expected '$pinnedSbomVersion' (the pinned release-tooling version)."
+    Write-Output "  expected exactly '$pinnedSbomVersion' (the pinned release-tooling version;"
+    Write-Output "  major/minor/patch and prerelease must match exactly, so 1.0.10.0,"
+    Write-Output "  0.10.0-rc.1 or 0.10.01 drift is rejected)."
     Write-Output "  Install the pinned version with:"
     Write-Output "    cargo install cargo-sbom --version $pinnedSbomVersion --locked"
     exit 2

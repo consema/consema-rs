@@ -34,11 +34,10 @@ mod convert_cmd;
 mod detect;
 mod edit_cmd;
 mod explain;
-// Milestone M6: fsio (atomic-write engine) and redact (presentation
-// redaction) are pure infrastructure with unit tests, consumed by the
-// edit/plan/apply milestones M7/M8; until then no item of either module is
-// reachable, so dead-code is expected and the allow is the standing
-// declaration (it stays harmless once the engines are wired).
+// fsio (atomic-write engine) and redact (presentation redaction) are wired
+// and consumed by the edit/plan/apply commands; the allow below remains the
+// standing declaration for any helper not reached by a production path
+// (test-only surface), harmless now that the engines are live.
 #[allow(dead_code)]
 mod fsio;
 mod inspect;

@@ -64,8 +64,9 @@ use std::sync::Arc;
 /// The CLI-local request wrapper schema shared by query/project/materialize.
 pub(crate) const REQUEST_SCHEMA: &str = "cli.request@1";
 
-/// The only query domain wired in this milestone (native domains need
-/// caller-externalized node locators, which the facade does not expose yet).
+/// The only query domain the CLI command wires (the SDK facade exposes the
+/// native per-family query domains; the CLI request wire maps
+/// portable-domain requests only).
 pub(crate) const PORTABLE_QUERY_DOMAIN: &str = "core.portable-value-query";
 
 /// One fully decoded strict request (`cli.request@1`).
@@ -1161,9 +1162,9 @@ fn execute_query(input: &RequestInput) -> Result<QueryResultMessage, FlowError> 
         return Err(query_failure(
             &consema::core::QueryFailure::DomainMismatch(domain.clone()),
             &format!(
-                "query domain '{}{}' is not wired in this milestone; only {PORTABLE_QUERY_DOMAIN}@1 \
-                 is supported (native domains need caller-externalized node locators, which the \
-                 facade does not yet expose)",
+                "query domain '{}{}' is not wired by the CLI command; only {PORTABLE_QUERY_DOMAIN}@1 \
+                 is supported (the native per-family query domains are served by the SDK API, not \
+                 by the CLI request wire)",
                 domain.id(),
                 domain.version()
             ),
@@ -1182,8 +1183,9 @@ fn execute_query(input: &RequestInput) -> Result<QueryResultMessage, FlowError> 
             "cli.data.invalid-request@1",
             format!(
                 "the {PORTABLE_QUERY_DOMAIN}@1 domain cannot query {family} sources: their \
-                 default projection publishes a versioned internal record (the native query \
-                 domains require caller locators not yet exposed by the facade)"
+                 default projection publishes a versioned internal record (those families expose \
+                 only native query domains, served by the SDK API — the CLI request wire is \
+                 portable-domain only)"
             ),
         ));
     }
@@ -2056,7 +2058,7 @@ mod tests {
         let (code, _, stderr) =
             run_request(&["query", "--profile", "json.strict", "--json"], &request);
         assert_eq!(code, 2);
-        assert!(stderr_text(&stderr).contains("not wired in this milestone"));
+        assert!(stderr_text(&stderr).contains("not wired by the CLI command"));
     }
 
     #[test]

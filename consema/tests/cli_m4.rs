@@ -605,7 +605,7 @@ fn explain_capability_kind_is_a_data_error_until_a_declaration_source_exists() {
     assert_eq!(
         status(&output),
         2,
-        "the 0.12.0 SDK publishes no capability-declaration registry"
+        "this SDK build publishes no capability-declaration registry"
     );
     assert!(
         output.stdout.is_empty(),

@@ -3,13 +3,17 @@
 # minute to spread load) and on demand via workflow_dispatch:
 #
 #   - minimal-versions: regenerate the lockfile at MINIMAL versions and
-#     check the whole workspace against it. The workspace pins every direct
-#     external dependency with `=` in [workspace.dependencies] (Cargo.toml),
-#     so the minimal-versions resolution cannot move them; it still lowers
-#     every transitive range dependency of those pinned crates (e.g.
-#     toml_edit -> winnow), which is exactly the surface this job exists to
-#     verify: a crate whose declared minimum versions do not actually
-#     compile together fails here instead of at a user's first build.
+#     check the whole workspace against it. The workspace's directly-
+#     declared external dependencies are the 7 exactly-pinned crates in
+#     [workspace.dependencies] (Cargo.toml, `=` pins that minimal-versions
+#     cannot move) plus the CLI facade's ctrlc (consema/Cargo.toml, a caret
+#     range that minimal-versions lowers to its declared minimum — same
+#     accounting as audit.yml's dependency-surface note); the resolution
+#     also lowers every transitive range dependency of the pinned crates
+#     (e.g. toml_edit -> winnow), which is exactly the surface this job
+#     exists to verify: a crate whose declared minimum versions do not
+#     actually compile together fails here instead of at a user's first
+#     build.
 #     Implementation (serde's exact pattern): `cargo generate-lockfile -Z
 #     minimal-versions` regenerates Cargo.lock in the clean CI checkout
 #     (the committed lockfile is never touched — CI checkouts are fresh and

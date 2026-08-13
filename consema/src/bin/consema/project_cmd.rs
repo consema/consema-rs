@@ -85,14 +85,14 @@ pub(crate) fn wire_projection_request(
     if !message.rules().is_empty() {
         return Err(FlowError::new(
             "cli.data.invalid-request@1",
-            "projection rules are not mapped by milestone M5 (targets and the default policy \
+            "projection rules are not mapped by this build (targets and the default policy \
              only); refusing instead of silently ignoring them",
         ));
     }
     if !message.limits().is_empty() {
         return Err(FlowError::new(
             "cli.data.invalid-request@1",
-            "projection named limits are not mapped by milestone M5 (format-owned limits only); \
+            "projection named limits are not mapped by this build (format-owned limits only); \
              refusing instead of silently ignoring them",
         ));
     }
@@ -286,8 +286,8 @@ fn execute_project(input: &RequestInput) -> Result<ProjectionResultMessage, Flow
         return Err(FlowError::new(
             "cli.data.invalid-request@1",
             format!(
-                "the project command is not wired for the '{family}' family in milestone M5 \
-                 (its report/provenance externalization is not yet implemented); refusing \
+                "the project command is not wired for the '{family}' family (only json/toml \
+                 families are wired; the other families are served by the SDK API); refusing \
                  instead of emitting an incomplete record"
             ),
         ));

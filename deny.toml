@@ -20,6 +20,23 @@ exceptions = []
 ignore = false
 
 [bans]
+# multiple-versions = "deny" is the policy. The three duplicate version
+# groups currently in Cargo.lock are documented here as justified (G044):
+# the bans graph that cargo-deny analyzes excludes dev-dependencies and
+# lockfile-only packages, so these duplicates are not intercepted by the
+# gate — this note is the explicit justification record:
+#   - getrandom 0.3.4 / 0.4.3: both sit under the proptest dev-dependency
+#     subtree of consema-conformance (rand_core 0.9.5 -> getrandom 0.3.4;
+#     tempfile -> getrandom 0.4.3). Dev-only, never shipped to consumers;
+#     unifying would pin transitive versions of rand/tempfile outside this
+#     repository's control.
+#   - syn 2.0.119 / 3.0.3: syn 2.0.119 is a lockfile-only entry reachable
+#     by no workspace target (verified `cargo tree -i` with --all-features;
+#     the graph uses syn 3.0.3 via thiserror 2 -> saphyr-parser); a future
+#     `cargo update` prunes it.
+#   - r-efi 5.3.0 / 6.0.0: both lockfile-only, reachable by no workspace
+#     target; same pruning note.
+# Any duplicate that DOES appear in the analyzed graph still fails the gate.
 multiple-versions = "deny"
 wildcards = "deny"
 highlight = "all"

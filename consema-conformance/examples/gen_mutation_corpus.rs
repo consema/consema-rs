@@ -88,9 +88,13 @@ macro_rules! fixture {
 }
 
 /// The complete fixture table: every committed fixture under
-/// `conformance/fixtures/` is mutated. `profile`/`encoding` are the exact
-/// production profile and source-contract selection the replay test must
-/// parse the mutated bytes with.
+/// `conformance/fixtures/` is mutated, except the special-cased
+/// `fixtures/toml/Cargo.toml` mirror of the consema-rs root manifest —
+/// the corpus therefore carries 46 fixture keys while the fixtures tree
+/// has 47 files (see `conformance/corpora/README.md`).
+/// `profile`/`encoding` are the exact production profile and
+/// source-contract selection the replay test must parse the mutated bytes
+/// with.
 const FIXTURES: &[Fixture] = &[
     // JSON family.
     fixture!(
@@ -438,8 +442,12 @@ struct MutationCase {
 
 fn main() {
     let check = std::env::args().any(|argument| argument == "--check");
-    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../conformance/corpora/mutation-v1.json");
+    // G155: the corpus lives at the repository root
+    // (`consema-rs/conformance/corpora/`); from the consema-conformance
+    // crate directory one `..` reaches the repository root — the old
+    // `../../` was the pre-split layout and panicked at runtime.
+    let target =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../conformance/corpora/mutation-v1.json");
     // Regression entries are committed by hand (conformance/corpora/README.md,
     // "Adding a fuzz finding"). Read the committed array once at startup and
     // round-trip it verbatim into the regenerated output: regeneration is

@@ -1,11 +1,13 @@
 //! emit_protocol_exchange — cross-language protocol exchange harness support
 //! (milestone 0.19.0 G5.3; docs/go-implementation-plan.md §2.6 and §4.4;
-//! roadmap §16.6 line 1549 and §22.2 line 1882: "protocol cross-encode/
+//! roadmap §16.6 line 1555 and §22.2 line 1883: "protocol cross-encode/
 //! decode 100%").
 //!
 //! Reads the differential case file
-//! (`go/conformance/differential/protocol-exchange/cases.json`) and executes
-//! every case with the public Rust SDK. Each case carries one RFC 0015
+//! (`conformance/differential/protocol-exchange/cases.json`, the vendored
+//! copy of the single-authority case set in the consema repository) and
+//! executes every case with the public Rust SDK. Each case carries one
+//! RFC 0015
 //! machine record as canonical transport JSON
 //! (`{"schema":"core.portable-value-json@1","value":{...}}`) plus the
 //! expected outcome (empty error code = accept, registered

@@ -57,7 +57,9 @@
 //! (step 4). The documented injection point
 //! `CONSEMA_APPLY_INTERRUPT_AFTER=<n>` (0-based file index) remains and
 //! fires at the same code point, deterministically, for tests and embedded
-//! callers without OS signals. The sequence writes no further bytes to
+//! callers without OS signals (G045: compiled out of release builds — the
+//! injection seam exists only in dev/test binaries). The sequence writes
+//! no further bytes to
 //! stdout (RFC 0015 §4.2: interruption never produces an envelope), emits
 //! `cli.interrupted.signal@1` on stderr, and exits 4, leaving the in-flight
 //! file pending in the on-disk manifest. The shell-convention code 130 is
@@ -69,10 +71,12 @@
 //! against a real filesystem on every platform (Windows ACLs, no tiny
 //! volumes); following the milestone-M6 `FsBackend` approach at the process
 //! level, `CONSEMA_APPLY_WRITE_FAILURE=permission|io` makes the **first**
-//! atomic target write fail with the named `cli.write.*` error. All other
-//! failure injections (stale digest, tampered patch, read-only, symlink/
-//! junction, directory target, result-manifest write failure) use real
-//! filesystem states.
+//! atomic target write fail with the named `cli.write.*` error (G045: like
+//! the interrupt seam, both injections are compiled out of release builds,
+//! so a production binary can never be influenced by these variables). All
+//! other failure injections (stale digest, tampered patch, read-only,
+//! symlink/junction, directory target, result-manifest write failure) use
+//! real filesystem states.
 //!
 //! # Per-file `redacted` fact
 //!
@@ -244,25 +248,47 @@ struct Injections {
 impl Injections {
     /// Reads the injection points from the environment (deterministic: an
     /// absent, malformed, or out-of-range value disables the injection).
+    ///
+    /// G045: the injection points are compile-time gated to non-release
+    /// builds (`cfg(debug_assertions)`). `cargo test` and dev builds keep
+    /// the deterministic seams for tests and embedded callers; release
+    /// binaries (the production path: `cargo install` / `--release`) have
+    /// the injection compiled out, so a stray environment variable can
+    /// never inject a failure into a real batch write.
     fn from_env() -> Self {
-        let interrupt_after = std::env::var(INTERRUPT_AFTER_ENV)
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok());
-        let write_failure = match std::env::var(WRITE_FAILURE_ENV).ok().as_deref() {
-            Some("permission") => Some((
-                "cli.write.permission@1".to_owned(),
-                format!("injected permission failure ({WRITE_FAILURE_ENV}=permission)"),
-            )),
-            Some("io") => Some((
-                "cli.write.io@1".to_owned(),
-                format!("injected disk-full failure ({WRITE_FAILURE_ENV}=io)"),
-            )),
-            _ => None,
-        };
-        Self {
-            interrupt_after,
-            write_failure,
-            write_failure_fired: Cell::new(false),
+        #[cfg(debug_assertions)]
+        {
+            let interrupt_after = std::env::var(INTERRUPT_AFTER_ENV)
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok());
+            let write_failure = match std::env::var(WRITE_FAILURE_ENV).ok().as_deref() {
+                Some("permission") => Some((
+                    "cli.write.permission@1".to_owned(),
+                    format!("injected permission failure ({WRITE_FAILURE_ENV}=permission)"),
+                )),
+                Some("io") => Some((
+                    "cli.write.io@1".to_owned(),
+                    format!("injected disk-full failure ({WRITE_FAILURE_ENV}=io)"),
+                )),
+                _ => None,
+            };
+            Self {
+                interrupt_after,
+                write_failure,
+                write_failure_fired: Cell::new(false),
+            }
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            // Release build: the injection points are compiled out entirely
+            // (G045); the env-var names are referenced to keep the
+            // documentation consts alive for the debug branch above.
+            let _ = (INTERRUPT_AFTER_ENV, WRITE_FAILURE_ENV);
+            Self {
+                interrupt_after: None,
+                write_failure: None,
+                write_failure_fired: Cell::new(false),
+            }
         }
     }
 

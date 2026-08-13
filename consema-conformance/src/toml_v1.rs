@@ -406,4 +406,20 @@ mod tests {
         assert!(report.is_conformant(), "{report:#?}");
         assert_eq!(report.passed.len(), 18);
     }
+
+    /// G163: the `toml.corpus.cargo-manifest` fixture must stay
+    /// byte-identical to the consema-rs root manifest (the fixture README
+    /// promises it; the vector consumer only parses it, so this is the
+    /// enforcement the claim needs). A version bump that forgets the
+    /// fixture now fails CI.
+    #[test]
+    fn cargo_manifest_fixture_is_byte_identical_to_the_workspace_root_manifest() {
+        let fixture = include_bytes!("../../conformance/fixtures/toml/Cargo.toml");
+        let root = include_bytes!("../../Cargo.toml");
+        assert_eq!(
+            fixture, root,
+            "conformance/fixtures/toml/Cargo.toml must stay byte-identical to the \
+             consema-rs root Cargo.toml (update the fixture with the root manifest)"
+        );
+    }
 }

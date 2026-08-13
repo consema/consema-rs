@@ -1,11 +1,12 @@
 //! Deterministic in-process mutational fuzz harness (0.13.0 gate plan M2).
 //!
-//! The 0.13.0 gate plan (docs/0.13.0-gate-plan.md, M2 and §15.3) requires a
-//! per-format fuzz target set for parser/decoder/query/projection/
-//! materialization/edit entry points with resource limits pinned to the
-//! production profile defaults, plus a committed seed/corpus story. The plan
-//! allows either cargo-fuzz or an equivalent harness ("cargo-fuzz 或等价
-//! harness").
+//! The 0.13.0 gate plan (consema repository,
+//! https://github.com/consema/consema/blob/main/docs/0.13.0-gate-plan.md,
+//! M2 and §15.3) requires a per-format fuzz target set for
+//! parser/decoder/query/projection/materialization/edit entry points with
+//! resource limits pinned to the production profile defaults, plus a
+//! committed seed/corpus story. The plan allows either cargo-fuzz or an
+//! equivalent harness ("cargo-fuzz 或等价 harness").
 //!
 //! This workspace cannot run cargo-fuzz/libFuzzer: the toolchain is
 //! `x86_64-pc-windows-msvc` and no clang is installed, so `libfuzzer-sys`
@@ -31,8 +32,10 @@
 //! `<format>/fuzz/fuzz_logic/` and is the single source of truth
 //! included both by the in-tree drivers here and by the cargo-fuzz wrappers
 //! under `<format>/fuzz/fuzz_targets/` (which run unmodified on a
-//! libFuzzer-capable host, e.g. the Linux machine used for the 72 CPU-hours
-//! milestone M8).
+//! libFuzzer-capable host — the clang completion path recorded in the
+//! evidence ledger; note the 72 CPU-hours M8 ledger was accumulated by the
+//! in-process driver on this machine (FRANCK-PC, MSVC-only), and the
+//! libFuzzer/clang host path remains unexecuted).
 //!
 //! Equivalence to libFuzzer: libFuzzer mutates its input corpus with
 //! byte-level operations (bit flips, byte flips, insertion, deletion,

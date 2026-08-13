@@ -9,8 +9,8 @@
 //! the test with the exact input.
 //!
 //! The full replay is the `#[ignore]`d long run; the bounded default run
-//! replays a deterministic stride sample (≤256 cases per fixture) to keep
-//! CI fast.
+//! replays a deterministic stride sample (≤96 cases per fixture,
+//! `BOUNDED_CASES_PER_FIXTURE` below) to keep CI fast.
 
 use consema_document::ParseLimits;
 use consema_json::{JsonProfile, JsonValue, SemanticAvailability, parse};

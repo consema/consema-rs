@@ -1345,6 +1345,10 @@ mod tests {
         r#"{"key":"schema","value":{"type":"String","value":"core.cli-output@1"}},"#,
         r#"{"key":"command","value":{"type":"String","value":"inspect"}},"#,
         r#"{"key":"exit_class","value":{"type":"String","value":"success"}},"#,
+        // product_version "0.12.0" is the frozen RFC 0015 §4.4 example
+        // version (the published canonical envelope bytes carry it; the
+        // digest-pinned cli-v1.json vector embeds the same example) —
+        // contract data, not a stale version label (G120).
         r#"{"key":"product_version","value":{"type":"String","value":"0.12.0"}},"#,
         r#"{"key":"payload","value":{"type":"Object","entries":["#,
         r#"{"key":"schema","value":{"type":"String","value":"cli.inspect@1"}},"#,
@@ -1420,6 +1424,7 @@ mod tests {
     }
 
     fn envelope() -> CliOutputMessage {
+        // Frozen RFC 0015 §4.4 example version (see RFC_ENVELOPE_JSON).
         CliOutputMessage::new(
             CliCommand::Inspect,
             ExitClass::Success,
@@ -1507,7 +1512,7 @@ mod tests {
         assert_eq!(decoded, envelope());
         assert_eq!(decoded.command(), CliCommand::Inspect);
         assert_eq!(decoded.exit_class(), ExitClass::Success);
-        assert_eq!(decoded.product_version(), "0.12.0");
+        assert_eq!(decoded.product_version(), "0.12.0"); // frozen RFC §4.4 example version
         assert!(!decoded.redaction().redacted());
         assert_eq!(decoded.redaction().count(), 0);
         // The same value round-trips through PVCE/1 byte-exactly.
@@ -1543,7 +1548,7 @@ mod tests {
         let error = CliOutputMessage::new(
             CliCommand::Inspect,
             ExitClass::Success,
-            "0.12.0",
+            env!("CARGO_PKG_VERSION"),
             object(vec![("schema", PortableValue::string("cli.explain@1"))]),
             Vec::new(),
             Redaction::new(false, 0).unwrap(),
@@ -1554,7 +1559,7 @@ mod tests {
         let error = CliOutputMessage::new(
             CliCommand::Query,
             ExitClass::Success,
-            "0.12.0",
+            env!("CARGO_PKG_VERSION"),
             object(vec![("schema", PortableValue::string("cli.inspect@1"))]),
             Vec::new(),
             Redaction::new(false, 0).unwrap(),
@@ -1573,7 +1578,7 @@ mod tests {
             CliOutputMessage::new(
                 CliCommand::Query,
                 ExitClass::Success,
-                "0.12.0",
+                env!("CARGO_PKG_VERSION"),
                 object(vec![("schema", PortableValue::string(schema))]),
                 Vec::new(),
                 Redaction::new(false, 0).unwrap(),
@@ -1585,7 +1590,7 @@ mod tests {
         let error = CliOutputMessage::new(
             CliCommand::Query,
             ExitClass::Success,
-            "0.12.0",
+            env!("CARGO_PKG_VERSION"),
             PortableValue::string("core.query-result@1"),
             Vec::new(),
             Redaction::new(false, 0).unwrap(),
@@ -1602,7 +1607,7 @@ mod tests {
         let error = CliOutputMessage::new(
             CliCommand::Inspect,
             ExitClass::Success,
-            "0.12.0",
+            env!("CARGO_PKG_VERSION"),
             entries.build(),
             Vec::new(),
             Redaction::new(false, 0).unwrap(),
@@ -1686,7 +1691,7 @@ mod tests {
         let message = CliOutputMessage::new(
             CliCommand::Inspect,
             ExitClass::Limit,
-            "0.12.0",
+            env!("CARGO_PKG_VERSION"),
             rfc_inspect_payload(),
             vec![diagnostic],
             Redaction::new(false, 0).unwrap(),
@@ -1729,7 +1734,11 @@ mod tests {
 
     #[test]
     fn batch_plan_notation_round_trips_on_both_transports() {
-        let plan = BatchPlanMessage::new("0.12.0", vec![planned_entry(), failed_entry()]).unwrap();
+        let plan = BatchPlanMessage::new(
+            env!("CARGO_PKG_VERSION"),
+            vec![planned_entry(), failed_entry()],
+        )
+        .unwrap();
         let value = plan.to_value().unwrap();
         let decoded = BatchPlanMessage::from_value(&value).unwrap();
         assert_eq!(decoded, plan);
@@ -1828,7 +1837,7 @@ mod tests {
         assert_eq!(error.path(), "$.files[]");
 
         // The manifest rejects a non-plan command.
-        let mut value = BatchPlanMessage::new("0.12.0", Vec::new())
+        let mut value = BatchPlanMessage::new(env!("CARGO_PKG_VERSION"), Vec::new())
             .unwrap()
             .to_value()
             .unwrap();
@@ -1881,8 +1890,11 @@ mod tests {
             false,
         )
         .unwrap();
-        let result =
-            BatchResultMessage::new("0.12.0", vec![completed, failed, stale, pending]).unwrap();
+        let result = BatchResultMessage::new(
+            env!("CARGO_PKG_VERSION"),
+            vec![completed, failed, stale, pending],
+        )
+        .unwrap();
         let value = result.to_value();
         let decoded = BatchResultMessage::from_value(&value).unwrap();
         assert_eq!(decoded, result);

@@ -3,7 +3,9 @@
 //! §16.1 hard gate: "Rust 与 Go 的 PVCE/PGCE bytes 完全一致").
 //!
 //! Reads the differential case file
-//! (`go/conformance/differential/cases.json`) and emits the Rust reference
+//! (`conformance/differential/cases.json`, the vendored copy of the
+//! single-authority case set in the consema repository) and emits the Rust
+//! reference
 //! encoder's canonical bytes for every case as `<outdir>/<case-id>.hex`.
 //! Orchestration: `scripts/go-verify-byte-parity.ps1`.
 //!

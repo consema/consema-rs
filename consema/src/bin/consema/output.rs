@@ -203,7 +203,7 @@ mod tests {
         CliOutputMessage::new(
             CliCommand::Conformance,
             ExitClass::Success,
-            "0.12.0",
+            env!("CARGO_PKG_VERSION"),
             payload.build(),
             Vec::new(),
             Redaction::new(false, 0).expect("redaction invariant"),

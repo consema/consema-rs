@@ -9,13 +9,15 @@
     "oracle_platform_url": "https://developer.apple.com/xcode/system-requirements",
     "toolchain": "Xcode 26.6 with Swift 6.3 (6.3.3)",
     "toolchain_url": "https://developer.apple.com/documentation/xcode-release-notes/xcode-26-release-notes",
-    "note": "runtime pins follow the repository oracle 体例 (conformance/oracles/java-properties-v1/README.md: the manifest is frozen after the adapter is executed on the authoritative runtime). The macOS-leg golden outputs (converted-byte digests) are enforced as plutil-vs-Swift-driver byte identity plus reparse and value equality at runtime; byte-level golden digests are frozen by the first pinned-macOS run and must be updated together with the runtime pins only when the pinned toolchain changes."
+    "note": "runtime pins follow the repository oracle 体例 (conformance/oracles/java-properties-v1/README.md: the manifest is frozen after the adapter is executed on the authoritative runtime). The macOS-leg golden outputs (converted-byte digests) are enforced as plutil-vs-Swift-driver byte identity plus reparse and value equality at runtime; byte-level golden digests are frozen by the first pinned-macOS run and must be updated together with the runtime pins only when the pinned toolchain changes. Honest scope (G113, 2026-08-13): no macOS execution exists in any repository — the macOS runtime pins below are declarations taken from the Apple system-requirements/release-notes pages, not observed facts; they become observed facts at the first pinned-macOS run."
   },
   "runtime": {
     "macos.product_version": "26.5",
     "xcode.version": "26.6",
     "swift.version": "6.3.3",
-    "windows_build": "10.0.26200.0"
+    "macos_observation": "not-yet-executed as of 2026-08-13 (declared, not observed; see the authority note)",
+    "windows_build": "10.0.26200.0",
+    "windows_build_note": "development machine of the plistlib secondary leg (Windows); not a macOS runtime fact"
   },
   "driver": {
     "source": "scripts/oracles/PropertyListOracle.swift",

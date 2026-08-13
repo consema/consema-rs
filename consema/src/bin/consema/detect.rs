@@ -8,8 +8,9 @@
 //! §7.2 rule 1), and a candidate set of more than one profile is a
 //! first-class ambiguity result (`ambiguous: true`), never a silent guess
 //! (RFC 0015 §7.2 rule 5; plan §3.2). The marker set and its judgments are
-//! the deterministic table below; milestone M9 pins them with the
-//! `consema.cli.conformance@1` vectors (RFC 0015 §16.1 `cli.detection@1`).
+//! the deterministic table below; milestone M9 pinned them with the
+//! `consema.cli.conformance@1` vectors (RFC 0015 §16.1 `cli.detection@1`,
+//! delivered with the 519-case suite).
 
 use consema::document::{ContentDigest, ProfileId};
 

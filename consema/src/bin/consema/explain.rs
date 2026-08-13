@@ -13,7 +13,7 @@
 //! the v7 registries and the facade profile inventory — nothing is
 //! redeclared (plan §11 item 3).
 //!
-//! The capability kind is reserved by RFC 0015 §6.2 but the 0.12.0 SDK
+//! The capability kind is reserved by RFC 0015 §6.2 but this SDK build
 //! publishes no capability-declaration registry: an explicit capability
 //! lookup is a data error (exit 2) instead of an invented declaration.
 
@@ -112,7 +112,7 @@ pub fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) 
                 &[cli_diagnostic(
                     "cli.data.invalid-request@1",
                     "explain: capability declarations are not published by this SDK build \
-                     (RFC 0015 §6.2 reserves the kind; the 0.12.0 SDK has no \
+                     (RFC 0015 §6.2 reserves the kind; this SDK build has no \
                      capability-declaration registry)"
                         .to_owned(),
                 )],
@@ -530,7 +530,7 @@ mod tests {
             run(&["explain", "capability", "core.query.ordered-results@1"]);
         assert_eq!(
             code, 2,
-            "no capability-declaration source in the 0.12.0 SDK"
+            "no capability-declaration source in this SDK build"
         );
         assert!(
             stdout.is_empty(),

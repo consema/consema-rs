@@ -787,7 +787,7 @@ mod tests {
 
     #[test]
     fn inspect_unreadable_file_is_a_data_error_with_an_envelope() {
-        let missing = std::env::temp_dir().join("consema-inspect-missing-0.12.0-file");
+        let missing = std::env::temp_dir().join("consema-inspect-missing-file");
         let (code, stdout, stderr) = run(&["inspect", missing.to_str().unwrap(), "--json"]);
         assert_eq!(code, 2, "cli.data.io@1 classifies as data");
         assert!(!stdout.is_empty(), "data failures carry an envelope");

@@ -858,6 +858,12 @@ mod tests {
     }
 
     fn rfc_envelope() -> CliOutputMessage {
+        // product_version "0.12.0" is the frozen RFC 0015 §4.4 example
+        // version: the published canonical envelope bytes (embedded in the
+        // digest-pinned cli-v1.json vector as
+        // `cli.envelope.rfc-canonical-bytes`) carry it, and this helper must
+        // re-encode byte-identically to that frozen example — this is
+        // contract data, not a stale version label (G120).
         CliOutputMessage::new(
             CliCommand::Inspect,
             ExitClass::Success,

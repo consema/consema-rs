@@ -1021,7 +1021,7 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
         let error = FlowError::usage(
             "cli.usage.invalid-argument@1",
             "flag '--write' is not available in this build: edit is dry-run only \
-             (the commit path lands with fsio in milestone M8)",
+             (RFC 0015 §10.1; the write path is `plan` + `apply`)",
         );
         return emit_failure(CliCommand::Edit, parsed, &error, None, stdout, stderr);
     }
@@ -1070,7 +1070,7 @@ pub(crate) fn run_with_request(
         let error = FlowError::usage(
             "cli.usage.invalid-argument@1",
             "flag '--write' is not available in this build: edit is dry-run only \
-             (the commit path lands with fsio in milestone M8)",
+             (RFC 0015 §10.1; the write path is `plan` + `apply`)",
         );
         return emit_failure(
             CliCommand::Edit,

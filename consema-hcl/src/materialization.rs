@@ -158,10 +158,9 @@
 //! bytes, or partial provenance. The reparse uses limits derived from the
 //! request so a bounded input cannot fail its own closure.
 //!
-//! The module is not yet re-exported from the crate root (the M5-M8 parallel
-//! milestones land their `pub use` wiring together); this attribute is the
-//! shared adaptation-point pattern of the parallel milestone files and is
-//! removed when the crate root exports land.
+//! The module is re-exported from the crate root (`pub use
+//! materialization::materialize`, lib.rs) — the parallel-milestone wiring
+//! pattern is complete.
 use crate::expression::{
     HclDirectiveKind, HclExpression, HclExpressionKind, HclForIntro, HclObjectKey, HclTemplatePart,
     HclTraversalRoot, HclTraversalStep, UnaryOp, canonical_decimal,
