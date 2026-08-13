@@ -55,15 +55,16 @@ names are reserved placeholders and do not name any real product.
 
 The UTF-16 XML source encoding is not stored as a fixture file. Following the
 XML fixture 体例 (`conformance/fixtures/xml/README.md` and
-`crates/consema-conformance/tests/xml_encoding_corpus.rs`), the plist fixtures
-gate generates a UTF-16LE BOM preference-shaped plist in memory and runs the
-same parse/render/coverage/projection/materialization closure over it
-(`crates/consema-conformance/tests/plist_fixtures.rs`).
+`consema-conformance/tests/xml_encoding_corpus.rs` in the consema-rs repo),
+the plist fixtures gate generates a UTF-16LE BOM preference-shaped plist in
+memory and runs the same parse/render/coverage/projection/materialization
+closure over it (`consema-conformance/tests/plist_fixtures.rs`, consema-rs
+repo).
 
 ## Gate
 
-The fixtures gate (`crates/consema-conformance/tests/plist_fixtures.rs`)
-parses every fixture under its profile (`plist.xml@1` / `plist.binary@1`),
+The fixtures gate (`consema-conformance/tests/plist_fixtures.rs`, consema-rs
+repo) parses every fixture under its profile (`plist.xml@1` / `plist.binary@1`),
 requires byte-exact unmodified rendering, exhaustive structural coverage (XML
 lossless pieces and binary structure regions cover every byte), an exact
 `plist.value-tree@1` projection, a canonical materialization round trip whose

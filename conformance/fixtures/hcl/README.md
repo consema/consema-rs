@@ -23,7 +23,8 @@ secrets.
   `.tfvars` documents: attributes only, with objects, tuples, heredocs, and
   both ASCII and hyphenated names.
 
-The fixture gate (`crates/consema-conformance/tests/hcl_fixtures.rs`) parses
+The fixture gate (`consema-conformance/tests/hcl_fixtures.rs`, consema-rs
+repo — crates at the repo root after the 2026-08-12 split) parses
 every fixture under its profile, requires byte-exact unmodified rendering,
 complete lossless-syntax coverage, an `hcl.projection.body@1` projection
 under the explicit `ProjectExpression` policy (production configurations

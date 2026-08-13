@@ -16,10 +16,11 @@ secrets.
 - `namespaced-service.xml` exercises multiple namespace prefixes, prefixed
   attributes, mixed content order, and a processing instruction.
 
-The encoding corpus gate (`crates/consema-conformance/tests/xml_encoding_corpus.rs`)
-covers BOM/declaration conflicts, UTF-16LE/BE round trips, BOM-less UTF-16
-rejection under the frozen default-UTF-8 contract, non-BMP names and content,
-invalid sequences, and raw/decoded span closure.
+The encoding corpus gate (`consema-conformance/tests/xml_encoding_corpus.rs`,
+consema-rs repo — crates at the repo root after the 2026-08-12 split) covers
+BOM/declaration conflicts, UTF-16LE/BE round trips, BOM-less UTF-16 rejection
+under the frozen default-UTF-8 contract, non-BMP names and content, invalid
+sequences, and raw/decoded span closure.
 
 The hardening gate parses every fixture under `xml.1.0-safe@1`, requires
 byte-exact unmodified rendering, complete lossless-syntax coverage, exact

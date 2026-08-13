@@ -37,7 +37,7 @@ raw `NodeRef`、snapshot handle、cursor 与 `CancellationToken` 不可序列化
 
 `hcl.native@1`/`hcl.tfvars@1` 的 parse/query/project/edit 全程不求值：无 variable/function/template 求值与展开，`hcl.expression@1` 只承载语法事实、永不执行，无 application schema 与 Terraform/cty 语义。formation 只消费调用方提供的完整文档字节，不访问文件、网络、registry 或环境。表达式/模板/heredoc depth、number digits、item/label/attribute counts 与 recovery regions 等全部尺寸算术在分配前 checked，limit 失败绝不伪装成空 body、截断表达式或缩短查询。恢复文档可查询、不可 project/materialize/commit；`hcl.canonical-document@1` materialization 生成字节必先重解析并逐节点比较闭包语义，失败返回无目标 Document、无 partial bytes、无 partial provenance。对抗门禁覆盖 expression depth、template/heredoc size、number digits、body nesting 与 item counts 的极限输入，验证无 panic、无无界分配。
 
-依赖门禁由 `Cargo.lock`、精确锁定的 TOML/Unicode 依赖、RustSec `cargo audit` 和仓库级 `deny.toml` 共同执行。`cargo deny check` 拒绝已知公告、未知 registry/Git 来源、通配版本和重复版本，并只允许当前实际使用的 MIT/Apache-2.0/Unicode-3.0 许可证；任何例外都必须携带可审计理由进入版本控制。
+依赖门禁由 `Cargo.lock`、精确锁定的 TOML/Unicode 依赖、RustSec `cargo audit` 和仓库级 `deny.toml` 共同执行。`cargo deny check` 拒绝已知公告、未知 registry/Git 来源、通配版本和重复版本，并只允许 `deny.toml` 声明的 Apache-2.0 / BSD-3-Clause / MIT / Unicode-3.0 许可证；任何例外都必须携带可审计理由进入版本控制。
 
 ## 安全披露与支持周期
 

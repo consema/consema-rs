@@ -340,7 +340,10 @@ fn formation_malformed_escape_in_key(case: &VectorCase<'_>) -> Result<(), String
         status_name(document.formation_status()) == expected_string(case, "formation")?
             && document.properties().len() == expected_usize(case, "properties")?
             && document.error_lines().len() == expected_usize(case, "error_lines")?
-            && document.error_lines().first().map(|line| line.code().as_ref())
+            && document
+                .error_lines()
+                .first()
+                .map(|line| line.code().as_ref())
                 == Some(expected_string(case, "code")?),
         "malformed escape in key facts differed",
     )
@@ -353,8 +356,8 @@ fn formation_malformed_escape_in_key(case: &VectorCase<'_>) -> Result<(), String
 fn formation_fatal_encoding(case: &VectorCase<'_>) -> Result<(), String> {
     let encoding = source_encoding(input_string(case, "encoding")?)?;
     let bytes = decode_hex(input_string(case, "source_hex")?)?;
-    let failure = properties::parse_reader(bytes, encoding, PropertiesParseLimits::default())
-        .unwrap_err();
+    let failure =
+        properties::parse_reader(bytes, encoding, PropertiesParseLimits::default()).unwrap_err();
     require(
         failure.diagnostics().first().map(|item| item.code.as_str())
             == Some(expected_string(case, "code")?),

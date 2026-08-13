@@ -1112,8 +1112,9 @@ fn run_limit(case: &PortableValue) -> Result<(), String> {
     .err()
     .ok_or("parse must fail fatally under the declared limits")?;
     if let Some(status) = expected_string_field(expected, "status") {
-        ensure(status == "FatalFormationFailure")
-            .map_err(|_| format!("limit case status must be FatalFormationFailure, got {status}"))?;
+        ensure(status == "FatalFormationFailure").map_err(|_| {
+            format!("limit case status must be FatalFormationFailure, got {status}")
+        })?;
     }
     if let Some(diagnostic) = expected_string_field(expected, "diagnostic") {
         ensure(failure.diagnostics().iter().any(|d| d.code == diagnostic))

@@ -114,13 +114,15 @@ MSRV 1.85（workspace `rust-version`；CI msrv job 真实验证）。
   单独运行：`cargo test -p consema-conformance --locked`。
 - `conformance/` 是从规范仓（consema）vendored 的快照副本（编译期 include
   需要），含 vectors / fixtures / oracles / corpora / differential；权威在
-  规范仓，一致性由 CI（conformance job 的 suite-count 断言与共享 conformance
-  校验）保证，任何改动必须回到规范仓提交后再同步。
+  规范仓。本仓 CI 的 conformance job 断言 suite-count（18 套 / 519 case）；
+  共享 conformance 的聚合 digest 校验在 Go 仓与规范仓 fc-manifest。任何
+  改动必须回到规范仓提交后再同步。
 
 ## CI
 
 `.github/workflows/ci.yml`：lint / test / coverage / msrv / conformance /
-deny / audit / semver / package 九个 job（coverage 硬下限 + 趋势门禁；
+deny / audit / semver / package / check-version-consistency / examples
+十一个 job，外加 check 聚合门禁（coverage 硬下限 + 趋势门禁；
 semver baseline 为拆分前的 v0.8.0 crates/ 树，见 ci.yml 注释）。
 
 ## FAQ
@@ -128,7 +130,7 @@ semver baseline 为拆分前的 v0.8.0 crates/ 树，见 ci.yml 注释）。
 - **支持哪些配置格式？** 八个格式家族、16 个 profiles：JSON（`json.strict@1` / `jsonc.bounded@1` / `json5.standard@1`）、TOML（`toml.1.0@1`）、YAML（`yaml.1.2-core@1` / `yaml.1.1-compat@1`）、INI（`ini.portable@1` / `ini.windows@1` / `ini.python-configparser@1`）、Java Properties（`java-properties.reader@1` / `java-properties.latin1@1`）、XML（`xml.1.0-safe@1`）、Property List（`plist.xml@1` / `plist.binary@1`）、HCL（`hcl.native@1` / `hcl.tfvars@1`）。完整面枚举见 `registry::profiles()`。
 - **与 serde 的关系？** 无依赖关系：serde 是 Rust 类型序列化框架，Consema 是格式内容处理引擎（无损文档、公共值、类型化查询、显式投影、原子编辑、跨格式转换），二者可共存。契约是语言中立的（RFC 0016），五个语言实现同等地位、互不调用。
 - **性能如何？** 解析/渲染基准、硬化语料与基准工具见规范仓 `docs/BENCHMARKS-0.13.0.md`（consema-conformance 基准工具）；CI 带 coverage 硬下限 + 趋势门禁与 deny/audit/semver 门禁。
-- **零依赖吗？** 发布 crates 仅依赖 7 个精确固定版本（`=x.y.z`）的 crate：encoding_rs、sha2、toml_edit、saphyr-parser、unicode-id-start、unicode-ident、xmlparser。
+- **零依赖吗？** 发布 crates 的 7 个 workspace 外部依赖全部精确固定版本（`=x.y.z`）：encoding_rs、sha2、toml_edit、saphyr-parser、unicode-id-start、unicode-ident、xmlparser；此外 CLI facade（consema crate）依赖 `ctrlc = "3.5"`（非精确固定，Cargo.lock 当前为 3.5.2）。
 - **跨语言一致性如何保证？** 18 套语言无关 conformance suite 共 519/519 cases（聚合 digest `cfd6e296…`）由规范仓维护、五仓共享；CI 多仓 checkout 跑 conformance runner 与跨语言差分（byte parity / normalized differential / protocol-exchange）门禁。
 - **兼容承诺？** 语义化版本；`check-version-consistency` 门禁断言 README 版本行与 `Cargo.toml` 一致；semver-check 基线为拆分前 v0.8.0 树；兼容与支持政策见 RFC 0020。
 - **如何贡献？** 见本仓 [CONTRIBUTING.md](CONTRIBUTING.md)（规范仓为权威版）；conformance 向量/夹具/oracle/差分数据权威在规范仓——向量变更是五仓同步事件，必须先回规范仓提交再同步五个语言仓。

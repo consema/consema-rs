@@ -1,7 +1,7 @@
 {
   "suite": "consema.mutation-corpus@1",
   "generator": {
-    "tool": "crates/consema-conformance/examples/gen_mutation_corpus.rs",
+    "tool": "consema-conformance/examples/gen_mutation_corpus.rs",
     "seed": 6840145125992895424,
     "classes": ["flip", "truncate", "insert", "delete", "repeat", "splice"],
     "regenerate": "cargo run -p consema-conformance --example gen_mutation_corpus"

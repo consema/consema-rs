@@ -679,12 +679,12 @@ fn parse_depth_limit(case: &VectorCase<'_>) -> Result<(), String> {
 /// node is visited (projection.rs:564-567).
 fn projection_amplification_limit(case: &VectorCase<'_>) -> Result<(), String> {
     let document = parse_case(case)?;
-    let result = document.project_value(
-        ValueProjectionRequest::best_exact_v1().with_limits(ValueProjectionLimits {
+    let result = document.project_value(ValueProjectionRequest::best_exact_v1().with_limits(
+        ValueProjectionLimits {
             max_amplification_ratio: input_usize(case, "max_amplification_ratio")?,
             ..ValueProjectionLimits::default()
-        }),
-    );
+        },
+    ));
     let ValueProjectionResult::Failed(failure) = result else {
         return Err("projection unexpectedly completed".to_owned());
     };

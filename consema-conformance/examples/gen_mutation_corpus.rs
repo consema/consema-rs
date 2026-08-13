@@ -6,7 +6,7 @@
 //! `consema_conformance::fuzz`), and writes
 //! `conformance/corpora/mutation-v1.json`. The corpus is regression input,
 //! not a runtime generator: the replay test
-//! (`crates/consema-conformance/tests/mutation_corpus.rs`) reads the
+//! (`consema-conformance/tests/mutation_corpus.rs`) reads the
 //! committed file and never regenerates.
 //!
 //! Usage:
@@ -568,7 +568,7 @@ fn generate(regressions: &str) -> String {
     output.push_str("  \"suite\": \"consema.mutation-corpus@1\",\n");
     output.push_str("  \"generator\": {\n");
     output.push_str(
-        "    \"tool\": \"crates/consema-conformance/examples/gen_mutation_corpus.rs\",\n",
+        "    \"tool\": \"consema-conformance/examples/gen_mutation_corpus.rs\",\n",
     );
     let _ = writeln!(output, "    \"seed\": {BASE_SEED},");
     output.push_str("    \"classes\": [\"flip\", \"truncate\", \"insert\", \"delete\", \"repeat\", \"splice\"],\n");

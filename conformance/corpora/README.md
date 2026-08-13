@@ -42,9 +42,10 @@ Layout:
 
 ### Replay
 
-* Bounded (CI): `crates/consema-conformance/tests/mutation_corpus.rs`
-  replays a deterministic stride sample (≤96 cases per fixture) plus every
-  regression entry.
+* Bounded (CI): `consema-conformance/tests/mutation_corpus.rs` (consema-rs
+  repository, crate at the repo root — no `crates/` prefix after the 2026-08-12
+  six-repo split) replays a deterministic stride sample (≤96 cases per
+  fixture) plus every regression entry.
 * Full: `cargo test -p consema-conformance --test mutation_corpus -- --ignored`
   replays all ~175,000 committed cases.
 
@@ -85,14 +86,14 @@ still reproduce):
   level (minimal inputs `{"a` and `{"a"1,...}`). The gate (M2) requires
   rejection; the ini projection implements the explicit
   `RecoveredDocument` gate that the json family lacks
-  (`crates/consema-ini/src/projection.rs:292`). Tracked by
+  (`consema-ini/src/projection.rs:292`, consema-rs repo). Tracked by
   `KNOWN_RECOVERED_ACCEPTED_HITS` in
-  `crates/consema-json/fuzz/fuzz_logic/operations.rs`.
+  `consema-json/fuzz/fuzz_logic/operations.rs` (consema-rs repo).
 * **M2-F2** — a double-quoted YAML scalar `"~"` decodes to empty content
   instead of the string `"~"` (content loss on a quoted scalar)
-  (`crates/consema-yaml/src/native.rs:490-499`, `exact_empty_scalar`).
-  Tracked by `KNOWN_FINDING_M2_F2_HITS` in
-  `crates/consema-conformance/tests/property_graph.rs`.
+  (`consema-yaml/src/native.rs:490-499`, consema-rs repo,
+  `exact_empty_scalar`). Tracked by `KNOWN_FINDING_M2_F2_HITS` in
+  `consema-conformance/tests/property_graph.rs` (consema-rs repo).
 
 Both exemptions are counter-asserted in CI: when the format crates are
 fixed, the counters stop incrementing and the tests demand removal of the

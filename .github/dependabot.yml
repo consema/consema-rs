@@ -1,7 +1,9 @@
 # Dependabot version updates: cargo ecosystem at the workspace root
 # (Cargo.lock is committed). Weekly cadence, at most 5 open PRs, minor and
 # patch updates grouped into a single PR per week. Update PRs run the full
-# CI gate (ci.yml) plus the path-filtered dependency audit (audit.yml).
+# CI gate (ci.yml) plus the standing dependency audit (audit.yml: daily
+# cron + every push to main, full surface, no path filter — see the
+# audit.yml header).
 version: 2
 updates:
   - package-ecosystem: cargo
