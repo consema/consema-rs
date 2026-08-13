@@ -39,7 +39,8 @@
 #     (non-interactive: `gpg --batch --passphrase '' --quick-generate-key
 #     "Your Name <you@example.com>" rsa4096 sign`). Release signing must
 #     use a key that is backed up; a lost key makes every prior signature
-#     unverifiable (see docs/release-process-0.13.0.md "丢失标签" drill).
+#     unverifiable (see the consema repository's
+#     docs/release-process-0.13.0.md "丢失标签" drill).
 #
 # Isolation switch: -GpgHome <dir> sets $env:GNUPGHOME for the whole
 # process, so the signing/verification runs against a scratch keyring
@@ -445,7 +446,7 @@ if ($mode -eq 'verify') {
     if ($failures.Count -gt 0) {
         Write-Output "FAIL: $($failures.Count) archive verification failure(s):"
         foreach ($failure in $failures) { Write-Output "  $failure" }
-        Write-Output '  Recovery: see docs/release-process-0.13.0.md (recovery'
+        Write-Output '  Recovery: see the consema repository docs/release-process-0.13.0.md (recovery'
         Write-Output '  drill section: corrupted archive / checksum mismatch);'
         Write-Output '  never ship a manifest edited by hand to match a'
         Write-Output '  corrupted archive.'

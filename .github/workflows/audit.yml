@@ -14,7 +14,13 @@
 # The push/PR tracks used to be path-filtered to Cargo.toml/Cargo.lock
 # changes; the filters are gone so this workflow is a constantly-running
 # check that branch protection can require. The cost is acceptable: the
-# workspace has a small dependency surface (8 direct dependencies) and a
+# dependency surface is small (Cargo.lock: 83 packages, as reported by
+# cargo-audit 0.22.2 "Scanning Cargo.lock ... (83 crate dependencies)").
+# The workspace's directly-declared external dependencies are the 7
+# exactly-pinned crates in [workspace.dependencies] plus the CLI facade's
+# ctrlc (consema/Cargo.toml); consema-conformance's dev-dependency proptest
+# is a test-only edge not counted in that figure, and cargo-audit itself
+# reports lockfile-wide counts, not a per-crate "direct" breakdown. A
 # cargo-audit run is ~1 minute.
 #
 # Both jobs keep the exact gates of ci.yml so the scheduled, push and PR

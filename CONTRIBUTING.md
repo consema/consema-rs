@@ -27,7 +27,7 @@ lint 与 CI 一致：
 ```text
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo doc --workspace --no-deps --locked
+cargo doc --workspace --no-deps --locked   # CI 带 RUSTDOCFLAGS=-D warnings（ci.yml lint job）
 ```
 
 ## 贡献点
@@ -47,10 +47,12 @@ cargo doc --workspace --no-deps --locked
 
 ## CI 门禁
 
-`.github/workflows/ci.yml` 九个 job：lint（fmt + clippy + rustdoc，三 OS）/
+`.github/workflows/ci.yml` 十一个 job：lint（fmt + clippy + rustdoc，三 OS）/
 test（三 OS）/ coverage（硬下限 + 趋势门禁）/ msrv / conformance / deny /
-audit / semver / package。push 到 main 或 PR 均触发；PR 另受 pr-labels.yml
-的 kind 标签门禁约束（标签见规范仓 .github/LABELS.md）。
+audit / semver / package / check-version-consistency / examples，外加
+check 聚合门禁（branch protection 只要求 `check (all gates green)` 这一个
+check，见 ci.yml）。push 到 main 或 PR 均触发；PR 另受 pr-labels.yml 的
+kind 标签门禁约束（标签见规范仓 .github/LABELS.md）。
 
 ## 发布与安全
 
