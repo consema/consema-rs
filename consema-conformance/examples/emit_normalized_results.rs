@@ -25,7 +25,8 @@
 //! participate in the comparison.
 //!
 //! Since milestone 0.19.0 G5.2 the comparison is bidirectional (roadmap
-//! §16.6 line 1554; docs/go-implementation-plan.md §2.6): the Go test
+//! §16.6「0.19.0：双语言一致性与产品 Beta」的 Rust/Go bidirectional
+//! differential runs 交付项；docs/go-implementation-plan.md §2.6): the Go test
 //! driver also emits its evidence files for the same input set
 //! (CONSEMA_DIFFERENTIAL_NORMALIZED_GO_DIR), and this example's consume
 //! mode (`--consume <evidence-dir>`) reads them, computes the Rust side

@@ -1,6 +1,8 @@
 //! emit_conformance_reports — shared dual-runner conformance orchestration
 //! support (milestone 0.19.0 G5.1; docs/go-implementation-plan.md §2.6,
-//! §4.1 and §4.5; roadmap §16.6 line 1547).
+//! §4.1 and §4.5; roadmap §16.6「0.19.0：双语言一致性与产品 Beta」的
+//! shared conformance runner orchestration 与 cross-language protocol
+//! exchange 交付项——锚为节标题，行号以规范仓为准).
 //!
 //! Runs every one of the 18 frozen language-neutral vector suites through
 //! the reference runner's `run_*` entry points (each executes its embedded
