@@ -655,27 +655,47 @@ impl ValueNode {
 }
 
 /// Converts one exact decimal to its double value; `None` when the
-/// coefficient or exponent exceeds the exact `i64` range (the decimal is then
-/// far outside double precision).
+/// coefficient or exponent exceeds the exact `i64` range, or when
+/// |exponent| > 308 (the value is then never a finite double, so the
+/// decimal is not a spelling of any finite double — fail atomically
+/// instead of clamping to a wrong finite value).
 ///
 /// The conversion intentionally rounds to the nearest double: the plist
 /// native value is the exact IEEE 754 double, and the decimal is a spelling
-/// of it (RFC 0013 §6).
-#[allow(clippy::cast_precision_loss)]
+/// of it (RFC 0013 §6). The rounding is a single correctly-rounded pass
+/// (strtod semantics, ties-to-even): the exact decimal spelling is parsed
+/// by the standard library's correctly-rounded float parser, so there is
+/// no double rounding through an intermediate `coefficient as f64`
+/// multiply/divide chain (wave-4 R42: 7.038531e-26 was 1 ULP off under
+/// the old two-step rounding). Overflow beyond the finite range yields
+/// +/-Infinity, which is the correctly rounded result.
 fn decimal_to_f64(decimal: &Decimal) -> Option<f64> {
     let coefficient = decimal.coefficient().to_i64()?;
     let exponent = decimal.exponent().to_i64()?;
-    let mut value = coefficient as f64;
-    // The if/else-if chain trips the 1.85-only clippy::comparison_chain
-    // (removed or reconfigured in later clippy); the allow carries
-    // unknown_lints so the attribute stays valid under both toolchains.
-    #[allow(unknown_lints, clippy::comparison_chain)]
-    if exponent > 0 {
-        value *= 10_f64.powi(exponent.min(308) as i32);
-    } else if exponent < 0 {
-        value /= 10_f64.powi(exponent.unsigned_abs().min(308) as i32);
+    if exponent.abs() > 308 {
+        // |exp| > 308 can never land in the finite double range (the
+        // largest finite double is ~1.8e308): 1e1000 is not 1e308 and
+        // 1e-1000 is not 1e-308. Not a spelling of any finite double, so
+        // fail atomically (RFC 0013 §6, wave-4 R42) instead of clamping.
+        return None;
     }
-    Some(value)
+    let sign = if coefficient < 0 { "-" } else { "" };
+    let digits = coefficient.unsigned_abs().to_string();
+    let spelling = if exponent >= 0 {
+        // |exponent| <= 308 was enforced above, so the conversion is
+        // infallible.
+        let zeros = usize::try_from(exponent).expect("|exponent| <= 308 fits usize");
+        format!("{sign}{digits}{}", "0".repeat(zeros))
+    } else {
+        let shift = exponent.unsigned_abs() as usize;
+        if shift >= digits.len() {
+            format!("{sign}0.{}{digits}", "0".repeat(shift - digits.len()))
+        } else {
+            let (whole, fraction) = digits.split_at(digits.len() - shift);
+            format!("{sign}{whole}.{fraction}")
+        }
+    };
+    spelling.parse().ok()
 }
 
 /// Strictly decodes one even-length hex string (RFC 0013 §9 data spelling).
@@ -3068,5 +3088,59 @@ mod tests {
             assert_eq!(complete.fidelity, MaterializationFidelity::Exact);
             assert_eq!(complete.document.document(), Some(&expected));
         }
+    }
+
+    #[test]
+    fn decimal_to_f64_rounds_once_correctly() {
+        // Wave-4 R42 regression: the old two-step rounding (coefficient as
+        // f64, then multiply/divide by 10^exponent) double-rounded
+        // 7.038531e-26 to 0x3ab5_c87f_afff_ffff (1 ULP off); the single-pass
+        // conversion must give the correctly rounded strtod result
+        // 0x3ab5_c87f_b000_0000 (renders '7.038531e-26' in scientific
+        // notation).
+        let decimal = consema_core::Decimal::new(
+            BigInteger::parse_decimal("7038531").unwrap(),
+            BigInteger::parse_decimal("-32").unwrap(),
+        );
+        assert_eq!(
+            decimal_to_f64(&decimal).map(f64::to_bits),
+            Some(0x3ab5_c87f_b000_0000),
+        );
+        assert_eq!(
+            format!("{:e}", decimal_to_f64(&decimal).unwrap()),
+            "7.038531e-26",
+        );
+        // Negative coefficient keeps the sign.
+        let negative = consema_core::Decimal::new(
+            BigInteger::parse_decimal("-7038531").unwrap(),
+            BigInteger::parse_decimal("-32").unwrap(),
+        );
+        assert_eq!(
+            format!("{:e}", decimal_to_f64(&negative).unwrap()),
+            "-7.038531e-26",
+        );
+    }
+
+    #[test]
+    fn decimal_to_f64_rejects_out_of_range_exponents_atomically() {
+        // Wave-4 R42: |exp| > 308 can never be a finite double; 1e1000 and
+        // 1e-1000 must fail atomically (None, -> Unrepresentable at the
+        // call sites) instead of clamping to 1e308 / 1e-308.
+        let decimal = |exponent: &str| {
+            consema_core::Decimal::new(
+                BigInteger::parse_decimal("1").unwrap(),
+                BigInteger::parse_decimal(exponent).unwrap(),
+            )
+        };
+        assert_eq!(decimal_to_f64(&decimal("1000")), None);
+        assert_eq!(decimal_to_f64(&decimal("-1000")), None);
+        // Boundary: |exp| = 308 stays representable (1e308 is finite;
+        // 1e-308 rounds into the subnormal range).
+        assert_eq!(decimal_to_f64(&decimal("308")), Some(1e308));
+        assert!(decimal_to_f64(&decimal("-308")).is_some());
+        // In-range decimals still round correctly through the single pass.
+        assert_eq!(decimal_to_f64(&decimal("0")), Some(1.0));
+        assert_eq!(decimal_to_f64(&decimal("-3")), Some(1e-3));
+        assert_eq!(decimal_to_f64(&decimal("3")), Some(1000.0));
     }
 }

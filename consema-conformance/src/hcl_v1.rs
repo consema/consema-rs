@@ -82,6 +82,20 @@ pub fn run_hcl_v1_json(json: &str) -> ConformanceReport {
             )],
         };
     }
+    // Wave-4 R4: the vector declares semantic_model; the runner must
+    // verify the identity instead of only reading it into the report.
+    if object_field(root, "semantic_model").and_then(PortableValue::as_string)
+        != Some("core.semantic-model@6")
+    {
+        return ConformanceReport {
+            suite,
+            passed: Vec::new(),
+            failed: vec![(
+                "suite.schema".to_owned(),
+                "unexpected semantic-model identifier".to_owned(),
+            )],
+        };
+    }
     let cases = object_field(root, "cases")
         .and_then(PortableValue::as_sequence)
         .expect("cases field");
@@ -177,18 +191,45 @@ fn expected_f64(value: &PortableValue) -> Option<f64> {
 }
 
 /// Converts one exact decimal to its double value; `None` when the
-/// coefficient or exponent exceeds the exact `i64` range.
-#[allow(clippy::cast_precision_loss)]
+/// coefficient or exponent exceeds the exact `i64` range, or when
+/// |exponent| > 308 (the value is then never a finite double, so the
+/// decimal is not a spelling of any finite double — fail atomically
+/// instead of clamping to a wrong finite value).
+///
+/// The rounding is a single correctly-rounded pass (strtod semantics,
+/// ties-to-even): the exact decimal spelling is parsed by the standard
+/// library's correctly-rounded float parser, so there is no double
+/// rounding through an intermediate `coefficient as f64` multiply/divide
+/// chain (wave-4 R42: 7.038531e-26 was 1 ULP off under the old two-step
+/// rounding). Overflow beyond the finite range yields +/-Infinity, which
+/// is the correctly rounded result.
 fn decimal_to_f64(decimal: &consema_core::Decimal) -> Option<f64> {
     let coefficient = decimal.coefficient().to_i64()?;
     let exponent = decimal.exponent().to_i64()?;
-    let mut value = coefficient as f64;
-    match exponent.cmp(&0) {
-        std::cmp::Ordering::Greater => value *= 10_f64.powi(exponent.min(308) as i32),
-        std::cmp::Ordering::Less => value /= 10_f64.powi(exponent.unsigned_abs().min(308) as i32),
-        std::cmp::Ordering::Equal => {}
+    if exponent.abs() > 308 {
+        // |exp| > 308 can never land in the finite double range (the
+        // largest finite double is ~1.8e308): 1e1000 is not 1e308 and
+        // 1e-1000 is not 1e-308. Not a spelling of any finite double, so
+        // fail atomically (RFC 0013 §6, wave-4 R42) instead of clamping.
+        return None;
     }
-    Some(value)
+    let sign = if coefficient < 0 { "-" } else { "" };
+    let digits = coefficient.unsigned_abs().to_string();
+    let spelling = if exponent >= 0 {
+        // |exponent| <= 308 was enforced above, so the conversion is
+        // infallible.
+        let zeros = usize::try_from(exponent).expect("|exponent| <= 308 fits usize");
+        format!("{sign}{digits}{}", "0".repeat(zeros))
+    } else {
+        let shift = exponent.unsigned_abs() as usize;
+        if shift >= digits.len() {
+            format!("{sign}0.{}{digits}", "0".repeat(shift - digits.len()))
+        } else {
+            let (whole, fraction) = digits.split_at(digits.len() - shift);
+            format!("{sign}{whole}.{fraction}")
+        }
+    };
+    spelling.parse().ok()
 }
 
 /// Exact bit equality of two doubles; every published numeric fact is an
@@ -2243,6 +2284,53 @@ mod tests {
             "{report:#?}"
         );
         assert!(report.passed.is_empty());
+    }
+
+    #[test]
+    fn decimal_to_f64_rounds_once_correctly() {
+        // Wave-4 R42 regression: the old two-step rounding (coefficient as
+        // f64, then multiply/divide by 10^exponent) double-rounded
+        // 7.038531e-26 to 0x3ab5_c87f_afff_ffff (1 ULP off the actual side's
+        // text.parse::<f64>); the single-pass conversion must give the
+        // correctly rounded strtod result 0x3ab5_c87f_b000_0000.
+        let decimal = consema_core::Decimal::new(
+            consema_core::BigInteger::parse_decimal("7038531").unwrap(),
+            consema_core::BigInteger::parse_decimal("-32").unwrap(),
+        );
+        assert_eq!(
+            decimal_to_f64(&decimal).map(f64::to_bits),
+            Some(0x3ab5_c87f_b000_0000),
+        );
+        assert_eq!(decimal_to_f64(&decimal), Some(7.038_531e-26));
+        // Negative coefficient keeps the sign.
+        let negative = consema_core::Decimal::new(
+            consema_core::BigInteger::parse_decimal("-7038531").unwrap(),
+            consema_core::BigInteger::parse_decimal("-32").unwrap(),
+        );
+        assert_eq!(decimal_to_f64(&negative), Some(-7.038_531e-26));
+    }
+
+    #[test]
+    fn decimal_to_f64_rejects_out_of_range_exponents_atomically() {
+        // Wave-4 R42: |exp| > 308 can never be a finite double; 1e1000 and
+        // 1e-1000 must fail atomically (None) instead of clamping to
+        // 1e308 / 1e-308.
+        let decimal = |exponent: &str| {
+            consema_core::Decimal::new(
+                consema_core::BigInteger::parse_decimal("1").unwrap(),
+                consema_core::BigInteger::parse_decimal(exponent).unwrap(),
+            )
+        };
+        assert_eq!(decimal_to_f64(&decimal("1000")), None);
+        assert_eq!(decimal_to_f64(&decimal("-1000")), None);
+        // Boundary: |exp| = 308 stays representable (1e308 is finite;
+        // 1e-308 rounds into the subnormal range).
+        assert_eq!(decimal_to_f64(&decimal("308")), Some(1e308));
+        assert!(decimal_to_f64(&decimal("-308")).is_some());
+        // In-range decimals still round correctly through the single pass.
+        assert_eq!(decimal_to_f64(&decimal("0")), Some(1.0));
+        assert_eq!(decimal_to_f64(&decimal("-3")), Some(1e-3));
+        assert_eq!(decimal_to_f64(&decimal("3")), Some(1000.0));
     }
 
     #[test]
