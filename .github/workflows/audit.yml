@@ -1,6 +1,11 @@
 # Dependency audit, dual-track (schedule/push + PR). The standing security
 # gate in ci.yml (deny + audit jobs) runs on every push/PR; this workflow
-# adds the tracks that ci.yml cannot express:
+# runs the scheduled and push tracks for the same checks, plus the PR
+# advisories subset (wave-4 R9: ci.yml could declare a schedule itself —
+# any GitHub Actions workflow may declare schedule and push/pull_request
+# side by side, so "tracks ci.yml cannot express" would be a false causal
+# claim; the two workflows exist to split responsibilities, not because of
+# an expressivity limit):
 #
 #   - audit: daily cron (03:37 UTC, non-standard minute to spread load) plus
 #     every push to main (unconditional — no path filter). Same RustSec
@@ -24,8 +29,12 @@
 # reports lockfile-wide counts, not a per-crate "direct" breakdown. A
 # cargo-audit run is ~1 minute.
 #
-# Both jobs keep the exact gates of ci.yml so the scheduled, push and PR
-# paths share one bar. No repository secrets are required (automatic
+# Gate coverage per track (wave-4 R9, honest scope): the audit track runs
+# the same RustSec advisories check as ci.yml's audit job; the PR track
+# runs only the `advisories` section of the cargo-deny gate — the full
+# advisories+bans+licenses+sources gate stays in ci.yml, so the scheduled,
+# push and PR paths do NOT share one identical bar (the PR path is a
+# documented subset). No repository secrets are required (automatic
 # GITHUB_TOKEN only; the audit job needs checks: write because
 # rustsec/audit-check posts a check run, identical to the ci.yml audit job).
 #

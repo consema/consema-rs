@@ -1,10 +1,24 @@
-# Consema Rust release: tag-triggered publishing of the 14 publishable
-# crates to crates.io, in dependency order (top-tier bar: 半自动发布,
+# Consema Rust release: tag-triggered publishing of the publishable crates
+# to crates.io, in dependency order (top-tier bar: 半自动发布,
 # pydantic precedent; crates.io trusted publishing GA 2025-07, RFC #3691).
+# The publishable set is derived from cargo metadata at runtime (publish ==
+# null members; currently 14 crates) — wave-4 R10: no hand-maintained
+# crate list, so a future 15th publishable crate is published automatically.
 #
 # Credentials, primary path — crates.io trusted publishing (OIDC):
 #   - The rust-lang/crates-io-auth-action exchanges the GitHub OIDC token
 #     for a short-lived crates.io token (30 min, auto-revoked).
+#   - Timing (wave-4 R31, documented honestly): the publish job has
+#     timeout-minutes 60, and the OIDC token lives 30 minutes. The publish
+#     loop runs zero-cache cold builds of up to 14 crates, each doing one
+#     verification build inside `cargo publish`, so the loop can in
+#     principle exceed the token lifetime; a token that expires mid-loop
+#     fails the later crates with an auth error (set -euo pipefail aborts
+#     the loop) and the release is resumed by re-pushing the tag (G042:
+#     already-published crates are skipped; the release guard exempts a
+#     resume re-push from the 24 h recency window). No caching or
+#     token-splitting is added before 1.0.0 (post-1.0.0 backlog): the
+#     resume flow is the documented recovery path.
 #   - User-side one-time setup per crate (see RELEASING.md §凭证配置):
 #     crates.io → crate settings → Trusted Publishers, with
 #     repository = consema/consema-rs and workflow file = release.yml
@@ -18,14 +32,14 @@
 # workflow falls back to the CARGO_REGISTRY_TOKEN repository secret
 # (set it in Settings → Secrets and variables → Actions; see RELEASING.md).
 # Either path ends in plain `cargo publish --locked -p <crate>`; the
-# 14-crate order is the topological dependency order
+# publish order is the topological dependency order
 # (core → document → graph → pvce → json → toml → yaml → ini → properties
 # → xml → plist → hcl → protocol → consema). Publishing is idempotent and
 # resumable (G042): a crate whose {crate}@{version} already exists on
 # crates.io is skipped, so re-pushing a tag after a partial failure resumes
 # the remaining crates instead of failing on "already exists"; a final
-# crates.io verification step turns the job red until all 14 crates are
-# actually published. Release gates (G106): the tag commit must lie on the
+# crates.io verification step turns the job red until every publishable
+# crate is actually published. Release gates (G106): the tag commit must lie on the
 # main branch history — G071 implements this as a merge-base ancestor check
 # against the job-time main HEAD plus a 24 h recency window that constrains
 # the first push of the tag only: a resume re-push (any crate of the release
@@ -53,7 +67,7 @@ permissions:
 
 jobs:
   publish:
-    name: cargo publish (14 crates, dependency order)
+    name: cargo publish (publishable crates, dependency order)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -214,7 +228,10 @@ jobs:
             $sha.Dispose()
           }
           $computed = ([System.BitConverter]::ToString($aggregateBytes)).Replace('-', '').ToLowerInvariant()
-          $expected = 'cfd6e296da5b22b62d37b076d35bf6bbf58b0678ceddb37eea51a8b47200ab6a'
+          # Wave-4 R10: the expected digest is read from the vendored
+          # conformance/DIGEST file — the single sync point (re-vendor =
+          # recompute and commit that file), no hand-maintained literal.
+          $expected = (Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'conformance/DIGEST') -Raw).Trim()
           if ($computed -ne $expected) {
             throw "aggregate digest mismatch: computed $computed, expected $expected (vendored snapshot drifted from the frozen inventory)"
           }
@@ -225,10 +242,11 @@ jobs:
         # its crate directory, so its packaged archive can never verify
         # standalone (cargo package --workspace dies deterministically on it
         # with 70 "couldn't read" errors). The gate therefore covers exactly
-        # the 14 publishable crates; each publish step below re-verifies its
-        # archive inside `cargo publish --locked -p <crate>` right before
-        # upload (dependency order means intra-workspace deps already exist
-        # on crates.io by then).
+        # the publishable crates (cargo-metadata-derived set, wave-4 R10);
+        # each publish step below re-verifies its archive inside
+        # `cargo publish --locked -p <crate>` right before upload
+        # (dependency order means intra-workspace deps already exist on
+        # crates.io by then).
         run: cargo package --workspace --locked --exclude consema-conformance
       - name: exchange OIDC token for a short-lived crates.io token (trusted publishing)
         id: auth
@@ -237,8 +255,9 @@ jobs:
         # CARGO_REGISTRY_TOKEN secret. The publish steps fail clearly if
         # neither path has credentials.
         continue-on-error: true
-      # Idempotent/resumable publish (G042): dependency order over the fixed
-      # 14-crate list; a crate whose {crate}@{version} already exists on
+      # Idempotent/resumable publish (G042): dependency order over the
+      # cargo-metadata-derived publishable set (wave-4 R10); a crate whose
+      # {crate}@{version} already exists on
       # crates.io is skipped, so re-pushing the tag after a partial failure
       # resumes where the previous run stopped. The release guard matches
       # this semantics (wave-4 P1): the verify-tag step exempts a resume
@@ -247,10 +266,15 @@ jobs:
       # re-push more than 24 h after the tag commit still reaches this
       # step. The step script runs under `set -euo pipefail`, so a publish
       # failure aborts the loop at the failing crate — the resumability is
-      # across RUNS (re-push the tag and the curl skip-check resumes the
+      # across RUNS (re-push the tag and the skip-check resumes the
       # remaining crates), not within the step; continue-on-error only
-      # keeps the rest of the job observable. The final verification step
-      # below turns the job red until every crate is actually published.
+      # keeps the rest of the job observable. Transient crates.io failures
+      # inside the loop are tolerated with backoff retries (G022, wave-4
+      # R10): the skip-check only decides on a real 404 and cargo publish
+      # itself retries with backoff (a partial upload is caught by the
+      # "already exists" predicate). The final verification step below
+      # turns the job red until every publishable crate is actually
+      # published.
       - name: cargo publish (dependency order; already-published crates skipped)
         continue-on-error: true
         env:
@@ -258,21 +282,90 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.verify-tag.outputs.version }}"
-          crates=(consema-core consema-document consema-graph consema-pvce consema-json consema-toml consema-yaml consema-ini consema-properties consema-xml consema-plist consema-hcl consema-protocol consema)
+          # Wave-4 R10: the publishable crate set is derived from cargo
+          # metadata (publish == null members, sorted by name — the same
+          # predicate release-sign.ps1 and verify-package-archives.ps1 use),
+          # not a hand-maintained list: a future 15th publishable crate
+          # must be published automatically instead of passing every gate
+          # and silently missing the loop.
+          mapfile -t crates < <(cargo metadata --no-deps --format-version 1 --locked | jq -r '.packages[] | select(.publish == null) | .name' | sort)
+          echo "publishable crates (from cargo metadata, ${#crates[@]}): ${crates[*]}"
+          if [[ "${#crates[@]}" -lt 1 ]]; then
+            echo "::error::cargo metadata reports no publishable crates"
+            exit 1
+          fi
           for crate in "${crates[@]}"; do
-            if curl -fsS "https://crates.io/api/v1/crates/$crate/$version" >/dev/null 2>&1; then
+            # Resumable skip-check with backoff retries (G022, wave-4 R10):
+            # unauthenticated crates.io requests are IP rate-limited and can
+            # hit transient 5xx; only a real 404 decides "not published" —
+            # a flaky 429/5xx must not skip an unpublished crate (it would
+            # then fail the publish and abort the loop with "already
+            # exists").
+            published=0
+            decided=0
+            for attempt in 1 2 3 4 5; do
+              code="$(curl -sS -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/$crate/$version" 2>/dev/null || true)"
+              if [[ "$code" == "200" ]]; then
+                published=1
+                decided=1
+                break
+              fi
+              if [[ "$code" == "404" ]]; then
+                decided=1
+                break
+              fi
+              echo "retry $attempt/5: crates.io returned $code for $crate $version (backing off $((attempt * 10))s)"
+              sleep "$((attempt * 10))"
+            done
+            if [[ "$decided" -ne 1 ]]; then
+              echo "::error::crates.io kept returning a non-404 error for $crate $version (rate limit or transient failure); cannot decide whether it is published — re-run the job"
+              exit 1
+            fi
+            if [[ "$published" -eq 1 ]]; then
               echo "resume: $crate $version already published, skipping"
               continue
             fi
             echo "publishing: $crate $version"
-            cargo publish --locked -p "$crate"
+            # Bounded backoff retries around cargo publish itself (wave-4
+            # R10, G022 parity with the verify step): the upload can hit the
+            # same transient 5xx/429 as the API; a retry after a failed
+            # upload is harmless ("already exists" is treated as success —
+            # the final verification step below turns the job red until
+            # every crate is actually on crates.io). The error log is kept
+            # per attempt so the failure message names the real cause.
+            published_ok=0
+            for attempt in 1 2 3; do
+              publish_err="$(mktemp)"
+              if cargo publish --locked -p "$crate" 2>"$publish_err"; then
+                published_ok=1
+                rm -f "$publish_err"
+                break
+              fi
+              if grep -q "already exists\|already uploaded" "$publish_err"; then
+                echo "resume: $crate $version already published (cargo publish reported it), skipping"
+                published_ok=1
+                rm -f "$publish_err"
+                break
+              fi
+              echo "retry publish $attempt/3: cargo publish failed for $crate (backing off $((attempt * 15))s)"
+              cat "$publish_err" >&2
+              rm -f "$publish_err"
+              sleep "$((attempt * 15))"
+            done
+            if [[ "$published_ok" -ne 1 ]]; then
+              echo "::error::cargo publish failed for $crate $version; re-push the tag to resume (already-published crates are skipped)"
+              exit 1
+            fi
           done
-      - name: verify all 14 crates are published (crates.io API)
+      - name: verify every publishable crate is published (crates.io API)
         shell: bash
         run: |
           set -euo pipefail
           version="${{ steps.verify-tag.outputs.version }}"
-          crates=(consema-core consema-document consema-graph consema-pvce consema-json consema-toml consema-yaml consema-ini consema-properties consema-xml consema-plist consema-hcl consema-protocol consema)
+          # Same cargo-metadata derivation as the publish step (wave-4 R10):
+          # the verification must cover the same set the loop publishes.
+          mapfile -t crates < <(cargo metadata --no-deps --format-version 1 --locked | jq -r '.packages[] | select(.publish == null) | .name' | sort)
+          echo "verifying ${#crates[@]} publishable crates: ${crates[*]}"
           missing=0
           for crate in "${crates[@]}"; do
             ok=0
@@ -304,4 +397,4 @@ jobs:
             echo "::error::one or more crates are not published; re-push the tag to resume (already-published crates are skipped; the release guard skips the 24 h recency window for a resume re-push)"
             exit 1
           fi
-          echo "all 14 crates published: $version"
+          echo "all ${#crates[@]} publishable crates published: $version"
