@@ -40,10 +40,16 @@ consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的�
    推送后 `.github/workflows/release.yml` 自动发布；发布 workflow 首先校验
    tag↔版本一致（tag 去掉 `v` 前缀必须等于 Cargo.toml
    `[workspace.package] version`，不一致即 exit 1 中止），并校验 **tag 指向
-   main 分支历史**（tag 的 commit 必须是 main HEAD 的祖先，且与 main HEAD
+   main 分支历史**（tag 的 commit 必须是 main HEAD 的祖先；且与 main HEAD
    的提交时间差不超过 24 小时——从陈旧 commit 打 tag 会被拒绝；main 在
-   tag 推送后落入新 commit 不会误伤，无需 force 重推），校验通过才进入
-   发布步骤；**不要**在 tag 之外手动执行 cargo publish（除非处置失败重试）。
+   tag 推送后落入新 commit 不会误伤，无需 force 重推）。24 小时窗口只约束
+   **首次推送**：若该版本已有 crate 发布到 crates.io（部分发布失败后重推
+   tag 续发剩余 crate，G042），守卫识别为 resume 重推，只做祖先校验、
+   跳过 24 小时窗口——部分失败后超过 24 小时重推 tag 仍可续发；若失败
+   发生在任何 crate 发布之前（无 crate 落 crates.io，无 resume 依据），
+   重推 tag 仍会被窗口拒绝，此时应把 tag 改到新的 main commit 上再推
+   （版本号未变则校验仍通过）或手动补发。校验通过才进入发布步骤；
+   **不要**在 tag 之外手动执行 cargo publish（除非处置失败重试）。
 
 ## 2. 凭证配置（用户侧一次性动作）
 

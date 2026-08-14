@@ -27,9 +27,12 @@
 # crates.io verification step turns the job red until all 14 crates are
 # actually published. Release gates (G106): the tag commit must lie on the
 # main branch history — G071 implements this as a merge-base ancestor check
-# against the job-time main HEAD plus a 24 h recency window (see the
-# verify-tag step; "point at the main branch HEAD" would be the stricter
-# equality semantics that the ancestor check deliberately replaced) — and
+# against the job-time main HEAD plus a 24 h recency window that constrains
+# the first push of the tag only: a resume re-push (any crate of the release
+# already on crates.io at the tag version) is exempt and held to the ancestor
+# check alone (see the verify-tag step; "point at the main branch HEAD" would
+# be the stricter equality semantics that the ancestor check deliberately
+# replaced) — and
 # the workspace test suite plus the artifact verification (cargo package of
 # the 14 publishable crates — consema-conformance is publish = false and
 # cannot verify from its packaged archive, so it is excluded from the gate)
@@ -70,9 +73,21 @@ jobs:
       # origin/main HEAD — a legitimate commit landing on main between the
       # tag push and this job must not turn a valid release red. The guard
       # therefore checks (a) the tag commit is an ancestor of (or equal to)
-      # the current main HEAD, and (b) a recency window: the tag commit is
-      # not more than 24 h older than the current main HEAD (a genuinely
-      # stale tag still fails).
+      # the current main HEAD, and (b) a recency window: on a first push the
+      # tag commit must not be more than 24 h older than the current main
+      # HEAD (a genuinely stale tag still fails). The window does not apply
+      # to a resume re-push (wave-4 P1, 2026-08-15): when the window would
+      # trip, the guard probes crates.io for the release version on the
+      # first crate in publish order (consema-core — strict dependency order
+      # means it is always the first crate published, so its existence at
+      # the version is exactly "this release was started before"); a hit
+      # means the run is re-pushing the tag to finish a partially published
+      # release (G042) and only the ancestor check applies, a miss means a
+      # genuinely stale tag and the window still fails the run. The probe
+      # uses the same "already exists" predicate as the publish loop, one
+      # request, with backoff retries (G022) and fail-closed on an undecided
+      # probe — never guessed, so a stale first push can never publish old
+      # code on a flaky answer.
       - name: verify tag matches manifest version + main HEAD (Cargo.toml workspace)
         id: verify-tag
         shell: bash
@@ -102,10 +117,48 @@ jobs:
           tag_ts="$(git show -s --format=%ct "$tag_commit")"
           main_ts="$(git show -s --format=%ct "$main_head")"
           if (( main_ts - tag_ts > 86400 )); then
-            echo "::error::tag $GITHUB_REF_NAME is stale: tag commit is more than 24h behind the main branch HEAD (tag=$tag_commit, main=$main_head)"
-            exit 1
+            # Outside the 24 h recency window: either a genuinely stale
+            # first push (reject) or a resume re-push finishing a partially
+            # published release (G042 — allow). The resume predicate is the
+            # same "already exists" check the publish loop uses, probed on
+            # consema-core, the first crate in publish order: strict
+            # dependency order means it is always the first crate published,
+            # so consema-core@$manifest existing on crates.io is exactly
+            # "this release was started before". One request keeps the guard
+            # out of the shared-runner crates.io rate limit (G022); backoff
+            # retries like the verification step; fail closed on an undecided
+            # probe (never guess — a stale first push must not publish old
+            # code on a flaky answer).
+            resume=0
+            decided=0
+            for attempt in 1 2 3 4 5; do
+              code="$(curl -sS -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/consema-core/$manifest" 2>/dev/null || true)"
+              if [[ "$code" == "200" ]]; then
+                resume=1
+                decided=1
+                break
+              fi
+              if [[ "$code" == "404" ]]; then
+                resume=0
+                decided=1
+                break
+              fi
+              echo "retry $attempt/5: crates.io returned $code for consema-core@$manifest (backing off $((attempt * 10))s)"
+              sleep "$((attempt * 10))"
+            done
+            if [[ "$decided" -ne 1 ]]; then
+              echo "::error::cannot determine whether this run is a resume re-push (crates.io kept returning $code for consema-core@$manifest); re-run the job"
+              exit 1
+            fi
+            if [[ "$resume" -eq 1 ]]; then
+              echo "resume re-push: consema-core@$manifest already on crates.io, 24 h recency window skipped (ancestor check above applies; tag=$tag_commit, main=$main_head)"
+            else
+              echo "::error::tag $GITHUB_REF_NAME is stale: tag commit is more than 24h behind the main branch HEAD (tag=$tag_commit, main=$main_head)"
+              exit 1
+            fi
+          else
+            echo "tag $GITHUB_REF_NAME points at the main branch history (tag=$tag_commit, main=$main_head, window ok)"
           fi
-          echo "tag $GITHUB_REF_NAME points at the main branch history (tag=$tag_commit, main=$main_head, window ok)"
           echo "version=$manifest" >> "$GITHUB_OUTPUT"
       # W3-30 (wave-3 adversarial audit, 2026-08-14): the release toolchain
       # is pinned to 1.97.1 — the same version the four-language differential
@@ -187,13 +240,17 @@ jobs:
       # Idempotent/resumable publish (G042): dependency order over the fixed
       # 14-crate list; a crate whose {crate}@{version} already exists on
       # crates.io is skipped, so re-pushing the tag after a partial failure
-      # resumes where the previous run stopped. The step script runs under
-      # `set -euo pipefail`, so a publish failure aborts the loop at the
-      # failing crate — the resumability is across RUNS (re-push the tag and
-      # the curl skip-check resumes the remaining crates), not within the
-      # step; continue-on-error only keeps the rest of the job observable.
-      # The final verification step below turns the job red until every
-      # crate is actually published.
+      # resumes where the previous run stopped. The release guard matches
+      # this semantics (wave-4 P1): the verify-tag step exempts a resume
+      # re-push — detected by the same "already exists" predicate on the
+      # first publish-order crate — from the 24 h recency window, so a
+      # re-push more than 24 h after the tag commit still reaches this
+      # step. The step script runs under `set -euo pipefail`, so a publish
+      # failure aborts the loop at the failing crate — the resumability is
+      # across RUNS (re-push the tag and the curl skip-check resumes the
+      # remaining crates), not within the step; continue-on-error only
+      # keeps the rest of the job observable. The final verification step
+      # below turns the job red until every crate is actually published.
       - name: cargo publish (dependency order; already-published crates skipped)
         continue-on-error: true
         env:
@@ -244,7 +301,7 @@ jobs:
             fi
           done
           if [[ "$missing" -ne 0 ]]; then
-            echo "::error::one or more crates are not published; re-push the tag to resume (already-published crates are skipped)"
+            echo "::error::one or more crates are not published; re-push the tag to resume (already-published crates are skipped; the release guard skips the 24 h recency window for a resume re-push)"
             exit 1
           fi
           echo "all 14 crates published: $version"
