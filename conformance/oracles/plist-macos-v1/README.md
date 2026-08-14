@@ -71,8 +71,12 @@ The macOS gate requires a pinned macOS runner (plan risk R-15). On any
 non-macOS host `run-plist-macos-oracle.ps1` prints an explicit skip message
 and exits with code 3, mirroring `scripts/run-hcl-go-oracle.ps1`; the
 manifest records this allowed skip path. The suite id stays
-`consema.plist.macos-differential@1` either way. The plistlib runner is not
-skipped: it runs wherever the pinned CPython exists.
+`consema.plist.macos-differential@1` either way. The plistlib runner runs
+wherever the pinned CPython exists; when the pinned CPython exists but the
+Windows build does not match the pin, `run-plistlib-oracle.ps1` prints an
+explicit skip message and exits with code 3, mirroring
+`scripts/run-hcl-go-oracle.ps1` (2026-08-14 波 3 audit: corrected from the
+previous "is not skipped" claim).
 
 ## Pinning and divergence policy
 
