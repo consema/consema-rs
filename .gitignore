@@ -10,3 +10,6 @@ __pycache__/
 *.swp
 .DS_Store
 Thumbs.db
+
+# scratch outputs from local CLI runs
+cap_out.json
