@@ -3,8 +3,9 @@
 ![CI](https://img.shields.io/github/actions/workflow/status/consema/consema-rs/ci.yml?branch=main)
 ![License](https://img.shields.io/github/license/consema/consema-rs)
 
-Consema 语言中立契约（RFC 0016：portable value、无损文档、类型化查询、投影、
-materialization 与结构编辑）的 **Rust 参考实现**。
+Consema 语言中立契约（RFC 0002/0003/0004/0006 契约家族：portable value、
+无损文档、类型化查询、投影、materialization 与结构编辑；权威仓
+docs/rfcs/）的 **Rust 参考实现**。
 
 本仓库是 Consema 六仓拆分中的 Rust 仓：规范权威（RFC、docs、路线图、跨语言
 conformance suites）在 [github.com/consema/consema](https://github.com/consema/consema)；
@@ -134,7 +135,8 @@ semver baseline 为拆分前的 v0.8.0 crates/ 树，见 ci.yml 注释）。
 ## FAQ
 
 - **支持哪些配置格式？** 八个格式家族、16 个 profiles：JSON（`json.strict@1` / `jsonc.bounded@1` / `json5.standard@1`）、TOML（`toml.1.0@1`）、YAML（`yaml.1.2-core@1` / `yaml.1.1-compat@1`）、INI（`ini.portable@1` / `ini.windows@1` / `ini.python-configparser@1`）、Java Properties（`java-properties.reader@1` / `java-properties.latin1@1`）、XML（`xml.1.0-safe@1`）、Property List（`plist.xml@1` / `plist.binary@1`）、HCL（`hcl.native@1` / `hcl.tfvars@1`）。完整面枚举见 `registry::profiles()`。
-- **与 serde 的关系？** 无依赖关系：serde 是 Rust 类型序列化框架，Consema 是格式内容处理引擎（无损文档、公共值、类型化查询、显式投影、原子编辑、跨格式转换），二者可共存。契约是语言中立的（RFC 0016），五个语言实现同等地位、互不调用。
+- **与 serde 的关系？** 无依赖关系：serde 是 Rust 类型序列化框架，Consema 是格式内容处理引擎（无损文档、公共值、类型化查询、显式投影、原子编辑、跨格式转换），二者可共存。契约是语言中立的（RFC 0002/0003/0004/0006 契约家族；权威仓
+docs/rfcs/），五个语言实现同等地位、互不调用。
 - **性能如何？** 解析/渲染基准、硬化语料与基准工具见规范仓 `docs/BENCHMARKS-0.13.0.md`（consema-conformance 基准工具）；CI 带 coverage 硬下限 + 趋势门禁与 deny/audit/semver 门禁。趋势门禁基线在 Windows 本机实测、CI 在 ubuntu 复测（平台耦合事实与 wall-clock 断言的环境耦合说明见 `docs/COVERAGE-0.13.0.md` "CI 环境耦合事实" 节）。
 - **零依赖吗？** 发布 crates 的 7 个 workspace 外部依赖全部精确固定版本（`=x.y.z`）：encoding_rs、sha2、toml_edit、saphyr-parser、unicode-id-start、unicode-ident、xmlparser；此外 CLI facade（consema crate）依赖 `ctrlc = "3.5"`（非精确固定，Cargo.lock 当前为 3.5.2）。
 - **跨语言一致性如何保证？** 18 套语言无关 conformance suite 共 519/519 cases（聚合 digest `cfd6e296…`）由规范仓维护、五仓共享；跨语言差分门禁（多仓 checkout 跑 conformance runner 与 byte parity / normalized differential / protocol-exchange）由 go / ts / py / kt 各语言仓 CI 承担——本仓 ci.yml 无多仓 checkout job（见 ci.yml 头部自述），只跑 vendored conformance 快照与 suite-count + 聚合 digest 断言。
