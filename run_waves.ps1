@@ -17,10 +17,24 @@
 # referenced by fc-manifest). -LedgerDir overrides; otherwise the
 # CONSEMA_LEDGER_DIR environment variable wins; when that is unset too, the
 # hard-coded default path in the param block below applies. That default is
-# machine-specific (the original machine's consema repository checkout), so
-# set CONSEMA_LEDGER_DIR or pass -LedgerDir on any other machine; the
-# original pre-split run_waves.ps1 is preserved untouched in the consema repo
-# as evidence of the frozen protocol.
+# a snapshot of the original machine's layout (the original machine's
+# consema repository checkout), not a portable default: on any other
+# machine a clean checkout cannot replay with the defaults — it MUST pass
+# -LedgerDir (or set CONSEMA_LEDGER_DIR) and, when cargo/git are not on
+# PATH or resolve to the wrong toolchain, CONSEMA_CARGO / CONSEMA_GIT_EXE
+# (see below).
+#
+# Frozen-protocol evidence (wave-4 R34, honest record): the consema
+# repository's docs/fuzz-evidence-0.13.0-logs/run_waves.ps1 is the
+# preserved pre-split driver kept as evidence of the frozen protocol. It
+# is NOT byte-identical to the pre-split original: after the 2026-08-12
+# six-repo split the mother repo modified it (commit 8f1ffa2, 2026-08-13:
+# the $env:CONSEMA_GIT_EXE override, G038). The evidence value is the
+# frozen protocol behavior, and the preserved copy is kept as-is (the
+# frozen evidence content is not rolled back); readers reconstructing the
+# protocol from it must know it includes post-split changes. This driver
+# (consema-rs) is the live executor and carries the post-split fixes
+# (G038 exit-code checks, session locks, CONSEMA_* overrides).
 #
 # Usage (from the consema-rs repository root):
 #   powershell -ExecutionPolicy Bypass -File run_waves.ps1 -Waves 16 -Copies 2
@@ -37,7 +51,9 @@
 #     the $env:CONSEMA_GIT_EXE override (lets operators point at their own
 #     pinned git without editing this script; G038), then known absolute
 #     installs (codex runtime git, Git for Windows; the machine git was
-#     removed 2026-08-11 with the hermes bundle). If no git exists anywhere,
+#     removed 2026-08-11 with the hermes bundle). cargo is resolved with the
+#     same chain shape (PATH -> $env:CONSEMA_CARGO -> rustup installs,
+#     wave-4 R10). If no git exists anywhere,
 #     or a git command fails mid-session (G038: exit codes are checked), the
 #     check degrades loudly instead of silently: an INCIDENT NOTE is logged
 #     once and the tree-hash is salted per call, forcing a rebuild every wave
@@ -88,6 +104,23 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+# --- parameter validation (wave-4 R10) ---------------------------------------
+# -Waves 0 (or negative) would skip the wave loop entirely and end the
+# session with zero evidence and exit 0 — a direct violation of the G037
+# invariant "zero evidence with exit 0 is never acceptable" (the pre-flight
+# check only verifies the ledger exists and is writable, so it cannot catch
+# this). -Copies 0 would run the `1..0` range as (1, 0) — two processes
+# with bogus copy numbers. Both fail loudly before any session header is
+# written (exit 2).
+if ($Waves -lt 1) {
+    Write-Error "invalid -Waves ${Waves}: at least 1 wave is required (zero waves would end the session with zero evidence and exit 0, violating G037)"
+    exit 2
+}
+if ($Copies -lt 1) {
+    Write-Error "invalid -Copies ${Copies}: at least 1 copy is required (0 would run the 1..0 range as (1, 0))"
+    exit 2
+}
 
 # --- paths ------------------------------------------------------------------
 $scriptDir = $PSScriptRoot
@@ -180,19 +213,66 @@ $protocolTargets = @(
     @{ n = 'protocol-decode';    t = 'protocol_decode_fuzz_long_run';         file = 'protocol_fuzz.rs';    bc = 'DECODE_BASES'; seeds = 2 }
 )
 $targets = $parseTargets + $opsTargets + $protocolTargets
-$iterationsFor = @{}
-foreach ($t in $targets) {
-    $seedFactor = if ($t.ContainsKey('seeds')) { $t.seeds } else { 1 }
-    $iterationsFor[$t.n] = Get-TargetIterations $t.file $t.bc $seedFactor
+
+# Iteration counts are derived from the committed test sources (see the
+# targets comment above). Wave-4 R10: the derivation is a function so it is
+# re-run after every mid-session rebuild — the driver explicitly supports
+# code changes landing mid-session (the tree-hash check rebuilds on change),
+# and a landed change to LONG_RUN_ITERATIONS / *_BASES must be reflected in
+# the runs.csv `iterations` column of the waves that run the new binary. A
+# parse failure throws before any wave runs, so the column can never
+# silently drift from the code.
+$script:iterationsFor = @{}
+function Update-IterationsFor {
+    $script:iterationsFor = @{}
+    foreach ($t in $targets) {
+        $seedFactor = if ($t.ContainsKey('seeds')) { $t.seeds } else { 1 }
+        $script:iterationsFor[$t.n] = Get-TargetIterations $t.file $t.bc $seedFactor
+    }
 }
+Update-IterationsFor
 
 function Get-LatestExe([string]$pattern) {
     # Returns the newest matching FileInfo (or $null); the freshness check
-    # needs LastWriteTime, the launcher needs .FullName.
-    $candidates = Get-ChildItem (Join-Path $root "target\debug\deps\$pattern") -ErrorAction SilentlyContinue |
+    # needs LastWriteTime, the launcher needs .FullName. Wave-4 R10: honors
+    # $env:CARGO_TARGET_DIR exactly like scripts/verify-package-archives.ps1
+    # (a host that sets CARGO_TARGET_DIR builds the test binaries outside
+    # the default target/ directory; a hard-coded relative path would miss
+    # them and abort every wave).
+    $targetDirectory = if ($env:CARGO_TARGET_DIR) {
+        [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR)
+    } else {
+        Join-Path $root 'target'
+    }
+    $candidates = Get-ChildItem (Join-Path $targetDirectory "debug\deps\$pattern") -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending
     if ($candidates) { return $candidates[0] }
     return $null
+}
+
+function Get-CargoExe {
+    # Resolves a working cargo: PATH first, then the $env:CONSEMA_CARGO
+    # override (wave-4 R10 — the mirror of the CONSEMA_GIT_EXE override
+    # below: lets operators point at their own pinned cargo without editing
+    # this script; the machine git was removed 2026-08-11 with the hermes
+    # bundle and cargo can be absent from PATH the same way), then the
+    # rustup default toolchain's bin directories. Re-probes every call so a
+    # cargo appearing or disappearing mid-session is noticed. Returns ''
+    # when no cargo exists anywhere.
+    if ($script:cargoExe -and -not (Test-Path -LiteralPath $script:cargoExe)) {
+        $script:cargoExe = $null  # cached path vanished (e.g. runtime deleted)
+    }
+    if ($null -eq $script:cargoExe) {
+        $rustupBin = if ($env:RUSTUP_HOME) { Join-Path $env:RUSTUP_HOME 'bin' } else { $null }
+        $script:cargoExe = @(
+            (Get-Command cargo -ErrorAction SilentlyContinue).Source,
+            $env:CONSEMA_CARGO,
+            (Join-Path (Join-Path $env:USERPROFILE '.cargo') 'bin\cargo.exe'),
+            $rustupBin
+        ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+    }
+    if (-not $script:cargoExe) { return '' }
+    return $script:cargoExe
 }
 
 function Get-GitExe {
@@ -289,7 +369,11 @@ function Write-Log([string]$line) {
 # `session` column disambiguates the per-session wave numbering. The
 # count-read-write is serialized with an exclusive lock file, so two drivers
 # sharing a ledger can never allocate the same session number and pollute
-# runs.csv keys (G038).
+# runs.csv keys (G038). The number itself is max(existing)+1 derived from
+# anchored full-line matches (wave-4 R10): an unanchored substring count
+# would be raised by any log line merely containing "session start" (e.g.
+# an INCIDENT NOTE mentioning it) and would silently renumber after a
+# trimmed waves.log, merging distinct code states under one session key.
 $sessionLock = Join-Path $logs '.session.lock'
 $lockStream = $null
 for ($try = 0; $try -lt 30; $try++) {
@@ -307,7 +391,16 @@ for ($try = 0; $try -lt 30; $try++) {
 try {
     $sessionNum = 1
     if (Test-Path $wavesLog) {
-        $sessionNum = (@(Get-Content $wavesLog -ErrorAction SilentlyContinue | Select-String 'session start').Count) + 1
+        $sessionLineRe = '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[^]]*\] session start: session=([0-9]+)'
+        $sessionNums = @(
+            Get-Content $wavesLog -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                    if ($_ -match $sessionLineRe) { [int]$Matches[1] }
+                }
+        )
+        if ($sessionNums.Count -gt 0) {
+            $sessionNum = (($sessionNums | Measure-Object -Maximum).Maximum) + 1
+        }
     }
     if (-not (Test-Path $runsCsv)) {
         Add-LedgerLine $runsCsv 'session,wave,copy,target,iterations,wall_s,cpu_s,exit_code'
@@ -316,7 +409,21 @@ try {
     $osInfo = Get-CimInstance Win32_OperatingSystem
     Write-Log "session start: session=$sessionNum waves=$Waves copies=$Copies wave_timeout=${WaveTimeoutSec}s"
     Write-Log "machine: $($cpuInfo.Name); $($cpuInfo.NumberOfCores) physical / $($cpuInfo.NumberOfLogicalProcessors) logical cores; $($osInfo.Caption) $($osInfo.Version)"
-    $headVal = ''; $g = Get-GitExe; if ($g) { $headVal = (& $g -C $root rev-parse HEAD 2>$null) }; Write-Log "toolchain: $(rustc --version) | HEAD=$headVal"
+    # Wave-4 R10: the HEAD capture checks the exit code (G038: exit codes
+    # are checked) — a git that exists but fails rev-parse (e.g. a
+    # corrupted repository) must not silently record an empty HEAD anchor;
+    # it gets a loud INCIDENT NOTE, exactly like the tree-hash check's
+    # degraded path.
+    $headVal = ''
+    $g = Get-GitExe
+    if ($g) {
+        $headVal = (& $g -C $root rev-parse HEAD 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log 'INCIDENT NOTE: git rev-parse HEAD failed at session start; HEAD anchor recorded as (unresolved)'
+            $headVal = '(unresolved)'
+        }
+    }
+    Write-Log "toolchain: $(rustc --version) | HEAD=$headVal"
 }
 finally {
     if ($lockStream) { $lockStream.Dispose() }
@@ -389,8 +496,18 @@ try {
         $treeHash = Get-TreeHash
         if ($treeHash -ne $prevTree) {
             Write-Log "wave ${w}: tree changed since last build; rebuilding (cargo test -p consema-conformance --no-run --locked)"
+            # Wave-4 R10: cargo is resolved through the same override chain
+            # as git (PATH -> $env:CONSEMA_CARGO -> rustup installs); a host
+            # without cargo on PATH (the machine git was removed 2026-08-11
+            # with the hermes bundle; cargo can vanish the same way) fails
+            # loudly at the first rebuild instead of a bare `& cargo` error.
+            $cargoExe = Get-CargoExe
+            if (-not $cargoExe) {
+                Write-Log "wave ${w}: no cargo found anywhere (PATH, CONSEMA_CARGO, rustup installs); cannot rebuild; aborting (exit 2)"
+                exit 2
+            }
             Push-Location $root
-            & cargo test -p consema-conformance --no-run --locked 2>&1 | Out-Host
+            & $cargoExe test -p consema-conformance --no-run --locked 2>&1 | Out-Host
             $cargoExit = $LASTEXITCODE
             Pop-Location
             $fresh = Get-LatestExe 'parse_fuzz-*.exe'
@@ -401,6 +518,11 @@ try {
                 exit 2
             }
             $prevTree = $treeHash
+            # Wave-4 R10: the tree changed, so the committed test sources
+            # may have changed too — re-derive the iteration counts from the
+            # (possibly new) sources so the runs.csv `iterations` column
+            # matches the binary this wave actually runs.
+            Update-IterationsFor
             Write-Log "wave ${w}: build ok (cargo exit 0; newest parse_fuzz exe: $([System.IO.Path]::GetFileName($fresh.FullName)) mtime $($fresh.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')))"
         } else {
             Write-Log "wave ${w}: tree unchanged, reusing binaries (deterministic schedule, same code state)"
