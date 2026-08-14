@@ -54,6 +54,18 @@ pub fn run_toml_v1() -> ConformanceReport {
         .and_then(PortableValue::as_string)
         .expect("suite field")
         .to_owned();
+    if suite != "consema.toml.conformance@1" {
+        return ConformanceReport {
+            suite,
+            passed: Vec::new(),
+            failed: vec![(
+                "suite.schema".to_owned(),
+                "unexpected suite identifier".to_owned(),
+            )],
+        };
+    }
+    // The TOML vector declares no semantic_model (wave-4 R4: checked only
+    // when the vector declares it), so no semantic-model check here.
     let cases = object_field(root, "cases")
         .and_then(PortableValue::as_sequence)
         .expect("cases field");

@@ -54,6 +54,31 @@ pub fn run_protocol_v2_json(json: &str) -> ConformanceReport {
         .and_then(PortableValue::as_string)
         .expect("suite field")
         .to_owned();
+    if suite != "consema.protocol.conformance@2" {
+        return ConformanceReport {
+            suite,
+            passed: Vec::new(),
+            failed: vec![(
+                "suite.schema".to_owned(),
+                "unexpected suite identifier".to_owned(),
+            )],
+        };
+    }
+    // Wave-4 R4: the vector declares semantic_model; the runner must
+    // verify the top-level identity too (the per-case decoded
+    // semantic-model assertions below bind the wire payloads).
+    if object_field(root, "semantic_model").and_then(PortableValue::as_string)
+        != Some("core.semantic-model@2")
+    {
+        return ConformanceReport {
+            suite,
+            passed: Vec::new(),
+            failed: vec![(
+                "suite.schema".to_owned(),
+                "unexpected semantic-model identifier".to_owned(),
+            )],
+        };
+    }
     let cases = object_field(root, "cases")
         .and_then(PortableValue::as_sequence)
         .expect("cases field");

@@ -70,6 +70,20 @@ pub fn run_xml_v1_json(json: &str) -> ConformanceReport {
             )],
         };
     }
+    // Wave-4 R4: the vector declares semantic_model; the runner must
+    // verify the identity instead of only reading it into the report.
+    if object_field(root, "semantic_model").and_then(PortableValue::as_string)
+        != Some("core.semantic-model@6")
+    {
+        return ConformanceReport {
+            suite,
+            passed: Vec::new(),
+            failed: vec![(
+                "suite.schema".to_owned(),
+                "unexpected semantic-model identifier".to_owned(),
+            )],
+        };
+    }
     let cases = object_field(root, "cases")
         .and_then(PortableValue::as_sequence)
         .expect("cases field");

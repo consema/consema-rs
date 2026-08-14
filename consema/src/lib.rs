@@ -196,8 +196,14 @@ pub mod registry {
     /// The per-format encoding selection and limits use the frozen profile
     /// defaults (`ProfileDefault`; the properties reader profile uses an
     /// explicit UTF-8 selection because its contract has no profile default).
-    /// An unknown profile id returns the same failure the typed adapters do:
-    /// resolve ids against [`profiles`] first.
+    /// An unknown profile id fails with `core.protocol.unknown-contract@1`
+    /// (wave-4 R1: chosen from the frozen v1-v7 registry — 187 codes,
+    /// consema-protocol error_registry.rs — as the closest existing frozen
+    /// semantic for "an id that is not in the registry"; no new code is
+    /// added before 1.0.0, v8 is post-1.0.0). The CLI args layer already
+    /// intercepts unknown profiles with `cli.usage.invalid-format@1` before
+    /// this facade is reached, so this code is observable only to direct
+    /// library callers; resolve ids against [`profiles`] first.
     pub fn parse_document(
         source: Arc<[u8]>,
         profile: &ProfileId,
@@ -297,7 +303,16 @@ pub mod registry {
             ),
             _ => Err(FatalFormationFailure::from_diagnostic(
                 crate::core::Diagnostic::new(
-                    "core.source.encoding-conflict@1",
+                    // Wave-4 R1: unknown profile id is not an encoding
+                    // conflict. The closest frozen v1-v7 registry code
+                    // (187 codes, consema-protocol error_registry.rs) is
+                    // `core.protocol.unknown-contract@1` — "Protocol
+                    // contract ID or version is unknown" — matching the
+                    // "an id unknown to the registry" semantics of an
+                    // unrecognized profile id; its registered category is
+                    // Encoding (registry record, unchanged). No new code
+                    // before 1.0.0 (v8 is post-1.0.0).
+                    "core.protocol.unknown-contract@1",
                     crate::core::DiagnosticCategory::Encoding,
                     crate::core::DiagnosticSeverity::Error,
                     None,
@@ -429,11 +444,18 @@ pub mod registry {
                     .unwrap_or_else(|error| panic!("{id} must parse: {error:?}"));
                 assert_eq!(document.profile().id(), *id, "{id} profile round trip");
             }
-            // Unknown profile ids fail like the typed adapters.
+            // Unknown profile ids fail with the frozen closest-semantic
+            // code core.protocol.unknown-contract@1 (wave-4 R1; the typed
+            // adapters have no unknown-profile path to mirror — the facade
+            // match arms are exhaustive per known profile, so there is no
+            // "same failure" to speak of).
             let unknown = ProfileId::new("example.unknown", 1);
-            assert!(
-                parse_document(Arc::from(b"x".to_vec()), &unknown).is_err(),
-                "unknown profile id fails"
+            let error = parse_document(Arc::from(b"x".to_vec()), &unknown)
+                .expect_err("unknown profile id fails");
+            assert_eq!(
+                error.diagnostics()[0].code,
+                "core.protocol.unknown-contract@1",
+                "unknown profile id uses the frozen unknown-contract code"
             );
         }
 
