@@ -51,8 +51,21 @@ function Get-DirtyEntries {
         Write-Output 'warning: git not found on PATH; clean-tree precondition cannot be verified'
         return @()
     }
-    & git -C $workspaceRoot rev-parse --is-inside-work-tree 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    # Wave-4 R10: under $ErrorActionPreference = 'Stop' a native stderr
+    # line is a terminating NativeCommandError on Windows PowerShell 5.1
+    # even with 2>$null (release-sbom.ps1 comment, verified live), so the
+    # preference is lowered around the probe and only $LASTEXITCODE decides
+    # — the graceful-degradation branch below must stay reachable on the
+    # script's supported platforms instead of turning into exit 3.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & git -C $workspaceRoot rev-parse --is-inside-work-tree 2>$null | Out-Null
+        $insideWorkTree = ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if (-not $insideWorkTree) {
         Write-Output 'warning: workspace is not a git work tree; clean-tree precondition cannot be verified'
         return @()
     }
@@ -146,11 +159,19 @@ $workspacePackages = @(
         Where-Object { $workspaceMembers.ContainsKey($_.id) } |
         Sort-Object name
 )
+# Wave-4 R10 (publish predicate truth): cargo metadata's `publish` field is
+# null when the package is publishable everywhere (the default), an empty
+# list when it is never publishable, and a non-empty list when it is
+# publishable to the named registries. "Publishable" is therefore
+# `null -or non-empty list`; a crate with `publish = ["registry"]` must be
+# packaged and published, not excluded (the old `-ne $null` filter would
+# have misclassified it as repository-only, silently diverging from
+# release.yml's publish loop).
 $publishablePackages = @(
-    $workspacePackages | Where-Object { $null -eq $_.publish }
+    $workspacePackages | Where-Object { $null -eq $_.publish -or $_.publish.Count -gt 0 }
 )
 $repositoryOnlyPackages = @(
-    $workspacePackages | Where-Object { $null -ne $_.publish }
+    $workspacePackages | Where-Object { $null -ne $_.publish -and $_.publish.Count -eq 0 }
 )
 
 if ($publishablePackages.Count -eq 0) {

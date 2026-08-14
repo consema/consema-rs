@@ -20,10 +20,14 @@
 #       Write the checksum manifest and sign it. The manifest reuses the
 #       sha256 output format of scripts/verify-package-archives.ps1
 #       ("<64 lowercase hex>  <name>.crate"), computed over the same
-#       publishable-crate set (workspace members with publish != null,
-#       sorted by name), so the artifact the release record ships and the
-#       checksums the package gate printed are byte-identical. The
-#       manifest file is then signed twice, both standard forms:
+#       publishable-crate set (workspace members with publish == null —
+#       cargo metadata semantics: the publish field defaults to null for
+#       publishable crates, [] means never publishable; wave-4 R10
+#       corrected the header, the implementation below always used the
+#       `-eq $null` predicate — sorted by name), so the artifact the
+#       release record ships and the checksums the package gate printed
+#       are byte-identical. The manifest file is then signed twice, both
+#       standard forms:
 #         gpg --clearsign          -> <manifest>.asc  (text + signature)
 #         gpg --detach-sign --armor -> <manifest>.sig (signature only)
 #       and both signatures are verified with gpg --verify before the
@@ -49,6 +53,12 @@
 #     use a key that is backed up; a lost key makes every prior signature
 #     unverifiable (see the consema repository's
 #     docs/release-process-0.13.0.md "丢失标签" drill).
+#     (Wave-4 R10: this prerequisite constrains the two SIGNING modes
+#     (-SignTag / -SignArtifacts) only; -VerifyArtifacts consumes the
+#     public key — gpg --verify never touches secret material — so a
+#     consumer who holds only public keys, the normal case, must be able
+#     to verify. The secret-key check therefore runs inside the signing
+#     modes, not before mode dispatch.)
 #
 # Isolation switch: -GpgHome <dir> sets $env:GNUPGHOME for the whole
 # process, so the signing/verification runs against a scratch keyring
@@ -285,25 +295,35 @@ function Test-UsableSigningKey {
     return $null
 }
 
-$signingKey = Test-UsableSigningKey $KeyId
-if ($null -eq $signingKey) {
-    Write-Output 'error: no usable secret signing key in the effective keyring.'
-    if ($KeyId) {
-        Write-Output "  No secret key matches -KeyId '$KeyId' (fingerprint suffix)."
+function Get-RequiredSigningKey {
+    # Resolves the secret signing key for the signing modes (tag/sign).
+    # Wave-4 R10: checked inside the signing modes only — the
+    # -VerifyArtifacts path needs only the public key (gpg --verify never
+    # touches secret material), so a consumer without a secret key, the
+    # normal case, must be able to verify; the old unconditional check
+    # made the documented "verification path used by consumers"
+    # unreachable for them.
+    $key = Test-UsableSigningKey $KeyId
+    if ($null -eq $key) {
+        Write-Output 'error: no usable secret signing key in the effective keyring.'
+        if ($KeyId) {
+            Write-Output "  No secret key matches -KeyId '$KeyId' (fingerprint suffix)."
+        }
+        Write-Output '  Create a signing key with:'
+        Write-Output '    gpg --full-generate-key'
+        Write-Output '  (non-interactive: gpg --batch --passphrase "" --quick-generate-key'
+        Write-Output '   "Your Name <you@example.com>" rsa4096 sign)'
+        Write-Output "  List keys with: gpg --list-secret-keys --with-colons"
+        if ($GpgHome) {
+            Write-Output "  (an isolated keyring is active via -GpgHome: $GpgHome;"
+            Write-Output '   generate the key inside it with: gpg --homedir'
+            Write-Output "   `"$GpgHome`" --full-generate-key)"
+        }
+        exit 2
     }
-    Write-Output '  Create a signing key with:'
-    Write-Output '    gpg --full-generate-key'
-    Write-Output '  (non-interactive: gpg --batch --passphrase "" --quick-generate-key'
-    Write-Output '   "Your Name <you@example.com>" rsa4096 sign)'
-    Write-Output "  List keys with: gpg --list-secret-keys --with-colons"
-    if ($GpgHome) {
-        Write-Output "  (an isolated keyring is active via -GpgHome: $GpgHome;"
-        Write-Output '   generate the key inside it with: gpg --homedir'
-        Write-Output "   `"$GpgHome`" --full-generate-key)"
-    }
-    exit 2
+    Write-Output "signing key: $key"
+    return $key
 }
-Write-Output "signing key: $signingKey"
 
 function Invoke-GpgVerify {
     # Runs gpg --verify and maps the outcome onto the gate: gpg prints its
@@ -325,6 +345,9 @@ function Invoke-GpgVerify {
 # --- Tag signing -------------------------------------------------------------
 
 if ($mode -eq 'tag') {
+    # Wave-4 R10: the secret-key precondition is scoped to this signing
+    # mode (see Get-RequiredSigningKey).
+    $signingKey = Get-RequiredSigningKey
     # Line-anchored (G105): a prefix match let 'v0.13.0evil' through and
     # triggered a doomed release run; the whole string must be a version.
     # Wave 3 (2026-08-14, R2): a SemVer prerelease suffix is now allowed
@@ -491,6 +514,10 @@ if ($mode -eq 'verify') {
 }
 
 # --- Manifest writing + artifact signing -------------------------------------
+
+# Wave-4 R10: the secret-key precondition is scoped to this signing mode
+# (the verify mode above ran without it; see Get-RequiredSigningKey).
+$signingKey = Get-RequiredSigningKey
 
 $metadataJson = Invoke-NativeCapture 'cargo' @('metadata', '--locked', '--offline', '--no-deps', '--format-version', '1')
 if ($LASTEXITCODE -ne 0) {

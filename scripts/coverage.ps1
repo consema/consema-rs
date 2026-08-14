@@ -37,11 +37,11 @@
 # The report file is generated in full by this script (policy text included),
 # so the committed doc and the script can never drift apart — with one
 # registered exception (wave-3 ruling R7, 2026-08-14; G154 record): the
-# wall-clock assertion list (4 sites) in the report's "CI 环境耦合事实"
-# section is manually maintained, in the report and in this template
-# together — assertion sites move with the code, the script does not track
-# them, and any change to an assertion site must update both texts. Never
-# hand-edit the numbers block of the report.
+# wall-clock assertion list (5 sites, wave-4 R10) in the report's
+# "CI 环境耦合事实" section is manually maintained, in the report and in
+# this template together — assertion sites move with the code, the script
+# does not track them, and any change to an assertion site must update both
+# texts. Never hand-edit the numbers block of the report.
 
 param(
     # Compare the measured workspace totals against the report committed at
@@ -109,9 +109,15 @@ if (-not (Get-Command 'cargo-llvm-cov' -ErrorAction SilentlyContinue)) {
 $rustup = Get-Command 'rustup' -ErrorAction SilentlyContinue
 $hasLlvmTools = $false
 if ($rustup) {
-    $componentLines = @(& rustup component list)
+    # Wave-4 R10: `rustup component list` (without --installed) lists not
+    # installed components too (lines end with "(missing)" or are bare), so
+    # a name-prefix match alone would report llvm-tools present when it is
+    # not, making this exit-2 precondition unreachable and deferring the
+    # real failure to a misleading cargo llvm-cov error. --installed lists
+    # only installed components, so the name match is a true presence check.
+    $componentLines = @(& rustup component list --installed)
     if ($LASTEXITCODE -ne 0) {
-        Write-Output 'error: `rustup component list` failed; cannot verify the'
+        Write-Output 'error: `rustup component list --installed` failed; cannot verify the'
         Write-Output '  llvm-tools-preview component that cargo-llvm-cov needs.'
         exit 2
     }
@@ -143,8 +149,21 @@ if (-not (Get-Command 'git' -ErrorAction SilentlyContinue)) {
     Write-Output '  report, both of which need git.'
     exit 2
 }
-& git -C $workspaceRoot rev-parse --is-inside-work-tree 2>$null | Out-Null
-if ($LASTEXITCODE -ne 0) {
+# Wave-4 R10: under $ErrorActionPreference = 'Stop' a native stderr line is
+# a terminating NativeCommandError on Windows PowerShell 5.1 even with
+# 2>$null (release-sbom.ps1 comment, verified live), so the preference is
+# lowered around the probe and only $LASTEXITCODE decides — the exit-2
+# precondition branch below must stay reachable on the script's supported
+# platforms instead of turning into a misclassified exit 3.
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    & git -C $workspaceRoot rev-parse --is-inside-work-tree 2>$null | Out-Null
+    $insideWorkTree = ($LASTEXITCODE -eq 0)
+} finally {
+    $ErrorActionPreference = $previousPreference
+}
+if (-not $insideWorkTree) {
     Write-Output 'error: the workspace is not a git work tree; the report is'
     Write-Output '  committed at a fixed commit and cannot be produced here.'
     exit 2
@@ -475,14 +494,17 @@ $report = @"
 
 - 报告体例：由 ``scripts/coverage.ps1`` 整体生成（政策文本也在脚本内；禁止手改数字块）。
   登记例外（波 3 裁决 R7，2026-08-14；G154 记录）：下「CI 环境耦合事实」节的
-  wall-clock 断言清单（4 处）为人工维护——断言站点随代码变动，脚本不自动跟踪，
+  wall-clock 断言清单（5 处，波 4 R10）为人工维护——断言站点随代码变动，脚本不自动跟踪，
   改动断言站点时必须同步更新本报告与该脚本内的模板文本。
   本文件是 0.13.0 门禁 M3 的“报告数值入库”载体（gate plan §4 M3、§7 验收表：
   “coverage 可复现报告”）。
 - 取代一次性数字：规范仓（github.com/consema/consema）CHANGELOG.md 与
   docs/RELEASE-0.8.0.md 记录的 84.65% regions / 82.73% functions / 86.59%
   lines 是单次辅助报告，无脚本、无工件、不可复现；自本报告起 coverage 由
-  常设脚本在固定 commit 上产出，任何数字变化都来自脚本运行。
+  常设脚本在固定 commit 上产出，数字变化来自脚本运行（wave-4 R33 收窄：
+  脚本本身不校验 cargo-llvm-cov 版本——工具版本钉在 ci.yml coverage job
+  的 install 步骤（0.8.7）；本机重跑须自行对齐该版本，换工具版本产生的
+  数字差异不是「来自脚本运行」的回归信号）。
 
 $gateBanner
 
@@ -539,10 +561,10 @@ $($otherNote -join "`n")## 方法与范围
    （跌幅严格超过 1.0 pp 才失败）远大于实测平台差异；CI 与发布里程碑测量
    均以同一脚本同参数执行；任何趋势失败都以 CI 数字为准并在发布记录中
    disposition。
-2. **wall-clock 断言。** workspace 共 4 处墙钟断言。本清单为人工维护
+2. **wall-clock 断言。** workspace 共 5 处墙钟断言。本清单为人工维护
    （登记例外，波 3 裁决 R7 与 G154 记录：断言站点随代码变动，脚本不自动
    跟踪；改动断言站点时必须同步更新本清单、本报告头部注记与
-   ``scripts/coverage.ps1`` 内的模板文本）。完整清单（2026-08-14 复核）：
+   ``scripts/coverage.ps1`` 内的模板文本）。完整清单（2026-08-15 复核）：
    - ``consema-yaml/src/materialization.rs`` 的 B-7/B-8 回归测试两处
      （``elapsed < 8.0s``，debug 构建，2026-08-13 实测两条链路余量均在
      20x 以上）；
@@ -553,7 +575,13 @@ $($otherNote -join "`n")## 方法与范围
    - ``consema-document/src/source.rs``
      ``per_call_coordinate_conversion_does_not_rescan_large_utf8_sources``
      一处（``elapsed.as_secs() < 5``，逐调用坐标转换防重扫守卫，
-     2026-08-14 实测整测试 1.09s，余量约 4-5x）。
+     2026-08-14 实测整测试 1.09s，余量约 4-5x）；
+   - ``consema/tests/cli_plan_apply.rs`` 的
+     ``apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes``
+     一处（``Instant::now() + Duration::from_secs(30)`` 的 30 秒 deadline，
+     两个轮询循环超时时 panic——pending manifest 未出现、或 SIGINT 后
+     apply 未退出；Linux/macOS CI 信号路径的确定性守卫，2026-08-15
+     波 4 补记）。
    **风险**：墙钟断言环境耦合（慢机/负载抖动可能误红）。**缓解**：断言值
    针对修复前 O(n²) 实现的耗时（~30-60 s debug / ~6.7 s release）设上限，
    固定实现余量极宽（xml/source 两处亦为线性回归守卫，上限针对修复前
