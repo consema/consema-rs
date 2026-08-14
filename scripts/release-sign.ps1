@@ -7,12 +7,14 @@
 #       and immediately verify it with git tag -v. A tag that already
 #       exists is never re-signed (tags are content-addressed; a re-sign
 #       would mint a new tag object and orphan the old one).
-#       （如实注记（2026-08-14，G16-368）：示例随当前发布线改为
+#       （如实注记（2026-08-14 波 3，裁决 R2）：示例随当前发布线为
 #       v1.0.0-rc.1（release-process-0.13.0.md §4.2 与检查单第 6 项
-#       同口径）；但 -SignTag 校验正则 `^v[0-9]+\.[0-9]+\.[0-9]+$`
-#       （G105 端锚定）只接受纯 vX.Y.Z、不含 prerelease 后缀，
-#       `v1.0.0-rc.1` 会被拒绝（exit 2）。示例与正则口径差异如实
-#       记录于此，正则语义不改。）
+#       同口径）。-SignTag 校验正则自波 3 起放宽为
+#       `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`（G105 行锚定
+#       保留）：支持 SemVer 预发布后缀（v1.0.0-rc.1 通过），行锚定
+#       仍拒绝非法后缀（v0.13.0evil 仍 exit 2）。2026-08-14 本地
+#       预演实测：v1.0.0-rc.1 与 v0.13.0-drill（§4.4 演练记录串）
+#       均 exit 0，v0.13.0evil exit 2。）
 #
 #   -SignArtifacts
 #       Write the checksum manifest and sign it. The manifest reuses the
@@ -323,10 +325,12 @@ function Invoke-GpgVerify {
 # --- Tag signing -------------------------------------------------------------
 
 if ($mode -eq 'tag') {
-    # End-anchored (G105): a prefix match let 'v0.13.0evil' through and
+    # Line-anchored (G105): a prefix match let 'v0.13.0evil' through and
     # triggered a doomed release run; the whole string must be a version.
-    if ($SignTag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
-        Write-Output "error: -SignTag must look like 'vX.Y.Z' (got '$SignTag')."
+    # Wave 3 (2026-08-14, R2): a SemVer prerelease suffix is now allowed
+    # (v1.0.0-rc.1 passes); the anchors still reject any other suffix.
+    if ($SignTag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') {
+        Write-Output "error: -SignTag must look like 'vX.Y.Z' or 'vX.Y.Z-<prerelease>' (got '$SignTag')."
         exit 2
     }
     $existing = Invoke-NativeCapture 'git' @('-C', $RepoRoot, 'tag', '-l', $SignTag)
