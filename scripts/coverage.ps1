@@ -471,8 +471,8 @@ $report = @"
 - 报告体例：由 ``scripts/coverage.ps1`` 整体生成（政策文本也在脚本内；禁止手改数字块）。
   本文件是 0.13.0 门禁 M3 的“报告数值入库”载体（gate plan §4 M3、§7 验收表：
   “coverage 可复现报告”）。
-- 取代一次性数字：规范仓（github.com/consema/consema）CHANGELOG.md:219 与
-  docs/RELEASE-0.8.0.md:98 记录的 84.65% regions / 82.73% functions / 86.59%
+- 取代一次性数字：规范仓（github.com/consema/consema）CHANGELOG.md 与
+  docs/RELEASE-0.8.0.md 记录的 84.65% regions / 82.73% functions / 86.59%
   lines 是单次辅助报告，无脚本、无工件、不可复现；自本报告起 coverage 由
   常设脚本在固定 commit 上产出，任何数字变化都来自脚本运行。
 
@@ -543,7 +543,7 @@ $($otherNote -join "`n")## 方法与范围
 1. **Coverage 不替代语义证明。** 本报告的百分比只是回归探测器。质量证据的权威
    来源是 conformance 519/519 向量、byte-exact round-trip 证明、hardening 测试、
    差分 oracle、fuzz（0.13.0 M2/M8）与 API 审查（M4）；任何发布记录都不得把单一
-   coverage 百分比当作质量证明引用。本报告取代规范仓 CHANGELOG.md:219 记录的
+   coverage 百分比当作质量证明引用。本报告取代规范仓 CHANGELOG.md 记录的
    一次性数字，也不再制造新的单次数字。
 2. **硬下限（每次运行都强制）。** ``scripts/coverage.ps1`` 每次运行都带
    ``--fail-under-*``，workspace 总 coverage 低于 regions ≥ $hardFloorRegions% /

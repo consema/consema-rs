@@ -676,7 +676,7 @@ fn parse_depth_limit(case: &VectorCase<'_>) -> Result<(), String> {
 
 /// The alias-amplification budget (`max_alias_amplification_ratio`, RFC 0007
 /// §9): a zero budget is a hard denial of any value projection before any
-/// node is visited (projection.rs:564-567).
+/// node is visited (projection.rs).
 fn projection_amplification_limit(case: &VectorCase<'_>) -> Result<(), String> {
     let document = parse_case(case)?;
     let result = document.project_value(ValueProjectionRequest::best_exact_v1().with_limits(

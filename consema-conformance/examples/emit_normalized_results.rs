@@ -283,7 +283,7 @@ fn main() {
 }
 
 /// Reads one field of an object (the runner's `object_field`,
-/// consema-conformance/src/lib.rs:195-203).
+/// consema-conformance/src/lib.rs).
 fn object_field<'a>(
     entries: &'a [consema_core::ObjectEntry],
     key: &str,

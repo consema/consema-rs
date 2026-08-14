@@ -1325,7 +1325,7 @@ const NEW_CODES_V7: &[ErrorCodeDescriptor] = &[
     ),
     // Registered in 0.13.0 (audit finding F3): the 0.13.0 json
     // Recovered-document gate emits this code (consema-json
-    // projection.rs:756) and the CLI's failed projection record requires it
+    // projection.rs) and the CLI's failed projection record requires it
     // to be registry-validated; without the entry `Completion::new_with_registry`
     // rejects it and the CLI panicked on `.expect`.
     code!(
@@ -1795,7 +1795,7 @@ mod tests {
     #[test]
     fn json_projection_incomplete_document_is_registered_in_v7() {
         // The 0.13.0 json Recovered-document gate emits this code
-        // (consema-json/src/projection.rs:756); the CLI's failed
+        // (consema-json/src/projection.rs); the CLI's failed
         // `core.projection-result@1` record registry-validates the code
         // (execution.rs `Completion::new_with_registry`), so an unregistered
         // code would panic `project_cmd::projection_attempt_failure`

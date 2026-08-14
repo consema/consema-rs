@@ -38,8 +38,8 @@ workspace = true
 [package.metadata.cargo-semver-checks.lints]
 # reason: v0.8.0 后 facade 枚举的有意 API 演进——XML/plist/HCL 格式家族落地时
 # 新增的全部 Xml*/Plist*/Hcl* variant（ConversionProjectionReport、
-# ConversionProjectionProvenance、FormatMismatch，conversion.rs:65/:67/:69、
-# conversion.rs:86/:88/:90、lib.rs:505/:507/:509），引入 commit 8c02951
+# ConversionProjectionProvenance、FormatMismatch，conversion.rs、
+# conversion.rs、lib.rs），引入 commit 8c02951
 # （家族落地）与 29ba27d（facade 收口，0.9.0-0.11.0 记录），G5.5 API 稳定性
 # 审查已确认可接受。cargo-semver-checks 0.50.0 无逐 variant allowlist（不存在
 # semver-checks.toml，仅支持 lint 级覆盖），故本 crate 的 enum_variant_added

@@ -14,7 +14,7 @@
 //! never an aborted batch).
 //!
 //! The plan manifest is an **artifact, not a write authorization**
-//! (consema 仓 docs/IMPLEMENTATION.md:322,
+//! (consema 仓 docs/IMPLEMENTATION.md
 //! https://github.com/consema/consema/blob/main/docs/IMPLEMENTATION.md:
 //! "plan 不是文件写入授权"): `plan` never writes any target file;
 //! the manifest record goes to stdout (the `--json` envelope payload line)

@@ -333,7 +333,7 @@ fn formation_recovery_matrix(case: &VectorCase<'_>) -> Result<(), String> {
 
 /// One malformed `\uXXXX` escape in the KEY position: the logical line is
 /// recovered without a partial property and the error line carries the
-/// family parse code (parser.rs:626-666).
+/// family parse code (parser.rs).
 fn formation_malformed_escape_in_key(case: &VectorCase<'_>) -> Result<(), String> {
     let document = parse_case(case)?;
     require(
@@ -352,7 +352,7 @@ fn formation_malformed_escape_in_key(case: &VectorCase<'_>) -> Result<(), String
 /// One fatal encoding failure of the Reader profile: bytes that cannot be
 /// decoded under the explicit encoding (`core.source.invalid-sequence@1`) or
 /// a BOM that contradicts it (`core.source.encoding-conflict@1`) fail the
-/// whole parse before any document forms (parser.rs:24-33).
+/// whole parse before any document forms (parser.rs).
 fn formation_fatal_encoding(case: &VectorCase<'_>) -> Result<(), String> {
     let encoding = source_encoding(input_string(case, "encoding")?)?;
     let bytes = decode_hex(input_string(case, "source_hex")?)?;

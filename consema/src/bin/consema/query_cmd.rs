@@ -1722,7 +1722,7 @@ mod tests {
         // match value, so the source's key names survive in the payload tree
         // and the envelope redaction (redact_value) reaches them; a match
         // whose source key exists only as the record's `key` string is not a
-        // tree key and is never redacted (redact.rs:534 values-that-look-
+        // tree key and is never redacted (redact.rs values-that-look-
         // like-key-names guard).
         let request = request_json(
             "7b2270617373776f7264223a2268756e74657232222c22686f7374223a2264622e696e7465726e616c227d",

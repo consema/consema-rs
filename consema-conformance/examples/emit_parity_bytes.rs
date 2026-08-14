@@ -131,7 +131,7 @@ fn main() {
 
 /// Builds a PortableGraph from the neutral descriptor of the case file (the
 /// mirror of the runner's `graph_from_value`,
-/// consema-conformance/src/portable_graph_v1.rs:235-309).
+/// consema-conformance/src/portable_graph_v1.rs).
 fn graph_from_value(value: &PortableValue) -> Result<consema_graph::PortableGraph, String> {
     let fields = value.as_object().ok_or("graph must be Object")?;
     let nodes = object_field(fields, "nodes")
@@ -206,7 +206,7 @@ fn graph_from_value(value: &PortableValue) -> Result<consema_graph::PortableGrap
 }
 
 /// Resolves one neutral node index into its builder id (the runner's
-/// `graph_reference`, portable_graph_v1.rs:311-322).
+/// `graph_reference`, portable_graph_v1.rs).
 fn graph_reference(
     value: &PortableValue,
     ids: &[consema_graph::GraphNodeId],
@@ -229,7 +229,7 @@ fn object_string<'a>(
 }
 
 /// Reads one field of an object (the runner's `object_field`,
-/// consema-conformance/src/lib.rs:195-203).
+/// consema-conformance/src/lib.rs).
 fn object_field<'a>(
     entries: &'a [consema_core::ObjectEntry],
     key: &str,
@@ -241,7 +241,7 @@ fn object_field<'a>(
 }
 
 /// Lowercase hex of the bytes (the runner's `hex`,
-/// consema-conformance/src/lib.rs:377-386).
+/// consema-conformance/src/lib.rs).
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().fold(String::new(), |mut output, octet| {
         write!(output, "{octet:02x}").expect("String write");

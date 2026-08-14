@@ -87,16 +87,16 @@ The first bounded fuzz/property runs found two gate violations, both
   level (minimal inputs `{"a` and `{"a"1,...}`). **Fixed**: the json family
   now implements the explicit `RecoveredDocument` gate at the
   `Document::project` / `commit` entry points
-  (`consema-rs/consema-json/src/projection.rs:330,363`,
-  `consema-rs/consema-json/src/edit.rs:262,305`), with the strict assertion
-  in `consema-rs/consema-conformance/tests/operation_fuzz.rs:123` (the
+  (`consema-rs/consema-json/src/projection.rs`,
+  `consema-rs/consema-json/src/edit.rs`), with the strict assertion
+  in `consema-rs/consema-conformance/tests/operation_fuzz.rs` (the
   `KNOWN_RECOVERED_ACCEPTED_HITS` counter symbol was removed with the fix;
   it no longer exists in the tree).
 * **M2-F2** — a double-quoted YAML scalar `"~"` decoded to empty content
   instead of the string `"~"` (content loss on a quoted scalar). **Fixed**:
   `exact_empty_scalar` now rewrites only plain-style empty scalars
-  (`consema-rs/consema-yaml/src/native.rs:516`), with the trip-wire in
-  `consema-rs/consema-conformance/tests/property_graph.rs:20-34`
+  (`consema-rs/consema-yaml/src/native.rs`), with the trip-wire in
+  `consema-rs/consema-conformance/tests/property_graph.rs`
   (the `KNOWN_FINDING_M2_F2_HITS` counter is the trip-wire's assertion
   carrier: any increment fails the test).
 
