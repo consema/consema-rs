@@ -35,13 +35,13 @@
 # failure.
 #
 # The report file is generated in full by this script (policy text included),
-# so the committed doc and the script can never drift apart; never hand-edit
-# the numbers block of the report. One registered exception (wave-3 ruling
-# R7, 2026-08-14; G154 record): the wall-clock assertion list (4 sites) in
-# the report's "CI 环境耦合事实" section is manually maintained, in the
-# report and in this template together — assertion sites move with the code,
-# the script does not track them, and any change to an assertion site must
-# update both texts.
+# so the committed doc and the script can never drift apart — with one
+# registered exception (wave-3 ruling R7, 2026-08-14; G154 record): the
+# wall-clock assertion list (4 sites) in the report's "CI 环境耦合事实"
+# section is manually maintained, in the report and in this template
+# together — assertion sites move with the code, the script does not track
+# them, and any change to an assertion site must update both texts. Never
+# hand-edit the numbers block of the report.
 
 param(
     # Compare the measured workspace totals against the report committed at
