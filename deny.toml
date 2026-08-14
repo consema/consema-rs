@@ -30,12 +30,23 @@ ignore = false
 #     tempfile -> getrandom 0.4.3). Dev-only, never shipped to consumers;
 #     unifying would pin transitive versions of rand/tempfile outside this
 #     repository's control.
-#   - syn 2.0.119 / 3.0.3: syn 2.0.119 is a lockfile-only entry reachable
-#     by no workspace target (verified `cargo tree -i` with --all-features;
-#     the graph uses syn 3.0.3 via thiserror 2 -> saphyr-parser); a future
-#     `cargo update` prunes it.
-#   - r-efi 5.3.0 / 6.0.0: both lockfile-only, reachable by no workspace
-#     target; same pruning note.
+#   - syn 2.0.119 / 3.0.3: syn 2.0.119 is reachable only via the proptest
+#     dev-dependency subtree of consema-conformance (proptest 1.11.0 ->
+#     rand_chacha 0.9.0 -> ppv-lite86 0.2.21 -> zerocopy 0.8.56 ->
+#     zerocopy-derive 0.8.56 -> syn 2.0.119, verified `cargo tree -i
+#     --target all --edges all`). Dev-only, never shipped with the release
+#     artifacts; cargo-deny's bans graph excludes dev-dependencies and
+#     lockfile-only packages, so the gate does not intercept it. The
+#     release graph uses syn 3.0.3 via thiserror 2 -> saphyr-parser; the
+#     2.x entry is pruned only when the proptest subtree upgrades to syn 3.
+#   - r-efi 5.3.0 / 6.0.0: both reachable only via the same proptest
+#     dev-dependency subtree (r-efi 5.3.0 through getrandom 0.3.4 ->
+#     rand_core 0.9.5 -> rand 0.9.5; r-efi 6.0.0 through getrandom 0.4.3 ->
+#     tempfile, verified `cargo tree -i --target all --edges all`; the
+#     getrandom edges are target-gated to UEFI, so the host build never
+#     compiles them). Dev-only, never shipped with the release artifacts;
+#     cargo-deny's bans graph excludes dev/lockfile-only, so the gate does
+#     not intercept them; same pruning note.
 # Any duplicate that DOES appear in the analyzed graph still fails the gate.
 multiple-versions = "deny"
 wildcards = "deny"

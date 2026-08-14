@@ -36,7 +36,12 @@
 #
 # The report file is generated in full by this script (policy text included),
 # so the committed doc and the script can never drift apart; never hand-edit
-# the numbers block of the report.
+# the numbers block of the report. One registered exception (wave-3 ruling
+# R7, 2026-08-14; G154 record): the wall-clock assertion list (4 sites) in
+# the report's "CI 环境耦合事实" section is manually maintained, in the
+# report and in this template together — assertion sites move with the code,
+# the script does not track them, and any change to an assertion site must
+# update both texts.
 
 param(
     # Compare the measured workspace totals against the report committed at
@@ -469,6 +474,9 @@ $report = @"
 # Consema 0.13.0 Coverage Report
 
 - 报告体例：由 ``scripts/coverage.ps1`` 整体生成（政策文本也在脚本内；禁止手改数字块）。
+  登记例外（波 3 裁决 R7，2026-08-14；G154 记录）：下「CI 环境耦合事实」节的
+  wall-clock 断言清单（4 处）为人工维护——断言站点随代码变动，脚本不自动跟踪，
+  改动断言站点时必须同步更新本报告与该脚本内的模板文本。
   本文件是 0.13.0 门禁 M3 的“报告数值入库”载体（gate plan §4 M3、§7 验收表：
   “coverage 可复现报告”）。
 - 取代一次性数字：规范仓（github.com/consema/consema）CHANGELOG.md 与
@@ -531,12 +539,25 @@ $($otherNote -join "`n")## 方法与范围
    （跌幅严格超过 1.0 pp 才失败）远大于实测平台差异；CI 与发布里程碑测量
    均以同一脚本同参数执行；任何趋势失败都以 CI 数字为准并在发布记录中
    disposition。
-2. **wall-clock 断言。** ``consema-yaml/src/materialization.rs`` 的 B-7/B-8
-   回归测试含两处墙钟断言（``elapsed < 8.0s``，debug 构建，2026-08-13 实测
-   两条链路余量均在 20x 以上）。**风险**：墙钟断言环境耦合（慢机/负载抖动
-   可能误红）。**缓解**：断言值针对修复前 O(n²) 实现的耗时（~30-60 s debug /
-   ~6.7 s release）设上限，固定实现余量极宽；误红时按修复前基线人工复核，
-   不降低断言值。
+2. **wall-clock 断言。** workspace 共 4 处墙钟断言。本清单为人工维护
+   （登记例外，波 3 裁决 R7 与 G154 记录：断言站点随代码变动，脚本不自动
+   跟踪；改动断言站点时必须同步更新本清单、本报告头部注记与
+   ``scripts/coverage.ps1`` 内的模板文本）。完整清单（2026-08-14 复核）：
+   - ``consema-yaml/src/materialization.rs`` 的 B-7/B-8 回归测试两处
+     （``elapsed < 8.0s``，debug 构建，2026-08-13 实测两条链路余量均在
+     20x 以上）；
+   - ``consema-xml/src/parser.rs``
+     ``many_small_elements_formation_scales_linearly`` 一处
+     （``elapsed.as_secs() < 20``，10k 元素 formation 线性回归守卫，
+     2026-08-14 实测整测试 0.18s，余量远大于 20x）；
+   - ``consema-document/src/source.rs``
+     ``per_call_coordinate_conversion_does_not_rescan_large_utf8_sources``
+     一处（``elapsed.as_secs() < 5``，逐调用坐标转换防重扫守卫，
+     2026-08-14 实测整测试 1.09s，余量约 4-5x）。
+   **风险**：墙钟断言环境耦合（慢机/负载抖动可能误红）。**缓解**：断言值
+   针对修复前 O(n²) 实现的耗时（~30-60 s debug / ~6.7 s release）设上限，
+   固定实现余量极宽（xml/source 两处亦为线性回归守卫，上限针对修复前
+   行为）；误红时按修复前基线人工复核，不降低断言值。
 
 ## Coverage 政策（路线图 §18.3 落地）
 
