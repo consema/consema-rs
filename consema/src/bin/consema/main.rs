@@ -89,8 +89,11 @@ fn install_signal_handler() {
     let _ = ctrlc::set_handler(|| {
         INTERRUPT_REQUESTED.store(true, Ordering::SeqCst);
         if !APPLY_ACTIVE.load(Ordering::SeqCst) {
-            // Go main.go:138-139: the apply state machine owns the graceful
-            // shutdown; every other command exits 4 immediately.
+            // Go mirror (consema-go `go/cmd/consema/main.go`, the signal
+            // handler's applyActive-guarded exit): the apply state machine
+            // owns the graceful shutdown; every other command exits 4
+            // immediately. Cross-repo reference by symbol, not by line
+            // number — line numbers drift (wave-4 R10).
             let _ = writeln!(
                 std::io::stderr(),
                 "consema: error: interrupted by SIGINT/SIGTERM (code {INTERRUPTED_CODE})"

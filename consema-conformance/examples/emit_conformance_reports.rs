@@ -52,7 +52,9 @@ use consema_json::materialize;
 type SuiteEntry = (&'static str, fn() -> ConformanceReport);
 
 /// The frozen 18-suite inventory in the fc-manifest order (the Go runner's
-/// `allSuites` mirror, go/conformance/conformance.go:174-193).
+/// `allSuites` mirror — consema-go `conformance/conformance.go`, symbol
+/// `allSuites`; cross-repo reference by symbol, not by line number:
+/// line numbers drift, wave-4 R10).
 const SUITES: &[SuiteEntry] = &[
     ("v1.json", run_v1),
     ("toml-v1.json", run_toml_v1),

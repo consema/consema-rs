@@ -36,13 +36,16 @@
 //! both directions run in scripts/go-verify-normalized-differential.ps1.
 //!
 //! Why this example exists (justification): the differential harness needs
-//! the Rust SDK's normalized results for a data-driven set of 40+ document
-//! and source cases. No existing entry point executes arbitrary
-//! parse/query/project/materialize/edit/source workflows and prints
-//! normalized facts, so a minimal example is required. It reuses the
-//! published crate APIs only — no new encoding or analysis logic — and adds
-//! no dependency: the case file is parsed with the same consema-json strict
-//! parser the conformance runner uses.
+//! the Rust SDK's normalized results for a data-driven set of 108 document
+//! and source cases (the case set moved to
+//! `conformance/differential/normalized/cases.json` in 2026-08-12; the
+//! vendored conformance/README records normalized/cases.json = 108 —
+//! wave-4 R10 corrected the stale "40+" count). No existing entry point
+//! executes arbitrary parse/query/project/materialize/edit/source
+//! workflows and prints normalized facts, so a minimal example is
+//! required. It reuses the published crate APIs only — no new encoding or
+//! analysis logic — and adds no dependency: the case file is parsed with
+//! the same consema-json strict parser the conformance runner uses.
 //!
 //! Usage: `emit_normalized_results <cases.json> <out-dir> [--consume <evidence-dir>]`
 //! Exit code 0 = every case emitted and (in consume mode) all equal;

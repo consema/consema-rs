@@ -12,8 +12,11 @@
 //! Orchestration: `scripts/go-verify-byte-parity.ps1`.
 //!
 //! Why this example exists (justification): the hard gate needs the Rust
-//! encoder's bytes for a data-driven set of 40+ cases covering all fifteen
-//! kinds, boundaries, and nesting. No existing entry point can encode
+//! encoder's bytes for a data-driven set of 68 cases covering all fifteen
+//! kinds, boundaries, and nesting (the case set moved to
+//! `conformance/differential/cases.json` in 2026-08-12; the vendored
+//! conformance/README records byte-parity cases.json = 68 — wave-4 R10
+//! corrected the stale "40+" count). No existing entry point can encode
 //! arbitrary values to PVCE/PGCE and print bytes (the CLI has no encode
 //! command, and the cargo-test pins cover only in-code values), so a minimal
 //! example is required. It reuses the published codecs only — no new

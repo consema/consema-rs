@@ -1,11 +1,18 @@
 //! JSON5 (json5.standard@1) → strict-JSON conversion chain example:
 //! parse → best-exact projection → canonical-compact materialization,
-//! with byte-exact assertions (the README quick-start example keeps
-//! finite JSON5 exactly representable as strict JSON).
+//! with byte-exact assertions (finite JSON5 is exactly representable
+//! as strict JSON).
 //!
-//! (The README.md quick-start code fence is compile-gated by
-//! consema/examples/quickstart.rs; this test covers the same
-//! parse → project → convert shape for the JSON5 profile.)
+//! Attribution truth (wave-4 R10): the README quick-start fence
+//! (README.md:30-76) is a strict-JSON parse → query → edit → render
+//! example — the only JSON5 mention in the README is the
+//! `json5.standard@1` entry in the profile list — so the earlier claim
+//! that "the README quick-start example keeps finite JSON5 exactly
+//! representable as strict JSON" was a leftover from the 0.8.0-era
+//! README that did carry a JSON5 example. This test is the JSON5
+//! conversion gate itself; the README fence is compile-gated by
+//! consema/examples/quickstart.rs (same parse → project → convert
+//! shape for the JSON5 profile).
 
 use consema::document::{
     MaterializationRequest, MaterializationStyleId, NewlinePolicy, ParseLimits, ProfileId,

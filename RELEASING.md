@@ -20,14 +20,19 @@ consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的�
 
 1. **版本 bump**：改根 `Cargo.toml` `[workspace.package] version`，同时改
    `README.md` 的 `Workspace version:` 行（`check-version-consistency` 门禁
-   只断言这两者相等——精确 token 比较（ci.yml 该 job 内注释 G116），bump
-   漏改 README 会让 CI 红；门禁不扫描其他位置）。版本值字面量实测还出现在：
+   断言这两者相等——精确 token 比较（ci.yml 该 job 内注释 G116），bump
+   漏改 README 会让 CI 红；同一 job 的 G073 步骤还断言 `README.md` 其余
+   位置与 `.github/ISSUE_TEMPLATE/bug_report.yml` 中零版本字面量——新版本
+   值一旦硬编码进这些文件就会让 CI 红，所以只允许 `Workspace version:` 行
+   一处出现）。版本值字面量实测还出现在：
    依赖方成员 crate `Cargo.toml` 的 workspace 依赖钉（`version` 依赖声明）、
    `CHANGELOG.md` 发布记录（历史载体）与 `scripts/release-sign.ps1` 的 tag
    示例注释；`README.md` 快速开始栅栏用 `<当前版本>` 占位符、
    `.github/ISSUE_TEMPLATE/bug_report.yml` 不写版本字面量。
-2. **CHANGELOG 策展**：在仓库 CHANGELOG（若有）记录本版本变更；跨语言变更
-   同步到 consema 仓库 `docs/CHANGELOG.md`（组织纪律见 consema 仓 RELEASING.md）。
+2. **CHANGELOG 策展**：在根 `CHANGELOG.md` 记录本版本变更（G156：consema
+   仓库的 `docs/CHANGELOG.md` 只是勘误页，主记录以根 `CHANGELOG.md` 为
+   权威，与其余语言仓同口径）；跨语言变更同步到 consema 仓库根
+   `CHANGELOG.md`（组织纪律见 consema 仓 RELEASING.md）。
 3. **质量门禁全绿**：main 分支 CI `check (all gates green)` 全绿
    （清单见各仓 ci 配置；其中 `package` job 已常设证明 14 个发布归档
    可从干净环境重建，发布前无需重复打包）。
