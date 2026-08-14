@@ -29,7 +29,7 @@ Materialization 在递归与输出分配前计算 input node/depth 和增长上�
 
 raw `NodeRef`、snapshot handle、cursor 与 `CancellationToken` 不可序列化。需要 source/node identity 的 Diagnostic、Query、Provenance、ChangeSet、MaterializationResult 和 EditPlan 必须先绑定调用方稳定 locator；缺失绑定会失败，不会省略身份事实后伪造成功。
 
-`toml.1.0@1` 只对完整合法文档形成 snapshot，非法输入返回 `FatalFormationFailure`。toml-test 门禁固定运行 `toml-lang/toml-test v2.2.0` 的 205 个 valid 和 474 个 invalid TOML 1.0 decoder cases；该门禁的脚本与记录（`scripts/run-toml-test.ps1`、`docs/UPSTREAM-TOML-TEST.md`）属母仓（consema 仓），本仓 ci.yml/release.yml 无运行它的 job，本仓发布路径不含该门禁；上游版本变更必须单独审计。semantic edit 不会舍入 NaN payload、亚纳秒时间或非整分钟 offset 来伪造成功。
+`toml.1.0@1` 只对完整合法文档形成 snapshot，非法输入返回 `FatalFormationFailure`。`toml-lang/toml-test v2.2.0` 的 205 个 valid 和 474 个 invalid TOML 1.0 decoder cases 由母仓 `scripts/run-toml-test.ps1` 记录（门禁为记录载体：脚本与记录在母仓、无 CI job 执行——六仓拆分后母仓根无 Cargo.toml，脚本在母仓原位不可执行；可执行入口的迁移/重建待总指挥决策，2026-08-14 波 2 处置）；本仓 ci.yml/release.yml 无运行它的 job，本仓发布路径不含该门禁；上游版本变更必须单独审计。semantic edit 不会舍入 NaN payload、亚纳秒时间或非整分钟 offset 来伪造成功。
 
 `xml.1.0-safe@1` 的 formation 只消费调用方提供的完整 document entity bytes，绝不打开外部 DTD、实体、URI、文件、网络连接、registry、classpath 或 catalog，也不提供用户 resolver 回调。DOCTYPE 仅允许 bounded internal subset；外部 subset、外部/参数实体、notation、conditional section 与 validation 声明一律恢复并发布稳定诊断。entity 膨胀按整个文档六维记账（declaration/reference 数量、expansion depth、expanded bytes/scalars、amplification ratio），任何一维突破即恢复；攻击无法把预算拆分到多个引用。内部 subset 注释按字符数据处理，其文本不会触发排除声明误报。UTF-16 输入必须携带 BOM；encoding 声明与实际编码冲突时恢复。恢复文档永不投影、物化或编辑；`xml.safe-canonical-document@1` materialization 对生成字节执行重解析闭包验证，失败返回无目标 Document。结构编辑不接收 raw markup，新内容一律 XML-escape；编辑不猜测或伪造 namespace 声明，unbound/reserved prefix、重复 expanded attribute、ancestor placement 与根删除均在 commit 前失败。XML 语法覆盖包含 37 种细粒度 kind，实体引用与属性部件均可被 lossless query 精确区分。
 
@@ -43,8 +43,8 @@ raw `NodeRef`、snapshot handle、cursor 与 `CancellationToken` 不可序列化
 
 安全披露、响应时间与支持窗口（路线图 §19.4 的"安全披露联系方式和支持周期"；缺陷等级沿用 §18.4，P0/P1 在 1.0.0 前不允许未解决，P2 必须逐项公开评审）。
 
-**披露渠道。** 首选渠道是仓库的 GitHub Security Advisory（私有漏洞报告，已启用）。直接渠道是维护者邮箱 franckcl1989 &lt;franckcl@icloud.com&gt;（GitHub 个人页可见；本仓库尚未打发布 tag，发布记录以发布里程碑记录为载体）。报告请包含：受影响的版本与 Profile/contract、触发问题的 capability contract（如 `core.source-snapshot@1`）、最小复现输入、以及你观察到的行为。发现 panic、无界分配或规范绕过时，也请携带上述信息报告（见上文 hardening 段）。披露遵循协调披露：收到报告后先确认再公开，不会在修复可用前公开细节；不承诺任何形式的赏金。供应链问题（依赖、SBOM、签名、CI）同样走此渠道。
+**披露渠道。** GitHub 私有漏洞报告当前未启用（2026-08-14 gh api 实测 false）；启用后为首选渠道，启用前首选维护者邮箱 franckcl1989 &lt;franckcl@icloud.com&gt;（GitHub 个人页可见；本仓库尚未打发布 tag，发布记录以发布里程碑记录为载体）。报告请包含：受影响的版本与 Profile/contract、触发问题的 capability contract（如 `core.source-snapshot@1`）、最小复现输入、以及你观察到的行为。发现 panic、无界分配或规范绕过时，也请携带上述信息报告（见上文 hardening 段）。披露遵循协调披露：收到报告后先确认再公开，不会在修复可用前公开细节；不承诺任何形式的赏金。供应链问题（依赖、SBOM、签名、CI）同样走此渠道。
 
 **响应 SLA（按缺陷等级）。** P0（数据破坏、静默损失、RCE/外部访问、错误写文件、跨快照误编辑）：24 小时内确认，7 天内给出修复或缓解方案。P1（panic/crash/hang、错误完成状态、明显语义不一致、limit bypass）：72 小时内确认，14 天内修复。P2（有安全替代路径的功能缺陷、非核心性能回退、诊断位置错误）：随下一个发布窗口修复，发布判断逐项记录。P3（文档、易用性、非稳定 message、低风险边角）：尽力而为。任何等级都不得用降级测试或截断包装来"修复"；资源上限与完成状态语义是安全边界（见本文档开头部分），不能因披露而放松。
 
-**支持窗口。** 1.0.0 发布前，安全修复只承诺两个窗口：最新发布版本与其上一版本（当前窗口以 1.0.0-rc.1 为基准：发布前为 rc 版本与其前 rc；尚无已发布的前一 rc，故当前仅承诺 rc.1）；更早版本不承诺修复，除非影响面证明必须回移。正式支持的目标是 CI 矩阵（windows-latest / ubuntu-latest / macos-latest，x86_64 + arm64——macOS runner 自 2024 起为 arm64）；MSRV 窗口为 manifest 声明的 `rust-version`（当前 1.85）起的所有版本，MSRV 提升必须走 manifest 变更记录。Go 实现（0.14.0 起）的版本窗口在 Go RC 时按当时稳定生态冻结。公共 API 与 CLI 命令的弃用期至少一个 minor；contract/Profile 退役必须走 RFC 进程，已冻结的 v1-v7 registry 永不删除 code，退役只改变新输入的接受行为并在发布记录中列明。
+**支持窗口。** 1.0.0 发布前，安全修复只承诺两个窗口：最新发布版本与其上一版本（当前版本见 README「Workspace version:」行（本段避免硬编码版本串）；发布前窗口为 rc 版本与其前 rc；尚无已发布的前一 rc，故当前仅承诺当前 rc）；更早版本不承诺修复，除非影响面证明必须回移。正式支持的目标是 CI 矩阵（windows-latest / ubuntu-latest / macos-latest，x86_64 + arm64——macOS runner 自 2024 起为 arm64）；MSRV 窗口为 manifest 声明的 `rust-version`（当前 1.85）起的所有版本，MSRV 提升必须走 manifest 变更记录。Go 实现（0.14.0 起）的版本窗口在 Go RC 时按当时稳定生态冻结。公共 API 与 CLI 命令的弃用期至少一个 minor；contract/Profile 退役必须走 RFC 进程，已冻结的 v1-v7 registry 永不删除 code，退役只改变新输入的接受行为并在发布记录中列明。
