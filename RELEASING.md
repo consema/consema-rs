@@ -10,7 +10,8 @@ consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的�
   `consema-pvce` `consema-json` `consema-toml` `consema-yaml` `consema-ini`
   `consema-properties` `consema-xml` `consema-plist` `consema-hcl`
   `consema-protocol` `consema`（`consema-conformance` 为 `publish = false`，
-  只进仓库不打进发布归档，与 verify-package-archives.ps1 语义一致）。
+  只进仓库不打进发布归档，与 verify-package-archives.ps1 及 release.yml 的
+  package 门禁（`--exclude consema-conformance`）语义一致）。
 - 发布顺序即依赖拓扑序（core → document → graph → pvce → json → toml →
   yaml → ini → properties → xml → plist → hcl → protocol → consema），
   workflow 中任一 crate 失败即中止，人工处置后重推 tag（或手动补发剩余 crate）。
