@@ -36,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement via the repository's GitHub Security Advisory (private vulnerability reporting) or by email to franckcl1989 &lt;franckcl@icloud.com&gt;. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement by email to franckcl1989 &lt;franckcl@icloud.com&gt; (the repository's GitHub Security Advisory / private vulnerability reporting is currently not enabled — verified via `gh api` on 2026-08-14 — and becomes the preferred channel once enabled). All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
@@ -88,5 +88,6 @@ For answers to common questions about this code of conduct, see the FAQ at [http
 
 举报、申诉与咨询请联系 Consema 维护者；安全披露统一走规范仓
 [SECURITY.md](https://github.com/consema/consema/blob/main/SECURITY.md) 的
-披露渠道（GitHub Security Advisory 与维护者邮箱 `franckcl1989 <franckcl@icloud.com>`），
-不要将安全事件作为公开 issue 提交。
+披露渠道：GitHub 私有漏洞报告（Security Advisory）当前未启用（2026-08-14
+gh api 实测 false），启用后为首选渠道；启用前首选维护者邮箱
+`franckcl1989 <franckcl@icloud.com>`。不要将安全事件作为公开 issue 提交。

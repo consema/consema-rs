@@ -1,34 +1,47 @@
 # Path-based area labels for .github/workflows/labeler.yml (actions/labeler
-# v7 config: label -> list of match objects; rules without an `any`/`all`
-# wrapper are OR-ed; inside a combinator `all-globs-to-all-files` requires
-# every changed file to match every glob, and `!`-prefixed globs are
-# independent negated matchers — so `consema*/**` + `!**/*.md` means "every
-# changed file is a non-markdown file inside a crate"). Area labels are
-# derived from paths only; `kind:` labels remain the human/PR-template
-# merge gate (pr-labels.yml).
+# v7 config: label -> list of match objects; top-level match objects are
+# OR-ed (a bare `changed-files` entry defaults to `any`), and inside a
+# combinator `any-glob-to-any-file` means "any changed file matching any
+# glob" — a single source-file hit is enough to apply the label, so a mixed
+# source + docs PR gets both `area: core` and `area: docs` (the rules are
+# independent; the former `all-globs-to-all-files` + `!**/*.md` structure
+# made every changed file have to match and dropped core on any md in the
+# PR). Literal root patterns (LICENSE/.gitignore/.gitattributes) match only
+# the repo-root file (minimatch, no matchBase). Area labels are derived from
+# paths only; `kind:` labels remain the human/PR-template merge gate
+# (pr-labels.yml).
 
 'area: core':
-  # every changed file inside a crate, none a markdown file
+  # any changed file inside a crate (source hit is enough)
   - changed-files:
-      - all-globs-to-all-files:
+      - any-glob-to-any-file:
           - 'consema*/**'
-          - '!**/*.md'
-  # every changed file inside the vendored conformance snapshot, none md
+  # any changed file inside the vendored conformance snapshot
   - changed-files:
-      - all-globs-to-all-files:
+      - any-glob-to-any-file:
           - 'conformance/**'
-          - '!**/*.md'
   # workspace manifest / lockfile
   - changed-files:
       - any-glob-to-any-file:
           - 'Cargo.toml'
           - 'Cargo.lock'
+  # repo-root meta files (literal names, root-only — no subtree matches)
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'LICENSE'
+          - '.gitignore'
+          - '.gitattributes'
 
 'area: ci':
   - changed-files:
       - any-glob-to-any-file:
           - '.github/**'
           - 'scripts/**'
+  # root-level tooling / policy files (fuzz-evidence driver, dependency gate)
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'run_waves.ps1'
+          - 'deny.toml'
 
 'area: docs':
   # '**/*.md' already covers every markdown file, so no separate 'docs/**'

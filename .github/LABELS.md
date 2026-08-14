@@ -18,8 +18,8 @@ complements the human-chosen `kind:` label.
 | `kind: docs`    | `0075ca` | Documentation-only change                                          |
 | `kind: chore`   | `5319e7` | Maintenance: tooling, CI, dependencies, refactor without behavior change |
 | `kind: release` | `fbca04` | Release preparation / version bump                                 |
-| `area: core`    | `d93f0b` | Implementation / authoritative content (repo source tree)          |
-| `area: ci`      | `bfd4f2` | CI / tooling: `.github/**`, `scripts/**`                           |
+| `area: core`    | `d93f0b` | Implementation / authoritative content (repo source tree: `consema*/**`, `conformance/**`, `Cargo.toml`/`Cargo.lock`; root meta files `LICENSE`/`.gitignore`/`.gitattributes`) |
+| `area: ci`      | `bfd4f2` | CI / tooling: `.github/**`, `scripts/**`, root tooling files (`run_waves.ps1`, `deny.toml`) |
 | `area: docs`    | `c2e0c6` | Documentation: `*.md`, `docs/**`                                   |
 | `needs-info`    | `d4c5f9` | Issues awaiting information: the stale workflow (`only-labels: needs-info`) target（2026-08-14 换色：原登记 `f9d0c4` 而线上实为与 `kind: release` 共用的 `fbca04`，文档与线上双不符且标签 UI 不可区分；已按母仓/go 已修体例登记 `d4c5f9` 并 `gh label edit "needs-info" --color d4c5f9` 落地，线上与本表一致） |
 
