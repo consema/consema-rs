@@ -75,8 +75,8 @@ manifest records this allowed skip path. The suite id stays
 wherever the pinned CPython exists; when the pinned CPython exists but the
 Windows build does not match the pin, `run-plistlib-oracle.ps1` prints an
 explicit skip message and exits with code 3, mirroring
-`scripts/run-hcl-go-oracle.ps1` (2026-08-14 波 3 audit: corrected from the
-previous "is not skipped" claim).
+`scripts/run-hcl-go-oracle.ps1` (2026-08-14 波 3 audit: the previous wording
+denying this skip path was corrected here).
 
 ## Pinning and divergence policy
 
