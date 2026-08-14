@@ -1,7 +1,6 @@
 # Consema Rust workspace（consema-rs）
 
 ![CI](https://img.shields.io/github/actions/workflow/status/consema/consema-rs/ci.yml?branch=main)
-![Version](https://img.shields.io/github/v/tag/consema/consema-rs)
 ![License](https://img.shields.io/github/license/consema/consema-rs)
 
 Consema 语言中立契约（RFC 0016：portable value、无损文档、类型化查询、投影、
@@ -14,11 +13,11 @@ conformance suites）在 [github.com/consema/consema](https://github.com/consema
 Workspace version: 1.0.0-rc.1（`Cargo.toml` `[workspace.package] version`；CI
 check-version-consistency job 断言与 README 一致）。
 
-## 快速开始（30 秒跑通）
+## 快速开始
 
 ```toml
 [dependencies]
-consema = "1.0.0-rc.1"  # 1.0.0-rc.1 发布到 crates.io 后可用
+consema = "<当前版本>"  # 版本以「Workspace version:」行为准（crates.io 发布后可用）
 ```
 
 把下面代码放进 `src/main.rs`（一个 JSON 文档走完 parse → query → edit → render 四条链；
@@ -85,7 +84,7 @@ fn main() {
 | query | `consema::json::execute_json_query(&ExecutableQuery, &json::Document, QueryLimits, &CancellationToken) -> Result<QueryExecution<JsonMatch>, QueryFailure>` |
 | project | `json::Document::project(&ProjectionRequest) -> ProjectionResult`（请求：`ProjectionRequestBuilder::new(ProjectionTarget::BestExactCoreV1).build()`） |
 | edit | `json::EditTransactionBuilder::new(&json::Document)` + `json::Document::commit(&EditTransaction) -> Result<EditCommit, EditFailure>`（`commit.document` 为编辑后文档） |
-| materialize | `consema::json::materialize(&PortableValue, &MaterializationRequest) -> document::MaterializationResult` |
+| materialize | `consema::json::materialize(&PortableValue, &MaterializationRequest) -> document::MaterializationResult<Document>` |
 | convert | `consema::convert_json(&json::Document, &json::ProjectionRequest, &MaterializationRequest) -> ConversionResult`（另有 convert_toml / convert_yaml / convert_ini / convert_properties / convert_xml / convert_plist / convert_hcl） |
 | registry | `registry::format_families()` / `registry::profiles()` / `registry::query_domains()` / `registry::operation_registry(&ProfileId)`（8 家族 / 16 profiles / 21 查询域 / 16 操作注册表（按 profile 计）/ 56 操作） |
 

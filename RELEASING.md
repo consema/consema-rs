@@ -19,7 +19,9 @@ consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的�
 
 1. **版本 bump**：改根 `Cargo.toml` `[workspace.package] version`，同时改
    `README.md` 的 `Workspace version:` 行（`check-version-consistency` 门禁
-   强制两者一致，bump 漏改 README 会让 CI 红）。
+   强制两者一致，bump 漏改 README 会让 CI 红）。版本值**只**出现在这两处：
+   README 快速开始栅栏与 `.github/ISSUE_TEMPLATE/bug_report.yml` 不写版本
+   字面量（门禁断言无散落副本，bump 无需同步它们）。
 2. **CHANGELOG 策展**：在仓库 CHANGELOG（若有）记录本版本变更；跨语言变更
    同步到 consema 仓库 `docs/CHANGELOG.md`（组织纪律见 consema 仓 RELEASING.md）。
 3. **质量门禁全绿**：main 分支 CI `check (all gates green)` 全绿
@@ -33,7 +35,10 @@ consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的�
    ```
    推送后 `.github/workflows/release.yml` 自动发布；发布 workflow 首先校验
    tag↔版本一致（tag 去掉 `v` 前缀必须等于 Cargo.toml
-   `[workspace.package] version`，不一致即 exit 1 中止），校验通过才进入
+   `[workspace.package] version`，不一致即 exit 1 中止），并校验 **tag 指向
+   main 分支历史**（tag 的 commit 必须是 main HEAD 的祖先，且与 main HEAD
+   的提交时间差不超过 24 小时——从陈旧 commit 打 tag 会被拒绝；main 在
+   tag 推送后落入新 commit 不会误伤，无需 force 重推），校验通过才进入
    发布步骤；**不要**在 tag 之外手动执行 cargo publish（除非处置失败重试）。
 
 ## 2. 凭证配置（用户侧一次性动作）

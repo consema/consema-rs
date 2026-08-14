@@ -335,7 +335,13 @@ if ($Trend) {
     $relativeReportPath = $ReportPath.Replace('\', '/')
     $previous = Get-CommittedReport $relativeReportPath
     if ($null -eq $previous) {
-        Write-Output "note: no previous report at HEAD:$relativeReportPath; -Trend has no baseline to compare against (first baseline run)"
+        # 2026-08-14 波 2 修复：-Trend 请求下基线缺失此前静默放行（首跑即绿，
+        # 趋势门禁空转）；现改为硬失败——趋势门禁只在有已入库基线时才有意义，
+        # 首次建立基线请先不带 -Trend 运行并提交报告。
+        Write-Output "error: -Trend requested but no previous report at HEAD:$relativeReportPath"
+        Write-Output '  (-Trend has no baseline to compare against; run once without -Trend,'
+        Write-Output '   commit the report, then re-run with -Trend.)'
+        exit 1
     } else {
         $previousTotal = [regex]::Match(
             $previous, '(?m)^coverage\.total regions=([0-9.]+) functions=([0-9.]+) lines=([0-9.]+)\s*$'

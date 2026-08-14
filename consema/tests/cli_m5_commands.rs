@@ -142,7 +142,7 @@ fn project_usage_rejection_and_missing_request_input() {
 }
 
 #[test]
-fn materialize_output_flag_is_refused_until_fsio() {
+fn materialize_output_flag_is_refused_as_usage() {
     let output = run(&[
         "materialize",
         "--request-file",
@@ -152,7 +152,13 @@ fn materialize_output_flag_is_refused_until_fsio() {
         "--output",
         "out.json",
     ]);
-    assert_eq!(status(&output), 1, "usage: --output is an M6 feature");
+    // G089: --output is scoped to plan/apply; materialize rejects it as a
+    // usage error (not a silently ignored flag).
+    assert_eq!(
+        status(&output),
+        1,
+        "usage: --output is not wired for materialize"
+    );
     assert!(output.stdout.is_empty());
     assert!(stderr_text(&output).contains("--output"));
 }

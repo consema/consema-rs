@@ -9,7 +9,8 @@
 //! policies). The mapping table is the CLI's only projection knowledge and
 //! every entry is a published format target; the conservative default policy
 //! (`core.projection.exact-or-reject@1`, no rules, no limits) is the SDK's
-//! own default, never invented (roadmap §10 line 818).
+//! own default, never invented (roadmap §10「产品级 CLI」；锚为节标题，行号
+//! 以规范仓为准).
 //!
 //! The machine payload is the `core.projection-result@1` record (RFC 0015
 //! §6.1): value, fidelity, report, and provenance, externalized from the

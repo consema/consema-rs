@@ -110,10 +110,9 @@
 //! provenance. The reparse uses limits derived from the request so a bounded
 //! input cannot fail its own closure.
 //!
-//! The module is not yet re-exported from the crate root (the M5-M8 parallel
-//! milestones land their `pub use` wiring together); this attribute is the
-//! shared adaptation-point pattern of the parallel milestone files and is
-//! removed when the crate root exports land.
+//! The module is re-exported from the crate root (`lib.rs` `pub use
+//! materialization::materialize`); the M5-M8 parallel-milestone adaptation
+//! points have all landed.
 use crate::native::{
     PLIST_EPOCH_OFFSET_UNIX, PlistArray, PlistBoolean, PlistData, PlistDate, PlistDict,
     PlistDictEntry, PlistDocument, PlistDocumentBuilder, PlistInteger, PlistKey, PlistReal,

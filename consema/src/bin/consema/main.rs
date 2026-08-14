@@ -35,7 +35,7 @@ mod detect;
 mod edit_cmd;
 mod explain;
 // fsio (atomic-write engine) and redact (presentation redaction) are wired
-// and consumed by the edit/plan/apply commands; the allow below remains the
+// and consumed by the apply/manifest commands; the allow below remains the
 // standing declaration for any helper not reached by a production path
 // (test-only surface), harmless now that the engines are live.
 #[allow(dead_code)]
@@ -196,9 +196,9 @@ fn run_with_io(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) 
         CliCommand::Project => project_cmd::run(&parsed, stdout, stderr),
         CliCommand::Materialize => materialize_cmd::run(&parsed, stdout, stderr),
         CliCommand::Convert => convert_cmd::run(&parsed, stdout, stderr),
-        // Milestone M7: edit (single-file dry-run) and plan (multi-file
-        // batch-plan manifest) share the cli.edit-request@1 pipeline;
-        // milestone M8 wires apply (batch write from a prior plan manifest).
+        // edit (single-file dry-run) and plan (multi-file batch-plan
+        // manifest) share the cli.edit-request@1 pipeline; apply executes
+        // the batch write from a prior plan manifest (fsio).
         CliCommand::Edit => edit_cmd::run(&parsed, stdout, stderr),
         CliCommand::Plan => plan::run(&parsed, stdout, stderr),
         CliCommand::Apply => apply::run(&parsed, stdout, stderr),

@@ -1,6 +1,8 @@
 //! emit_parity_bytes — cross-language PVCE/PGCE byte-parity harness support
-//! (milestone 0.14.0 G0.5; docs/go-implementation-plan.md §4.4; roadmap
-//! §16.1 hard gate: "Rust 与 Go 的 PVCE/PGCE bytes 完全一致").
+//! (milestone 0.14.0 G0.5;
+//! https://github.com/consema/consema/blob/main/docs/go-implementation-plan.md
+//! §4.4; roadmap §16.1「0.14.0：Go core、PVCE、PGCE 与协议」hard gate:
+//! "Rust 与 Go 的 PVCE/PGCE bytes 完全一致").
 //!
 //! Reads the differential case file
 //! (`conformance/differential/cases.json`, the vendored copy of the

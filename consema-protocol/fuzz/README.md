@@ -17,8 +17,11 @@ truth:
   harness the gate plan allows ("cargo-fuzz 或等价 harness"): this
   Windows/MSVC machine has no clang, so `libfuzzer-sys` cannot link its C++
   runtime and `cargo fuzz run` is not available here.
-* **libFuzzer (72 CPU-hours milestone M8, on a Linux host with clang):**
-  `fuzz_targets/decode.rs` is a thin `#![no_main]` wrapper; run
+* **In-process driver (72 CPU-hours milestone M8, accumulated on FRANCK-PC,
+  MSVC-only):** the libFuzzer/clang host path has not been executed (no clang
+  on this machine; see `consema-conformance/src/fuzz.rs`).
+  `fuzz_targets/decode.rs` remains the unexecuted completion path; on a
+  libFuzzer-capable host, run
 
   ```sh
   cargo +nightly fuzz run decode

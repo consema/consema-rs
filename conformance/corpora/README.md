@@ -9,7 +9,7 @@ tests read the committed bytes; nothing regenerates them at test time.
 | File | Content |
 |---|---|
 | `json5-v2.2.3.json` | Upstream JSON5 v2.2.3 reference corpus (valid/invalid cases, upstream metadata in the file header). |
-| `mutation-v1.json` | Mutation corpus (0.13.0 gate plan M2): per-fixture byte mutations of the 46 mutated fixtures under `conformance/fixtures/` (every fixture except the special-cased `fixtures/toml/Cargo.toml` mirror of the consema-rs root manifest — the corpus has 46 fixture keys while the fixtures tree has 47 files), plus the fuzz-finding regression inputs (the `regressions` array is currently empty: no fuzz finding has been added yet). |
+| `mutation-v1.json` | Mutation corpus (0.13.0 gate plan M2): per-fixture byte mutations of the 46 fixtures registered in the corpus table (every fixture under `conformance/fixtures/` **except** the `toml/Cargo.toml` special-case file, which is excluded from the table by convention and not mutated), plus the fuzz-finding regression inputs. |
 | `licenses/` | License texts of upstream corpora. |
 
 ## Mutation corpus (`mutation-v1.json`)
@@ -80,26 +80,25 @@ Layout:
 ## Finding records (0.13.0 gate plan M2, 2026-08-07)
 
 The first bounded fuzz/property runs found two gate violations, both
-fixed on 2026-08-07. This section records the history and the current
-assertion carriers (no active exemptions remain):
+**fixed in 0.13.0 (commit 094f5d1) and permanently asserted**:
 
 * **M2-F1** — consema-json projection and edit entry points accepted
   recovered documents whose targeted structure is complete at the node
-  level (minimal inputs `{"a` and `{"a"1,...}`). **Fixed**: the json
-  family now implements the explicit `RecoveredDocument` rejection gates
-  that were missing (`consema-json/src/projection.rs` `ProjectionFailure::
-  RecoveredDocument`, `consema-json/src/edit.rs` `EditFailure::
-  RecoveredDocument`), and the old `KNOWN_RECOVERED_ACCEPTED_HITS` counter
-  was removed with the fix (zero hits — the symbol no longer exists).
+  level (minimal inputs `{"a` and `{"a"1,...}`). **Fixed**: the json family
+  now implements the explicit `RecoveredDocument` gate at the
+  `Document::project` / `commit` entry points
+  (`consema-rs/consema-json/src/projection.rs:330,363`,
+  `consema-rs/consema-json/src/edit.rs:262,305`), with the strict assertion
+  in `consema-rs/consema-conformance/tests/operation_fuzz.rs:123` (the
+  `KNOWN_RECOVERED_ACCEPTED_HITS` counter symbol was removed with the fix;
+  it no longer exists in the tree).
 * **M2-F2** — a double-quoted YAML scalar `"~"` decoded to empty content
   instead of the string `"~"` (content loss on a quoted scalar). **Fixed**:
-  `exact_empty_scalar` (`consema-yaml/src/native.rs:516`, consema-rs repo)
-  now rewrites only the plain-style empty-scalar placeholder. The
-  regression trip-wire `KNOWN_FINDING_M2_F2_HITS` in
-  `consema-conformance/tests/property_graph.rs:35` (consema-rs repo)
-  counts any re-introduced content loss and the bounded test fails if the
-  counter moves off zero.
+  `exact_empty_scalar` now rewrites only plain-style empty scalars
+  (`consema-rs/consema-yaml/src/native.rs:516`), with the trip-wire in
+  `consema-rs/consema-conformance/tests/property_graph.rs:20-34`
+  (the `KNOWN_FINDING_M2_F2_HITS` counter is the trip-wire's assertion
+  carrier: any increment fails the test).
 
-Both fixes are asserted by the regular test suite: the json gates make
-the strict rejection path permanent (no counter to maintain), and the
-M2-F2 trip-wire is asserted at zero on every run.
+Both findings' fixes are covered by strict assertions / trip-wires that
+fail on regression, so no exemption remains active.

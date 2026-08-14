@@ -1,12 +1,15 @@
 # API reference (rustdoc) build + artifact — preparation for docs.rs /
 # GitHub Pages publishing. docs.rs builds are triggered automatically by
-# crates.io publishes (each crate's Cargo.toml declares
-# `documentation = https://docs.rs/<crate>`); this workflow proves the full
-# workspace rustdoc tree builds clean (-D warnings, identical to the ci.yml
-# lint job's rustdoc step) on every push to main and every PR, and uploads
-# the rendered docs as a downloadable artifact so the API reference can be
-# reviewed/previewed before a release. A later release batch may attach
-# Pages deployment on top of this job; nothing here publishes anywhere.
+# crates.io publishes (14 of the 15 workspace crates declare
+# `documentation = https://docs.rs/<crate>`; consema-conformance is
+# `publish = false` and declares no documentation field — it never ships
+# to crates.io, so docs.rs has nothing to build for it); this workflow
+# proves the full workspace rustdoc tree builds clean (-D warnings,
+# identical to the ci.yml lint job's rustdoc step) on every push to main
+# and every PR, and uploads the rendered docs as a downloadable artifact
+# so the API reference can be reviewed/previewed before a release. A
+# later release batch may attach Pages deployment on top of this job;
+# nothing here publishes anywhere.
 #
 # The artifact contains only rustdoc HTML (target/doc, no .git, no
 # repository contents beyond the rendered docs); no repository secrets are

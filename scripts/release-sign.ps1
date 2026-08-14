@@ -2,11 +2,17 @@
 # §19.4 "signed tag 与 release artifact"). Covers the two signing paths of
 # the release supply chain:
 #
-#   -SignTag v0.13.0
-#       GPG-sign the release tag: git tag -s -a v0.13.0 -m "Consema 0.13.0"
+#   -SignTag v1.0.0-rc.1
+#       GPG-sign the release tag: git tag -s -a v1.0.0-rc.1 -m "Consema 1.0.0-rc.1"
 #       and immediately verify it with git tag -v. A tag that already
 #       exists is never re-signed (tags are content-addressed; a re-sign
 #       would mint a new tag object and orphan the old one).
+#       （如实注记（2026-08-14，G16-368）：示例随当前发布线改为
+#       v1.0.0-rc.1（release-process-0.13.0.md §4.2 与检查单第 6 项
+#       同口径）；但 -SignTag 校验正则 `^v[0-9]+\.[0-9]+\.[0-9]+$`
+#       （G105 端锚定）只接受纯 vX.Y.Z、不含 prerelease 后缀，
+#       `v1.0.0-rc.1` 会被拒绝（exit 2）。示例与正则口径差异如实
+#       记录于此，正则语义不改。）
 #
 #   -SignArtifacts
 #       Write the checksum manifest and sign it. The manifest reuses the
@@ -317,8 +323,10 @@ function Invoke-GpgVerify {
 # --- Tag signing -------------------------------------------------------------
 
 if ($mode -eq 'tag') {
-    if ($SignTag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+') {
-        Write-Output "error: -SignTag must look like 'v0.13.0' (got '$SignTag')."
+    # End-anchored (G105): a prefix match let 'v0.13.0evil' through and
+    # triggered a doomed release run; the whole string must be a version.
+    if ($SignTag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+        Write-Output "error: -SignTag must look like 'vX.Y.Z' (got '$SignTag')."
         exit 2
     }
     $existing = Invoke-NativeCapture 'git' @('-C', $RepoRoot, 'tag', '-l', $SignTag)
@@ -453,6 +461,7 @@ if ($mode -eq 'verify') {
         exit 1
     }
 
+    $signaturesVerified = 0
     foreach ($signaturePath in @("$ManifestPath.asc", "$ManifestPath.sig")) {
         if (Test-Path -LiteralPath $signaturePath -PathType Leaf) {
             $verifyArguments = @($signaturePath)
@@ -460,12 +469,20 @@ if ($mode -eq 'verify') {
                 $verifyArguments += $ManifestPath
             }
             Invoke-GpgVerify $verifyArguments ([IO.Path]::GetFileName($signaturePath))
+            $signaturesVerified++
         } else {
             Write-Output "note: no signature file present: $([IO.Path]::GetFileName($signaturePath))"
         }
     }
+    if ($signaturesVerified -eq 0) {
+        # G105: with no signature files at all the final line must not
+        # claim signatures were verified — an unsigned manifest fails.
+        Write-Output 'FAIL: no signature files present (.asc / .sig); the manifest is'
+        Write-Output '  unsigned, so no signature verification claim holds.'
+        exit 1
+    }
 
-    Write-Output "verified $($entries.Count) archive checksums and manifest signatures"
+    Write-Output "verified $($entries.Count) archive checksums and $signaturesVerified manifest signature file(s)"
     exit 0
 }
 
@@ -543,8 +560,12 @@ foreach ($line in $manifestLines) {
     Write-Output "  $line"
 }
 
-$signArguments = @('--batch', '--yes', '--armor')
-if ($KeyId) { $signArguments += @('-u', $KeyId) }
+# The key is always pinned with -u, exactly like the tag path above
+# (G105): without it gpg picks the default key from the keyring, which can
+# silently differ from the signing key this script detected/validated.
+# -KeyId overrides the pin; the precondition already validated that
+# -KeyId names a usable secret key.
+$signArguments = @('--batch', '--yes', '--armor', '-u', $signingKey)
 
 # Output names are explicit: gpg 2.4.9 defaults `--armor --detach-sign` to
 # <input>.asc, which would collide with the clearsign output and overwrite

@@ -106,12 +106,17 @@ $RepoRoot = [IO.Path]::GetFullPath($RepoRoot)
 # --- Preconditions -----------------------------------------------------------
 
 $pinnedSbomVersion = '0.10.0'
-if (-not (Get-Command 'cargo' -ErrorAction SilentlyContinue)) {
-    Write-Output 'error: cargo not found on PATH; cargo-sbom is a cargo'
+# The $env:CONSEMA_CARGO convention of the other scripts (coverage.ps1):
+# the cargo executable is resolved once per run, override first, PATH
+# fallback (wave-2 audit: the header claimed the convention while the
+# calls below hardcoded 'cargo').
+$cargo = if ($env:CONSEMA_CARGO) { $env:CONSEMA_CARGO } else { 'cargo' }
+if (-not (Get-Command $cargo -ErrorAction SilentlyContinue)) {
+    Write-Output "error: cargo not found (resolved via CONSEMA_CARGO or PATH: $cargo); cargo-sbom is a cargo"
     Write-Output '  subcommand and needs it to read the workspace lockfile.'
     exit 2
 }
-$sbomVersionOutput = Invoke-NativeCapture 'cargo' @('sbom', '--version')
+$sbomVersionOutput = Invoke-NativeCapture $cargo @('sbom', '--version')
 if ($LASTEXITCODE -ne 0) {
     Write-Output 'error: cargo-sbom is not installed (no `cargo sbom` subcommand).'
     Write-Output "  Install the pinned version with:"
@@ -158,7 +163,7 @@ if ($LASTEXITCODE -ne 0 -or $commitLines.Count -eq 0) {
 $commitLong = $commitLines[0].Trim()
 $runDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
 
-$metadataJson = Invoke-NativeCapture 'cargo' @('metadata', '--locked', '--offline', '--no-deps', '--format-version', '1')
+$metadataJson = Invoke-NativeCapture $cargo @('metadata', '--locked', '--offline', '--no-deps', '--format-version', '1')
 if ($LASTEXITCODE -ne 0) {
     Write-Output 'error: cargo metadata failed; the output file name derives'
     Write-Output '  from the workspace version.'
@@ -188,8 +193,8 @@ if (-not $workspaceVersion) {
 }
 
 $sbomArguments = @('sbom', '--output-format', $OutputFormat, '--project-directory', $RepoRoot)
-Write-Output "==> cargo $($sbomArguments -join ' ')"
-$sbomOutput = Invoke-NativeCapture 'cargo' $sbomArguments
+Write-Output "==> $cargo $($sbomArguments -join ' ')"
+$sbomOutput = Invoke-NativeCapture $cargo $sbomArguments
 $sbomExit = $LASTEXITCODE
 if ($sbomExit -ne 0) {
     Write-Output "error: cargo sbom failed with exit code $sbomExit"

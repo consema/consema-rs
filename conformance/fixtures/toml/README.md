@@ -22,4 +22,7 @@ these files directly; this directory is the single authority.
 The `toml.corpus.cargo-manifest` case requires the fixture to be a real,
 parseable TOML document that renders byte-exact: keep it byte-identical to
 the consema-rs root manifest when that manifest changes (a split-assembly
-commit in consema-rs updates this file).
+commit in consema-rs updates this file). The byte-identity is enforced by
+a standing comparison test (G163: `consema-conformance/src/toml_v1.rs`
+`cargo_manifest_fixture_is_byte_identical_to_the_workspace_root_manifest`),
+so a version bump that forgets the fixture fails CI.

@@ -31,7 +31,8 @@
           - 'scripts/**'
 
 'area: docs':
+  # '**/*.md' already covers every markdown file, so no separate 'docs/**'
+  # branch is needed (the two globs would overlap completely).
   - changed-files:
       - any-glob-to-any-file:
           - '**/*.md'
-          - 'docs/**'

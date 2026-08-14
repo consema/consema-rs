@@ -205,7 +205,8 @@ Global options:
   --pretty            indent the envelope JSON (requires --json)
   --profile <id>      explicit profile selection (required for parse-class
                       commands); --format is an alias
-  --output <path>     result or manifest write target
+  --output <path>     manifest/result write target (plan/apply only; any
+                      other command rejects it as a usage error)
   --request-file <path>  strict request input (query/project/materialize/
                          convert/edit/plan)
   --max-bytes <n>     CLI-layer per-file read budget in bytes
@@ -347,7 +348,7 @@ fn parse_flag(
         }
         "output" | "request-file" | "redact-keys" => {
             mark_seen(seen, flag)?;
-            if flag == "request-file" {
+            if flag == "request-file" || flag == "output" {
                 command_specific_flag(flag, command)?;
             }
             let value = take_value(args, index, flag, inline_value)?;
@@ -433,6 +434,10 @@ fn command_specific_flag(
             CliCommand::Plan,
         ],
         "write" => &[CliCommand::Edit],
+        // G089: --output is the result/manifest write target of the batch
+        // commands only (plan/apply, RFC 0015 §8.3). Every other command
+        // receives a usage error instead of silently ignoring the flag.
+        "output" => &[CliCommand::Plan, CliCommand::Apply],
         _ => return Ok(()),
     };
     if command.is_some_and(|command| allowed.contains(&command)) {
@@ -694,6 +699,38 @@ mod tests {
                 command: None,
             })
         );
+        // G089: --output is scoped to plan/apply; every other command gets
+        // a usage error instead of silently ignoring the flag.
+        let parsed = parse(&["apply", "plan.json", "--output", "result.json"]).unwrap();
+        assert_eq!(parsed.output.as_deref(), Some("result.json"));
+        assert_eq!(
+            parse(&["query", "--output", "x", "--profile", "ini.portable"]),
+            Err(ParseError::FlagNotAllowed {
+                flag: "output",
+                command: Some(CliCommand::Query),
+            })
+        );
+        assert_eq!(
+            parse(&["conformance", "--output", "x"]),
+            Err(ParseError::FlagNotAllowed {
+                flag: "output",
+                command: Some(CliCommand::Conformance),
+            })
+        );
+        assert_eq!(
+            parse(&[
+                "--output",
+                "x",
+                "plan",
+                "a.conf",
+                "--profile",
+                "ini.portable"
+            ]),
+            Err(ParseError::FlagNotAllowed {
+                flag: "output",
+                command: None,
+            })
+        );
     }
 
     #[test]
@@ -703,7 +740,7 @@ mod tests {
             Err(ParseError::MissingFlagValue("profile"))
         );
         assert_eq!(
-            parse(&["conformance", "--output"]),
+            parse(&["apply", "plan.json", "--output"]),
             Err(ParseError::MissingFlagValue("output"))
         );
         assert_eq!(
@@ -720,18 +757,18 @@ mod tests {
             Err(ParseError::EmptyFlagValue("profile"))
         );
         assert_eq!(
-            parse(&["conformance", "--output", ""]),
+            parse(&["apply", "plan.json", "--output", ""]),
             Err(ParseError::EmptyFlagValue("output"))
         );
     }
 
     #[test]
     fn equals_form_carries_dash_prefixed_values() {
-        let parsed = parse(&["conformance", "--output=-weird.json"]).unwrap();
+        let parsed = parse(&["apply", "plan.json", "--output=-weird.json"]).unwrap();
         assert_eq!(parsed.output.as_deref(), Some("-weird.json"));
         // Without the = form a dash-prefixed token is not a value.
         assert_eq!(
-            parse(&["conformance", "--output", "-weird.json"]),
+            parse(&["apply", "plan.json", "--output", "-weird.json"]),
             Err(ParseError::MissingFlagValue("output"))
         );
         // Boolean flags never take inline values.

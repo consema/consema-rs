@@ -56,12 +56,12 @@ body:
   - type: textarea
     id: environment
     attributes:
-      # 注意：description 中的「当前 1.0.0-rc.1」写死于模板，每次版本 bump 必须
-      # 人工同步为 Cargo.toml [workspace.package] version（模板无门禁覆盖）。
+      # 注意：模板不写死版本字面量——check-version-consistency 门禁断言
+      # bug_report 模板与 README 不含版本字面量（G073 wave 2），bump 无需同步模板。
       label: 环境信息
       description: |
         - `cargo --version`、`rustc --version`（MSRV 1.85；CI 用 stable）
-        - workspace 版本（Cargo.toml `[workspace.package] version`，当前 1.0.0-rc.1）
+        - workspace 版本（Cargo.toml `[workspace.package] version`；与 README「Workspace version:」行一致）
         - OS / 平台
       placeholder: |
         - cargo: ...

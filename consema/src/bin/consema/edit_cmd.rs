@@ -2,14 +2,15 @@
 //! request vocabulary consumed by both the edit and the plan commands
 //! (RFC 0015 §6.1 edit row; implementation plan §6 M7).
 //!
-//! The edit command is **dry-run only** in this milestone: parse the source
+//! The edit command is **dry-run only**: parse the source
 //! file under the `--profile` selection → build the format's typed
 //! [`EditTransaction`] through the facade public API → `dry_run` → emit the
 //! `cli.edit@1` payload record embedding the `core.edit-plan@1` record (whose
 //! `core.source-patch@2` carries the exact replacement preconditions and the
 //! target digest) and the `core.change-set@1` summary. `--write` is refused
-//! as a usage error until milestone M8 wires the commit path through fsio
-//! (the same refusal style milestone M5 uses for `--output` before fsio).
+//! as a usage error: the fsio commit path is not wired for the edit command
+//! (recorded gap — 0.13.0 gate plan backlog item B-8; the write path lives
+//! in `plan` + `apply`).
 //!
 //! # The request (`cli.edit-request@1`, CLI-local, not registered)
 //!
@@ -1064,8 +1065,7 @@ pub(crate) fn run_with_request(
 ) -> u8 {
     // The refusals live in both run() and run_with_request() so the
     // request-driven path (unit tests, embedded callers) can never reach a
-    // write path either (the same double-guard milestone M5 uses for
-    // --output before fsio).
+    // write path either (the same double-guard the --output refusals use).
     if parsed.write {
         let error = FlowError::usage(
             "cli.usage.invalid-argument@1",
@@ -1645,7 +1645,7 @@ mod tests {
             &mut stdout,
             &mut stderr,
         );
-        assert_eq!(code, 1, "usage: --write is a milestone-M8 feature");
+        assert_eq!(code, 1, "usage: --write is a recorded gap (gate-plan B-8)");
         assert!(stdout.is_empty(), "usage failures never emit an envelope");
         assert!(stderr_text(&stderr).contains("--write"));
         assert!(stderr_text(&stderr).contains("cli.usage.invalid-argument@1"));
@@ -1653,14 +1653,11 @@ mod tests {
 
     #[test]
     fn edit_output_flag_is_refused_as_usage() {
-        let parsed = parse(&[
-            "edit",
-            "x.conf",
-            "--profile",
-            "ini.portable",
-            "--output",
-            "o",
-        ]);
+        // G089: --output is rejected at parse time for edit; this test
+        // exercises the runtime double-guard (run_with_request / embedded
+        // callers), so the flag is set directly on the parsed arguments.
+        let mut parsed = parse(&["edit", "x.conf", "--profile", "ini.portable"]);
+        parsed.output = Some("o".to_owned());
         let policy = redact_policy(&parsed).unwrap_or_else(|error| panic!("{}", error.message));
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();

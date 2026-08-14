@@ -133,8 +133,23 @@ function Get-TargetIterations([string]$file, [string]$baseConst, [int]$seedFacto
         $iters = [int64](($Matches[1]) -replace '_', '')
     }
     $bases = 0
-    if ($src -match "(?s)const $baseConst\s*:\s*&\[&\[u8\]\]\s*=\s*&\[(.*?)\n\];") {
-        $bases = @($Matches[1] -split "`n" | Where-Object { $_ -match '^\s*(br#|b")' }).Count
+    if ($src -match "(?s)const $baseConst\s*:\s*&\[&\[u8\]\]\s*=\s*&\[(.*?)\s*\];") {
+        # Count the base literals themselves (wave-2 audit): the previous
+        # `\n\];` anchor required the closing `];` on its own line and
+        # overscanned past single-line arrays (operation_fuzz.rs
+        # PROPERTIES_BASES) into the next const, counting its elements too
+        # (25,000 x 4 = 100,000 instead of 25,000 x 3 = 75,000 for
+        # properties-ops). Match each byte-string literal and require the
+        # whole array body to be consumed by literals and separators, so
+        # any unexpected array layout fails loudly before a wave runs
+        # instead of silently deriving a wrong iteration count.
+        $body = $Matches[1]
+        $literalRe = 'br#"[\s\S]*?"#|b"(?:[^"\\]|\\.)*"'
+        $rest = $body -replace $literalRe, ''
+        if ($rest -notmatch '^[\s,]*$') {
+            throw "cannot derive base elements from $file ($baseConst): unexpected array layout in the base list"
+        }
+        $bases = @([regex]::Matches($body, $literalRe)).Count
     }
     if ($iters -le 0 -or $bases -le 0) {
         throw "cannot derive iterations from $file ($baseConst): LONG_RUN_ITERATIONS=$iters bases=$bases"
@@ -241,10 +256,31 @@ function Get-TreeHash {
     return "$head|$status"
 }
 
+# --- ledger append serialization (wave-2 audit) -----------------------------
+# The session lock above only serializes session numbering; per-wave ledger
+# rows (runs.csv) and log lines (waves.log) are appended outside it, so two
+# concurrent driver sessions sharing a ledger could interleave/tear a row.
+# Every append below goes through Add-LedgerLine, serialized with a named
+# mutex (session-scoped: concurrent sessions in the same Windows session
+# share it; cross-session sharing would need a Global\ name, which requires
+# admin rights, so the documented concurrency model is one ledger, one
+# interactive session, any number of drivers). An abandoned mutex (owner
+# killed mid-append) is caught and treated as acquired.
+$script:ledgerMutex = New-Object System.Threading.Mutex($false, 'consema-run_waves-ledger-1')
+
+function Add-LedgerLine([string]$path, [string]$value) {
+    try { [void]$script:ledgerMutex.WaitOne() } catch { }
+    try {
+        Add-Content -Path $path -Value $value -Encoding utf8
+    } finally {
+        try { [void]$script:ledgerMutex.ReleaseMutex() } catch { }
+    }
+}
+
 function Write-Log([string]$line) {
     $stamp = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz')
     $full = "[$stamp] $line"
-    Add-Content -Path $wavesLog -Value $full -Encoding utf8
+    Add-LedgerLine $wavesLog $full
     Write-Host $full
 }
 
@@ -274,7 +310,7 @@ try {
         $sessionNum = (@(Get-Content $wavesLog -ErrorAction SilentlyContinue | Select-String 'session start').Count) + 1
     }
     if (-not (Test-Path $runsCsv)) {
-        Add-Content -Path $runsCsv -Value 'session,wave,copy,target,iterations,wall_s,cpu_s,exit_code' -Encoding utf8
+        Add-LedgerLine $runsCsv 'session,wave,copy,target,iterations,wall_s,cpu_s,exit_code'
     }
     $cpuInfo = Get-CimInstance Win32_Processor | Select-Object -First 1
     $osInfo = Get-CimInstance Win32_OperatingSystem
@@ -290,6 +326,28 @@ finally {
 # --- waves ------------------------------------------------------------------
 # Async stream buffers per process id (G037): the DataReceived handlers append
 # here; Complete-Item flushes them to the per-process logs on exit or kill.
+# The handlers are compiled C# delegates (wave-2 audit): PowerShell-scriptblock
+# DataReceived callbacks crashed the driver with an unhandled
+# PSInvalidOperation on the .NET threadpool (ScriptBlock.GetContextFromTLS
+# race; WER-signed, exit code 2 with no record — the same class as the
+# unterminated session 916 ledger entry). C# delegates run without a runspace
+# context, so they cannot crash the host; the queues drain identically.
+Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+/// <summary>Compiled .NET async drain: attaches DataReceived handlers that
+/// enqueue lines into per-process queues (no PowerShell runspace involved,
+/// so no PSInvalidOperation crash class).</summary>
+public static class ConsemaAsyncDrain {
+    public static void Attach(Process p, ConcurrentQueue<string> outQ, ConcurrentQueue<string> errQ) {
+        p.OutputDataReceived += (s, e) => { if (e.Data != null) outQ.Enqueue(e.Data); };
+        p.ErrorDataReceived += (s, e) => { if (e.Data != null) errQ.Enqueue(e.Data); };
+        p.BeginOutputReadLine();
+        p.BeginErrorReadLine();
+    }
+}
+"@
 $script:procStreams = @{}
 
 function Complete-Item([object]$item) {
@@ -298,13 +356,17 @@ function Complete-Item([object]$item) {
     # when the filter matches zero tests, so an exit-0 process without the
     # "test result: ok. 1 passed" line is a driver-detected failure (-997).
     try { $item.P.WaitForExit() } catch { }  # best effort (drains async reads)
-    $outText = ''; $errText = ''
+    $outLines = [System.Collections.Generic.List[string]]::new()
+    $errLines = [System.Collections.Generic.List[string]]::new()
     if ($script:procStreams.ContainsKey($item.P.Id)) {
         $buffers = $script:procStreams[$item.P.Id]
-        $outText = $buffers.Out -join "`n"
-        $errText = $buffers.Err -join "`n"
+        $line = $null
+        while ($buffers.Out.TryDequeue([ref]$line)) { $outLines.Add($line) }
+        while ($buffers.Err.TryDequeue([ref]$line)) { $errLines.Add($line) }
         $script:procStreams.Remove($item.P.Id)
     }
+    $outText = $outLines -join "`n"
+    $errText = $errLines -join "`n"
     [System.IO.File]::WriteAllText($item.OutLog, $outText)
     [System.IO.File]::WriteAllText($item.ErrLog, $errText)
     if ($item.ExitCode -eq 0 -and $outText -notmatch 'test result: ok\.\s*1 passed') {
@@ -314,133 +376,95 @@ function Complete-Item([object]$item) {
 
 $prevTree = ''
 $waveFailures = 0
-for ($w = 1; $w -le $Waves; $w++) {
-    # 1. Sync build: rebuild whenever the working tree changed since the last
-    #    build (fix agents land concurrently), so the wave runs current code.
-    $treeHash = Get-TreeHash
-    if ($treeHash -ne $prevTree) {
-        Write-Log "wave ${w}: tree changed since last build; rebuilding (cargo test -p consema-conformance --no-run --locked)"
-        Push-Location $root
-        & cargo test -p consema-conformance --no-run --locked 2>&1 | Out-Host
-        $cargoExit = $LASTEXITCODE
-        Pop-Location
-        $fresh = Get-LatestExe 'parse_fuzz-*.exe'
-        $freshOps = Get-LatestExe 'operation_fuzz-*.exe'
-        $freshProto = Get-LatestExe 'protocol_fuzz-*.exe'
-        if ($cargoExit -ne 0 -or -not $fresh -or -not $freshOps -or -not $freshProto) {
-            Write-Log "wave ${w}: cargo build failed (exit $cargoExit) or binaries missing; aborting (exit 2)"
-            exit 2
-        }
-        $prevTree = $treeHash
-        Write-Log "wave ${w}: build ok (cargo exit 0; newest parse_fuzz exe: $([System.IO.Path]::GetFileName($fresh.FullName)) mtime $($fresh.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')))"
-    } else {
-        Write-Log "wave ${w}: tree unchanged, reusing binaries (deterministic schedule, same code state)"
-    }
-
-    # 2. Launch <Copies> copies of every target, one process per target.
-    $exeParse = (Get-LatestExe 'parse_fuzz-*.exe').FullName
-    $exeOps = (Get-LatestExe 'operation_fuzz-*.exe').FullName
-    $exeProto = (Get-LatestExe 'protocol_fuzz-*.exe').FullName
-
-    $items = @()
-    foreach ($copy in 1..$Copies) {
-        foreach ($t in $targets) {
-            $exe = if ($t.n -like '*-parse') { $exeParse } elseif ($t.n -like '*-ops') { $exeOps } else { $exeProto }
-            # Per-wave logs are named with the session number so a later
-            # session can never overwrite an earlier session's evidence
-            # (G037).
-            $outLog = Join-Path $logs "wave-$sessionNum-w$w-copy$copy-$($t.n).out.log"
-            $errLog = Join-Path $logs "wave-$sessionNum-w$w-copy$copy-$($t.n).err.log"
-            # Windows PowerShell 5.1 / .NET Framework host: Start-Process
-            # -PassThru with or without stream redirection corrupts
-            # Process.CPU/ExitCode/HasExited after the child exits (blank
-            # values, "null-valued expression" throws; verified 2026-08-07).
-            # The direct .NET ProcessStartInfo pattern (UseShellExecute=false,
-            # RedirectStandardOutput/Error=true) measures real
-            # TotalProcessorTime, HasExited polling and ExitCode correctly
-            # (verified on the protocol_decode long run, 2026-08-07). Output
-            # is drained asynchronously (BeginOutputReadLine/BeginErrorReadLine)
-            # so no pipe-buffer size can deadlock the sampler (G037); the
-            # buffers are flushed to the per-process logs by Complete-Item.
-            $psi = New-Object System.Diagnostics.ProcessStartInfo
-            $psi.FileName = $exe
-            $psi.Arguments = "--ignored $($t.t) --test-threads=1 --nocapture"
-            $psi.UseShellExecute = $false
-            $psi.RedirectStandardOutput = $true
-            $psi.RedirectStandardError = $true
-            $psi.CreateNoWindow = $true
-            $p = New-Object System.Diagnostics.Process
-            $p.StartInfo = $psi
-            [void]$p.Start()
-            $script:procStreams[$p.Id] = @{
-                Out = [System.Collections.Generic.List[string]]::new()
-                Err = [System.Collections.Generic.List[string]]::new()
+# Abort-path record (wave-2 audit): a session that never reaches FINAL (hard
+# kill, unhandled error, or an early exit) must leave an explicit ABORT line
+# in waves.log, so the ledger never silently ends on an unterminated session
+# (the historical session 916 ended this way with no note; its disposition
+# belongs to the consema-side evidence record).
+$script:sessionFinished = $false
+try {
+    for ($w = 1; $w -le $Waves; $w++) {
+        # 1. Sync build: rebuild whenever the working tree changed since the last
+        #    build (fix agents land concurrently), so the wave runs current code.
+        $treeHash = Get-TreeHash
+        if ($treeHash -ne $prevTree) {
+            Write-Log "wave ${w}: tree changed since last build; rebuilding (cargo test -p consema-conformance --no-run --locked)"
+            Push-Location $root
+            & cargo test -p consema-conformance --no-run --locked 2>&1 | Out-Host
+            $cargoExit = $LASTEXITCODE
+            Pop-Location
+            $fresh = Get-LatestExe 'parse_fuzz-*.exe'
+            $freshOps = Get-LatestExe 'operation_fuzz-*.exe'
+            $freshProto = Get-LatestExe 'protocol_fuzz-*.exe'
+            if ($cargoExit -ne 0 -or -not $fresh -or -not $freshOps -or -not $freshProto) {
+                Write-Log "wave ${w}: cargo build failed (exit $cargoExit) or binaries missing; aborting (exit 2)"
+                exit 2
             }
-            $p.add_OutputDataReceived({
-                param($sender, $e)
-                if ($e.Data -ne $null) {
-                    $id = $sender.Id
-                    if ($script:procStreams.ContainsKey($id)) { $script:procStreams[$id].Out.Add($e.Data) | Out-Null }
-                }
-            })
-            $p.add_ErrorDataReceived({
-                param($sender, $e)
-                if ($e.Data -ne $null) {
-                    $id = $sender.Id
-                    if ($script:procStreams.ContainsKey($id)) { $script:procStreams[$id].Err.Add($e.Data) | Out-Null }
-                }
-            })
-            $p.BeginOutputReadLine()
-            $p.BeginErrorReadLine()
-            $items += [pscustomobject]@{
-                P = $p; Name = $t.n; Copy = $copy; Wave = $w; Iterations = $iterationsFor[$t.n];
-                WallStart = Get-Date; WallEnd = $null; LastCpuS = 0.0;
-                Exited = $false; ExitCode = -1; OutLog = $outLog; ErrLog = $errLog
-            }
+            $prevTree = $treeHash
+            Write-Log "wave ${w}: build ok (cargo exit 0; newest parse_fuzz exe: $([System.IO.Path]::GetFileName($fresh.FullName)) mtime $($fresh.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')))"
+        } else {
+            Write-Log "wave ${w}: tree unchanged, reusing binaries (deterministic schedule, same code state)"
         }
-    }
-    Write-Log "wave $w start: $($items.Count) processes ($Copies copies x $($targets.Count) targets)"
 
-    # 3. Sample real CPU time until every process exits (or the safety
-    #    timeout kills stragglers; a killed process is a hang candidate).
-    $deadline = (Get-Date).AddSeconds($WaveTimeoutSec)
-    $timedOut = $false
-    while ($true) {
-        $anyRunning = $false
-        foreach ($item in $items) {
-            if ($item.Exited) { continue }
-            try {
-                if ($item.P.HasExited) {
-                    $item.Exited = $true
-                    $item.ExitCode = $item.P.ExitCode
-                    $item.WallEnd = Get-Date
-                    Complete-Item $item
-                } else {
-                    $item.LastCpuS = $item.P.TotalProcessorTime.TotalSeconds
-                    $anyRunning = $true
+        # 2. Launch <Copies> copies of every target, one process per target.
+        $exeParse = (Get-LatestExe 'parse_fuzz-*.exe').FullName
+        $exeOps = (Get-LatestExe 'operation_fuzz-*.exe').FullName
+        $exeProto = (Get-LatestExe 'protocol_fuzz-*.exe').FullName
+
+        $items = @()
+        foreach ($copy in 1..$Copies) {
+            foreach ($t in $targets) {
+                $exe = if ($t.n -like '*-parse') { $exeParse } elseif ($t.n -like '*-ops') { $exeOps } else { $exeProto }
+                # Per-wave logs are named with the session number so a later
+                # session can never overwrite an earlier session's evidence
+                # (G037).
+                $outLog = Join-Path $logs "wave-$sessionNum-w$w-copy$copy-$($t.n).out.log"
+                $errLog = Join-Path $logs "wave-$sessionNum-w$w-copy$copy-$($t.n).err.log"
+                # Windows PowerShell 5.1 / .NET Framework host: Start-Process
+                # -PassThru with or without stream redirection corrupts
+                # Process.CPU/ExitCode/HasExited after the child exits (blank
+                # values, "null-valued expression" throws; verified 2026-08-07).
+                # The direct .NET ProcessStartInfo pattern (UseShellExecute=false,
+                # RedirectStandardOutput/Error=true) measures real
+                # TotalProcessorTime, HasExited polling and ExitCode correctly
+                # (verified on the protocol_decode long run, 2026-08-07). Output
+                # is drained asynchronously (BeginOutputReadLine/BeginErrorReadLine)
+                # so no pipe-buffer size can deadlock the sampler (G037); the
+                # buffers are flushed to the per-process logs by Complete-Item.
+                $psi = New-Object System.Diagnostics.ProcessStartInfo
+                $psi.FileName = $exe
+                $psi.Arguments = "--ignored $($t.t) --test-threads=1 --nocapture"
+                $psi.UseShellExecute = $false
+                $psi.RedirectStandardOutput = $true
+                $psi.RedirectStandardError = $true
+                $psi.CreateNoWindow = $true
+                $p = New-Object System.Diagnostics.Process
+                $p.StartInfo = $psi
+                [void]$p.Start()
+                # Compiled .NET async drain (see the ConsemaAsyncDrain note
+                # above; G037 semantics preserved: no pipe-buffer deadlock).
+                $outQ = New-Object System.Collections.Concurrent.ConcurrentQueue[string]
+                $errQ = New-Object System.Collections.Concurrent.ConcurrentQueue[string]
+                $script:procStreams[$p.Id] = @{
+                    Out = $outQ
+                    Err = $errQ
                 }
-            } catch {
-                # Observation race (handle teardown): fall back to a fresh
-                # Get-Process snapshot; never silently skip the exit code.
-                $proc = Get-Process -Id $item.P.Id -ErrorAction SilentlyContinue
-                if ($proc) {
-                    $item.LastCpuS = [double]$proc.CPU
-                    $anyRunning = $true
-                } else {
-                    $item.Exited = $true
-                    $item.ExitCode = -998
-                    $item.WallEnd = Get-Date
-                    Complete-Item $item
+                [ConsemaAsyncDrain]::Attach($p, $outQ, $errQ)
+                $items += [pscustomobject]@{
+                    P = $p; Name = $t.n; Copy = $copy; Wave = $w; Iterations = $iterationsFor[$t.n];
+                    WallStart = Get-Date; WallEnd = $null; LastCpuS = 0.0;
+                    Exited = $false; ExitCode = -1; OutLog = $outLog; ErrLog = $errLog
                 }
             }
         }
-        if (-not $anyRunning) { break }
-        if ((Get-Date) -gt $deadline) {
-            $timedOut = $true
-            # Final observation pass before the kill (G037): processes that
-            # exited during the last sleep still get their real exit codes —
-            # no wave-wide collateral -1000 for processes that merely
-            # finished late.
+        Write-Log "wave $w start: $($items.Count) processes ($Copies copies x $($targets.Count) targets)"
+
+        # 3. Sample real CPU time until every process exits (or the safety
+        #    timeout kills stragglers; a killed process is a hang candidate).
+        $deadline = (Get-Date).AddSeconds($WaveTimeoutSec)
+        $timedOut = $false
+        while ($true) {
+            $anyRunning = $false
             foreach ($item in $items) {
                 if ($item.Exited) { continue }
                 try {
@@ -449,61 +473,103 @@ for ($w = 1; $w -le $Waves; $w++) {
                         $item.ExitCode = $item.P.ExitCode
                         $item.WallEnd = Get-Date
                         Complete-Item $item
+                    } else {
+                        $item.LastCpuS = $item.P.TotalProcessorTime.TotalSeconds
+                        $anyRunning = $true
                     }
-                } catch { }
+                } catch {
+                    # Observation race (handle teardown): fall back to a fresh
+                    # Get-Process snapshot; never silently skip the exit code.
+                    $proc = Get-Process -Id $item.P.Id -ErrorAction SilentlyContinue
+                    if ($proc) {
+                        $item.LastCpuS = [double]$proc.CPU
+                        $anyRunning = $true
+                    } else {
+                        $item.Exited = $true
+                        $item.ExitCode = -998
+                        $item.WallEnd = Get-Date
+                        Complete-Item $item
+                    }
+                }
             }
-            # Kill only the genuinely still-running (hang candidate)
-            # processes, then drain and write their per-process logs too
-            # (G037: a killed process must not lose its evidence).
-            foreach ($item in $items) {
-                if ($item.Exited) { continue }
-                try { $item.P.Kill() } catch { }
-                $item.Exited = $true
-                $item.ExitCode = -1000
-                $item.WallEnd = Get-Date
-                Complete-Item $item
+            if (-not $anyRunning) { break }
+            if ((Get-Date) -gt $deadline) {
+                $timedOut = $true
+                # Final observation pass before the kill (G037): processes that
+                # exited during the last sleep still get their real exit codes —
+                # no wave-wide collateral -1000 for processes that merely
+                # finished late.
+                foreach ($item in $items) {
+                    if ($item.Exited) { continue }
+                    try {
+                        if ($item.P.HasExited) {
+                            $item.Exited = $true
+                            $item.ExitCode = $item.P.ExitCode
+                            $item.WallEnd = Get-Date
+                            Complete-Item $item
+                        }
+                    } catch { }
+                }
+                # Kill only the genuinely still-running (hang candidate)
+                # processes, then drain and write their per-process logs too
+                # (G037: a killed process must not lose its evidence).
+                foreach ($item in $items) {
+                    if ($item.Exited) { continue }
+                    try { $item.P.Kill() } catch { }
+                    $item.Exited = $true
+                    $item.ExitCode = -1000
+                    $item.WallEnd = Get-Date
+                    Complete-Item $item
+                }
+                break
             }
+            Start-Sleep -Milliseconds 500
+        }
+
+        # 4. Append the ledger rows and the wave summary.
+        $wallMax = 0.0; $cpuTotal = 0.0; $failCount = 0
+        foreach ($item in $items) {
+            if ($null -eq $item.WallEnd) { $item.WallEnd = Get-Date } # safety net
+            $wall = ($item.WallEnd - $item.WallStart).TotalSeconds
+            if ($wall -gt $wallMax) { $wallMax = $wall }
+            $cpuTotal += $item.LastCpuS
+            $row = "$sessionNum,$w,$($item.Copy),$($item.Name),$($item.Iterations)," +
+                   [Math]::Round($wall, 1) + ',' + [Math]::Round($item.LastCpuS, 1) + ",$($item.ExitCode)"
+            Add-LedgerLine $runsCsv $row
+            if ($item.ExitCode -ne 0) {
+                $failCount++
+                $waveFailures++
+                $hint = if ($item.ExitCode -eq -997) { ' (driver: no-test-match, see outlog)' } else { '' }
+                Write-Log "FAIL session=$sessionNum wave=$w copy=$($item.Copy) target=$($item.Name) exit=$($item.ExitCode) wall=${wall}s cpu=$([Math]::Round($item.LastCpuS,1))s errlog=$([System.IO.Path]::GetFileName($item.ErrLog))$hint"
+            }
+        }
+        $cpuHours = [Math]::Round($cpuTotal / 3600.0, 3)
+        $tag = if ($timedOut) { ' (wave timeout hit)' } else { '' }
+        Write-Log "wave $w done: procs=$($items.Count) wall_max=$([Math]::Round($wallMax,1))s cpu_total_s=$([Math]::Round($cpuTotal,1)) cpu_hours=$cpuHours failures=$failCount$tag"
+        # Protocol §4.2 (G037): any FAIL (exit != 0) is an event — stop appending
+        # immediately; no further waves run in this session.
+        if ($failCount -gt 0) {
+            Write-Log "FAIL event in wave ${w}: $failCount process(es) exited non-zero; stopping further accumulation per protocol §4.2 (immediate stop on FAIL)"
             break
         }
-        Start-Sleep -Milliseconds 500
     }
 
-    # 4. Append the ledger rows and the wave summary.
-    $wallMax = 0.0; $cpuTotal = 0.0; $failCount = 0
-    foreach ($item in $items) {
-        if ($null -eq $item.WallEnd) { $item.WallEnd = Get-Date } # safety net
-        $wall = ($item.WallEnd - $item.WallStart).TotalSeconds
-        if ($wall -gt $wallMax) { $wallMax = $wall }
-        $cpuTotal += $item.LastCpuS
-        $row = "$sessionNum,$w,$($item.Copy),$($item.Name),$($item.Iterations)," +
-               [Math]::Round($wall, 1) + ',' + [Math]::Round($item.LastCpuS, 1) + ",$($item.ExitCode)"
-        Add-Content -Path $runsCsv -Value $row -Encoding utf8
-        if ($item.ExitCode -ne 0) {
-            $failCount++
-            $waveFailures++
-            $hint = if ($item.ExitCode -eq -997) { ' (driver: no-test-match, see outlog)' } else { '' }
-            Write-Log "FAIL session=$sessionNum wave=$w copy=$($item.Copy) target=$($item.Name) exit=$($item.ExitCode) wall=${wall}s cpu=$([Math]::Round($item.LastCpuS,1))s errlog=$([System.IO.Path]::GetFileName($item.ErrLog))$hint"
-        }
+    # --- final summary ----------------------------------------------------------
+    $rows = Import-Csv $runsCsv
+    $totalCpu = 0.0
+    foreach ($row in $rows) { $totalCpu += [double]$row.cpu_s }
+    $sessionRows = @($rows | Where-Object { $_.session -eq "$sessionNum" }).Count
+    Write-Log "session done: ledger rows=$($rows.Count) total CPU-hours=$([Math]::Round($totalCpu / 3600.0, 3)) (whole ledger); session rows=$sessionRows failures=$waveFailures (this session)"
+    if ($waveFailures -gt 0) {
+        Write-Log "FAIL PROPAGATION: $waveFailures failure(s) recorded; driver exits 1 (protocol §4.2: FAIL stops further appending)"
     }
-    $cpuHours = [Math]::Round($cpuTotal / 3600.0, 3)
-    $tag = if ($timedOut) { ' (wave timeout hit)' } else { '' }
-    Write-Log "wave $w done: procs=$($items.Count) wall_max=$([Math]::Round($wallMax,1))s cpu_total_s=$([Math]::Round($cpuTotal,1)) cpu_hours=$cpuHours failures=$failCount$tag"
-    # Protocol §4.2 (G037): any FAIL (exit != 0) is an event — stop appending
-    # immediately; no further waves run in this session.
-    if ($failCount -gt 0) {
-        Write-Log "FAIL event in wave ${w}: $failCount process(es) exited non-zero; stopping further accumulation per protocol §4.2 (immediate stop on FAIL)"
-        break
+    Write-Log "FINAL"
+    $script:sessionFinished = $true
+}
+finally {
+    if (-not $script:sessionFinished) {
+        Write-Log "ABORT: session $sessionNum terminated before FINAL (hard kill or unhandled error); no summary row appended; per-process logs remain as evidence"
     }
 }
-
-# --- final summary ----------------------------------------------------------
-$rows = Import-Csv $runsCsv
-$totalCpu = 0.0
-foreach ($row in $rows) { $totalCpu += [double]$row.cpu_s }
-Write-Log "session done: $($rows.Count) ledger rows; total CPU-hours=$([Math]::Round($totalCpu / 3600.0, 3)) failures=$waveFailures"
-if ($waveFailures -gt 0) {
-    Write-Log "FAIL PROPAGATION: $waveFailures failure(s) recorded; driver exits 1 (protocol §4.2: FAIL stops further appending)"
-}
-Write-Log "FINAL"
 if ($waveFailures -gt 0) { exit 1 }
 exit 0

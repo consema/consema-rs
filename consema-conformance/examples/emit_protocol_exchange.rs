@@ -1,7 +1,9 @@
 //! emit_protocol_exchange — cross-language protocol exchange harness support
-//! (milestone 0.19.0 G5.3; docs/go-implementation-plan.md §2.6 and §4.4;
-//! roadmap §16.6 line 1555 and §22.2 line 1883: "protocol cross-encode/
-//! decode 100%").
+//! (milestone 0.19.0 G5.3;
+//! https://github.com/consema/consema/blob/main/docs/go-implementation-plan.md
+//! §2.6 and §4.4; roadmap §16.6「0.19.0：双语言一致性与产品 Beta」的
+//! protocol-exchange 能力与 §22.2「双语言实现」的
+//! "protocol cross-encode/decode 100%"——锚为节标题，行号以规范仓为准).
 //!
 //! Reads the differential case file
 //! (`conformance/differential/protocol-exchange/cases.json`, the vendored

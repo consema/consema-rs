@@ -771,9 +771,10 @@ pub(crate) enum WireProjectionRequest {
 /// The default exact projection request of each format family.
 ///
 /// These are the SDK's conservative exact defaults (duplicates rejected, no
-/// authorized loss); the request commands never invent policies (roadmap §10
-/// line 818). The record formats' defaults publish their versioned internal
-/// records, consumed only by the owning family's materializer.
+/// authorized loss); the request commands never invent policies (roadmap
+/// §10「产品级 CLI」；锚为节标题，行号以规范仓为准). The record formats'
+/// defaults publish their versioned internal records, consumed only by the
+/// owning family's materializer.
 pub(crate) fn default_projection_request(family: &str) -> Result<WireProjectionRequest, FlowError> {
     match family {
         "json" => Ok(WireProjectionRequest::Json(

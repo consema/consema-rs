@@ -52,11 +52,22 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+          # Full history: the HEAD guard below compares the tag commit
+          # against the main branch history (merge-base), which needs the
+          # objects, not just the shallow checkout of the tag (G071).
+          fetch-depth: 0
       # Release guard (rc 前六角色审计 P1, 2026-08-12): the tag minus the
       # leading v must equal the workspace manifest version, otherwise a
       # mismatched tag could publish the wrong version to crates.io. G106:
       # the tag must also point at the main branch HEAD — a tag pushed from
-      # a stale commit must not publish old code.
+      # a stale commit must not publish old code. G071: the comparison is
+      # made against the main history at job runtime, not against the live
+      # origin/main HEAD — a legitimate commit landing on main between the
+      # tag push and this job must not turn a valid release red. The guard
+      # therefore checks (a) the tag commit is an ancestor of (or equal to)
+      # the current main HEAD, and (b) a recency window: the tag commit is
+      # not more than 24 h older than the current main HEAD (a genuinely
+      # stale tag still fails).
       - name: verify tag matches manifest version + main HEAD (Cargo.toml workspace)
         id: verify-tag
         shell: bash
@@ -74,16 +85,22 @@ jobs:
           fi
           echo "tag $GITHUB_REF_NAME matches workspace version $manifest"
           tag_commit="$(git rev-parse HEAD)"
-          main_head="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          main_head="$(git rev-parse origin/main 2>/dev/null || git ls-remote origin refs/heads/main | awk '{print $1}')"
           if [[ -z "$main_head" ]]; then
-            echo "::error::cannot resolve the main branch HEAD via ls-remote"
+            echo "::error::cannot resolve the main branch HEAD (origin/main)"
             exit 1
           fi
-          if [[ "$tag_commit" != "$main_head" ]]; then
-            echo "::error::tag $GITHUB_REF_NAME does not point at the main branch HEAD (tag=$tag_commit, main=$main_head)"
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_head"; then
+            echo "::error::tag $GITHUB_REF_NAME does not point at the main branch history (tag=$tag_commit, main=$main_head)"
             exit 1
           fi
-          echo "tag $GITHUB_REF_NAME points at the main branch HEAD ($main_head)"
+          tag_ts="$(git show -s --format=%ct "$tag_commit")"
+          main_ts="$(git show -s --format=%ct "$main_head")"
+          if (( main_ts - tag_ts > 86400 )); then
+            echo "::error::tag $GITHUB_REF_NAME is stale: tag commit is more than 24h behind the main branch HEAD (tag=$tag_commit, main=$main_head)"
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME points at the main branch history (tag=$tag_commit, main=$main_head, window ok)"
           echo "version=$manifest" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
@@ -93,6 +110,48 @@ jobs:
       # before anything is uploaded.
       - name: "gate: cargo test --workspace --locked"
         run: cargo test --workspace --locked
+      # G072: the release gates must include the conformance freeze itself,
+      # not just the crate test suites — the 18 suites / 519 cases /
+      # aggregate-digest assertions live in ci.yml's conformance job, and a
+      # release must not publish a tree whose vendored snapshot drifted.
+      - name: "gate: conformance frozen counts + aggregate digest"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vectorDir = Join-Path $env:GITHUB_WORKSPACE 'conformance/vectors'
+          $suites = 0
+          $cases = 0
+          foreach ($file in Get-ChildItem -LiteralPath $vectorDir -Filter '*.json') {
+            $vector = Get-Content -LiteralPath $file.FullName -Raw -Encoding utf8 | ConvertFrom-Json
+            if (-not ($vector.suite -like 'consema.*')) {
+              throw "unexpected suite id in $($file.Name): $($vector.suite)"
+            }
+            $suites += 1
+            $cases += @($vector.cases).Count
+          }
+          if ($suites -ne 18 -or $cases -ne 519) {
+            throw "suite-count mismatch: expected 18 suites / 519 cases, got $suites suites / $cases cases"
+          }
+          $names = @(Get-ChildItem -LiteralPath $vectorDir -Filter '*.json' | ForEach-Object { $_.Name })
+          [System.Array]::Sort($names, [System.StringComparer]::Ordinal)
+          $lines = @()
+          foreach ($name in $names) {
+            $digest = (Get-FileHash -LiteralPath (Join-Path $vectorDir $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            $lines += "$name`:$digest"
+          }
+          $aggregateText = [string]::Join("`n", $lines)
+          $sha = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $aggregateBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($aggregateText))
+          } finally {
+            $sha.Dispose()
+          }
+          $computed = ([System.BitConverter]::ToString($aggregateBytes)).Replace('-', '').ToLowerInvariant()
+          $expected = 'cfd6e296da5b22b62d37b076d35bf6bbf58b0678ceddb37eea51a8b47200ab6a'
+          if ($computed -ne $expected) {
+            throw "aggregate digest mismatch: computed $computed, expected $expected (vendored snapshot drifted from the frozen inventory)"
+          }
+          Write-Output "conformance freeze: $suites suites / $cases cases, digest $computed"
       - name: "gate: cargo package (every publishable crate, artifact verification)"
         run: cargo package --workspace --locked
       - name: exchange OIDC token for a short-lived crates.io token (trusted publishing)
@@ -105,9 +164,13 @@ jobs:
       # Idempotent/resumable publish (G042): dependency order over the fixed
       # 14-crate list; a crate whose {crate}@{version} already exists on
       # crates.io is skipped, so re-pushing the tag after a partial failure
-      # resumes where the previous run stopped. continue-on-error keeps the
-      # remaining crates publishing; the final verification step below turns
-      # the job red until every crate is actually published.
+      # resumes where the previous run stopped. The step script runs under
+      # `set -euo pipefail`, so a publish failure aborts the loop at the
+      # failing crate — the resumability is across RUNS (re-push the tag and
+      # the curl skip-check resumes the remaining crates), not within the
+      # step; continue-on-error only keeps the rest of the job observable.
+      # The final verification step below turns the job red until every
+      # crate is actually published.
       - name: cargo publish (dependency order; already-published crates skipped)
         continue-on-error: true
         env:
@@ -132,10 +195,28 @@ jobs:
           crates=(consema-core consema-document consema-graph consema-pvce consema-json consema-toml consema-yaml consema-ini consema-properties consema-xml consema-plist consema-hcl consema-protocol consema)
           missing=0
           for crate in "${crates[@]}"; do
-            if curl -fsS "https://crates.io/api/v1/crates/$crate/$version" >/dev/null 2>&1; then
-              echo "published: $crate $version"
-            else
-              echo "::error::not published: $crate $version"
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              code="$(curl -sS -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/$crate/$version")"
+              if [[ "$code" == "200" ]]; then
+                echo "published: $crate $version"
+                ok=1
+                break
+              fi
+              if [[ "$code" == "404" ]]; then
+                echo "::error::not published: $crate $version"
+                missing=1
+                ok=1
+                break
+              fi
+              # G022: unauthenticated crates.io requests are IP rate-limited
+              # and can hit transient 5xx; only a real 404 means "not
+              # published". Retry with backoff before deciding.
+              echo "retry $attempt/5: crates.io returned $code for $crate $version (backing off $((attempt * 10))s)"
+              sleep "$((attempt * 10))"
+            done
+            if [[ "$ok" -eq 0 ]]; then
+              echo "::error::crates.io kept returning a non-404 error for $crate $version (rate limit or transient failure); re-run the verification"
               missing=1
             fi
           done

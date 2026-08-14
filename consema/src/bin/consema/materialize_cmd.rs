@@ -40,7 +40,7 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
         let error = FlowError::usage(
             "cli.usage.invalid-argument@1",
             "flag '--output' is not available in this build: materialize writes only to stdout \
-             (file writing lands with fsio in milestone M6)",
+             (file writing is not wired for this command; the fsio write path is owned by apply/manifest)",
         );
         return emit_failure(
             CliCommand::Materialize,
@@ -78,7 +78,7 @@ pub(crate) fn run_with_request(
         let error = FlowError::usage(
             "cli.usage.invalid-argument@1",
             "flag '--output' is not available in this build: materialize writes only to stdout \
-             (file writing lands with fsio in milestone M6)",
+             (file writing is not wired for this command; the fsio write path is owned by apply/manifest)",
         );
         return emit_failure(
             CliCommand::Materialize,
@@ -531,20 +531,20 @@ mod tests {
 
     #[test]
     fn materialize_output_flag_is_usage_exit_one() {
-        // --output is not wired until fsio (milestone M6): explicit refusal.
+        // --output is not wired for materialize: explicit refusal (the fsio
+        // write path is owned by the apply/manifest commands).
         let request = materialize_request(
             "7b2261223a317d",
             "json.strict",
             "json.strict",
             "json.canonical-compact",
         );
-        let parsed = parse(&[
-            "materialize",
-            "--profile",
-            "json.strict",
-            "--output",
-            "out.json",
-        ]);
+        // G089: --output is rejected at parse time for materialize; this
+        // test exercises the runtime double-guard (run_with_request /
+        // embedded callers), so the flag is set directly on the parsed
+        // arguments.
+        let mut parsed = parse(&["materialize", "--profile", "json.strict"]);
+        parsed.output = Some("out.json".to_owned());
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         let code = run_with_request(&parsed, &request, &mut stdout, &mut stderr);

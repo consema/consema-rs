@@ -1,5 +1,5 @@
 //! The atomic file-write engine (RFC 0015 §10; implementation plan §4.1;
-//! milestone M6, consumed by the apply and edit commands of M7/M8).
+//! consumed by the apply and manifest commands).
 //!
 //! One atomic write is the sequence: same-directory unique temporary file
 //! (`{name}.consema-{pid}-{nonce}.tmp`, exclusive creation) → restricted

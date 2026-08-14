@@ -22,7 +22,14 @@ untracked allowlist exists.
 
 ## Running on macOS
 
-With PowerShell 7 (`pwsh`) on a pinned macOS host:
+The driver (`scripts/run-plist-macos-oracle.ps1` and
+`scripts/oracles/PropertyListOracle.swift`) lives in the consema repository
+(https://github.com/consema/consema); this repository vendors the manifest
+and records only — the oracle is executed from the consema checkout on a
+pinned macOS host, not from here (this repo's scripts/ contains no such
+driver).
+
+With PowerShell 7 (`pwsh`) on a pinned macOS host, from the consema checkout:
 
 ```powershell
 pwsh scripts/run-plist-macos-oracle.ps1

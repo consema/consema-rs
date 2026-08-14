@@ -13,9 +13,10 @@
 //! (CI check: `cargo check -p consema --example sdk_chain --locked`)
 //!
 //! Language-neutral contract reference (consema spec repository):
-//! - `docs/cookbook.md` — the CLI recipes for the same operations
-//! - `docs/multi-language-implementation-plan.md` — the five-language SDK design
-//!   https://github.com/consema/consema/blob/main/docs/cookbook.md
+//! - https://github.com/consema/consema/blob/main/docs/cookbook.md — the CLI
+//!   recipes for the same operations
+//! - https://github.com/consema/consema/blob/main/docs/multi-language-implementation-plan.md
+//!   — the five-language SDK design
 
 use consema::core::{
     BigInteger, CancellationToken, CapabilityId, CapabilitySet, OperatorCall, PortableValue,

@@ -7,13 +7,16 @@
 #     declared external dependencies are the 7 exactly-pinned crates in
 #     [workspace.dependencies] (Cargo.toml, `=` pins that minimal-versions
 #     cannot move) plus the CLI facade's ctrlc (consema/Cargo.toml, a caret
-#     range that minimal-versions lowers to its declared minimum — same
-#     accounting as audit.yml's dependency-surface note); the resolution
-#     also lowers every transitive range dependency of the pinned crates
-#     (e.g. toml_edit -> winnow), which is exactly the surface this job
-#     exists to verify: a crate whose declared minimum versions do not
-#     actually compile together fails here instead of at a user's first
-#     build.
+#     range that minimal-versions lowers to its declared minimum) and the
+#     consema-conformance dev-dependency proptest (consema-conformance/
+#     Cargo.toml, exactly pinned `=1.11.0` so minimal-versions cannot move
+#     it either) — same accounting as audit.yml's dependency-surface note
+#     (wave-2 audit: the proptest edge was missing from this list); the
+#     resolution also lowers every transitive range dependency of the
+#     pinned crates (e.g. toml_edit -> winnow), which is exactly the
+#     surface this job exists to verify: a crate whose declared minimum
+#     versions do not actually compile together fails here instead of at a
+#     user's first build.
 #     Implementation (serde's exact pattern): `cargo generate-lockfile -Z
 #     minimal-versions` regenerates Cargo.lock in the clean CI checkout
 #     (the committed lockfile is never touched — CI checkouts are fresh and

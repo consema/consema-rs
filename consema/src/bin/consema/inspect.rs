@@ -11,7 +11,7 @@
 //! is a data error (`cli.data.io@1`, exit 2; RFC 0015 §5.1) and a read that
 //! exceeds the CLI byte budget is a limit error (`cli.limit.file-size@1`,
 //! exit 3; RFC 0015 §12). No side effects (implementation plan §4.1: R-4
-//! reports the symlink fact; writes refuse symlinks in milestone M8).
+//! reports the symlink fact; inspect never writes).
 
 use consema::core::{
     Diagnostic, DiagnosticCategory, DiagnosticSeverity, ObjectBuilder, PortableValue,
@@ -537,8 +537,8 @@ fn internal_error(message: &str, stderr: &mut dyn Write) -> u8 {
     classify_error_code("cli.internal.unclassified@1").exit_code()
 }
 
-/// The always-present, always-empty v7 redaction record (redaction lands in
-/// milestone M6; these commands carry no secret-shaped values).
+/// The always-present, always-empty v7 redaction record (redaction is
+/// delivered; these commands carry no secret-shaped values).
 fn no_redaction() -> Redaction {
     Redaction::new(false, 0).expect("redaction invariant redacted == (count > 0)")
 }
@@ -785,9 +785,22 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 
+    /// One unique, provably absent path (G091): a residual file from an
+    /// earlier run must not flip the missing-file test.
+    fn temp_missing() -> std::path::PathBuf {
+        static NEXT_MISSING: AtomicU64 = AtomicU64::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "consema-inspect-missing-{}-{}",
+            std::process::id(),
+            NEXT_MISSING.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_file(&path);
+        path
+    }
+
     #[test]
     fn inspect_unreadable_file_is_a_data_error_with_an_envelope() {
-        let missing = std::env::temp_dir().join("consema-inspect-missing-file");
+        let missing = temp_missing();
         let (code, stdout, stderr) = run(&["inspect", missing.to_str().unwrap(), "--json"]);
         assert_eq!(code, 2, "cli.data.io@1 classifies as data");
         assert!(!stdout.is_empty(), "data failures carry an envelope");

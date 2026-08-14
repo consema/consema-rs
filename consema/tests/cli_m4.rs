@@ -17,6 +17,7 @@ use consema::protocol::{CliCommand, CliOutputMessage, ExitClass, ProtocolLimits}
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 fn run(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_consema"))
@@ -382,7 +383,16 @@ fn inspect_recovered_files_exit_zero_with_a_full_report() {
 
 #[test]
 fn inspect_unreadable_file_is_a_data_error_with_an_envelope() {
-    let missing = std::env::temp_dir().join("consema-cli-m4-no-such-file.conf");
+    // Nonce-ized and pre-removed: a residual file from an earlier run must
+    // not flip this missing-file test, and the parallel runner must never
+    // hand two tests the same path.
+    static NEXT_MISSING: AtomicU64 = AtomicU64::new(0);
+    let missing = std::env::temp_dir().join(format!(
+        "consema-cli-m4-no-such-file-{}-{}.conf",
+        std::process::id(),
+        NEXT_MISSING.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = fs::remove_file(&missing);
     let output = run(&["inspect", missing.to_str().unwrap(), "--json"]);
     assert_eq!(status(&output), 2, "cli.data.io@1 classifies as data");
     assert!(!output.stdout.is_empty(), "data failures carry an envelope");

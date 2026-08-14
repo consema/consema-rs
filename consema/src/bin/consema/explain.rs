@@ -407,8 +407,8 @@ fn diagnostic_message(diagnostic: &DiagnosticMessage) -> String {
         .unwrap_or_else(|| "see the envelope diagnostics".to_owned())
 }
 
-/// The always-present, always-empty v7 redaction record (redaction lands in
-/// milestone M6; these commands carry no secret-shaped values).
+/// The always-present, always-empty v7 redaction record (redaction is
+/// delivered; these commands carry no secret-shaped values).
 fn no_redaction() -> Redaction {
     Redaction::new(false, 0).expect("redaction invariant redacted == (count > 0)")
 }

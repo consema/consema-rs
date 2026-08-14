@@ -67,7 +67,7 @@ pub(crate) fn run(parsed: &ParsedArgs, stdout: &mut dyn Write, stderr: &mut dyn 
         let error = FlowError::usage(
             "cli.usage.invalid-argument@1",
             "flag '--output' is not available in this build: convert writes only to stdout \
-             (file writing lands with fsio in milestone M6)",
+             (file writing is not wired for this command; the fsio write path is owned by apply/manifest)",
         );
         return emit_failure(CliCommand::Convert, parsed, &error, None, stdout, stderr);
     }
@@ -91,7 +91,7 @@ pub(crate) fn run_with_request(
         let error = FlowError::usage(
             "cli.usage.invalid-argument@1",
             "flag '--output' is not available in this build: convert writes only to stdout \
-             (file writing lands with fsio in milestone M6)",
+             (file writing is not wired for this command; the fsio write path is owned by apply/manifest)",
         );
         return emit_failure(CliCommand::Convert, parsed, &error, None, stdout, stderr);
     }
@@ -559,10 +559,16 @@ mod tests {
 
     /// Writes a small source fixture into the system temp dir and returns
     /// its path (test-only file creation; the bin itself never writes).
+    /// The path carries a per-call nonce (process id + counter): several
+    /// tests share the "self" label, and a shared path is truncated by
+    /// whichever test writes last under the parallel test runner (observed
+    /// flake: exit 2 missing-value).
     fn write_source(label: &str, bytes: &[u8]) -> (std::path::PathBuf, String) {
+        static NEXT_SOURCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
-            "consema-m5-convert-{label}-{}.json",
-            std::process::id()
+            "consema-m5-convert-{label}-{}-{}.json",
+            std::process::id(),
+            NEXT_SOURCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         std::fs::write(&path, bytes).expect("test fixture write");
         let spelling = path.to_string_lossy().into_owned();
@@ -700,14 +706,11 @@ mod tests {
             "json.strict",
             "json.canonical-compact",
         );
-        let parsed = parse(&[
-            "convert",
-            &source_path,
-            "--profile",
-            "json.strict",
-            "--output",
-            "out.json",
-        ]);
+        // G089: --output is rejected at parse time for convert; this test
+        // exercises the runtime double-guard (run_with_request / embedded
+        // callers), so the flag is set directly on the parsed arguments.
+        let mut parsed = parse(&["convert", &source_path, "--profile", "json.strict"]);
+        parsed.output = Some("out.json".to_owned());
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         let code = run_with_request(&parsed, &request, &mut stdout, &mut stderr);

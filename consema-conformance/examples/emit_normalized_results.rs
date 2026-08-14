@@ -1,6 +1,8 @@
 //! emit_normalized_results — cross-language normalized-result differential
-//! harness support (milestone 0.15.0 G1.5; docs/go-implementation-plan.md
-//! §4.4 and §2.2; roadmap §16.2 line 1481 and §11.2 lines 849-861).
+//! harness support (milestone 0.15.0 G1.5;
+//! https://github.com/consema/consema/blob/main/docs/go-implementation-plan.md
+//! §4.4 and §2.2; roadmap §16.2「0.15.0：Go Document、JSON family 与 TOML」
+//! 与 §11.2「Go 不是 Rust 的翻译」——锚为节标题，行号以规范仓为准).
 //!
 //! Reads the differential case file
 //! (`conformance/differential/normalized/cases.json`, the vendored copy of

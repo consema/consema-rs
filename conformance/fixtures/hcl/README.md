@@ -34,6 +34,9 @@ profile, and a reparse whose re-projection equals the first projection
 exactly (a materialization fixed point).
 
 The differential oracle
-(`conformance/oracles/hcl-go-v1/` driven by `scripts/run-hcl-go-oracle.ps1`)
-runs the same fixture set against the pinned Go `hashicorp/hcl` parser and
-compares parse accept/reject outcomes only (RFC 0014 §12).
+(`conformance/oracles/hcl-go-v1/` driven by
+`scripts/run-hcl-go-oracle.ps1` — the driver lives in the consema
+repository, https://github.com/consema/consema; this repository vendors the
+oracle inputs only and does not execute it) runs the same fixture set
+against the pinned Go `hashicorp/hcl` parser and compares parse
+accept/reject outcomes only (RFC 0014 §12).
