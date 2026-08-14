@@ -1,13 +1,13 @@
-//! README quick-start example — compile gate.
+//! README quick-start example — fence gate.
 //!
-//! This file is the compile gate for the code fence in README.md's
-//! "快速开始" section: the runnable body below is kept in sync with the
-//! README example by hand (one JSON document through the parse -> query ->
-//! edit -> render chain; R14: manual sync, no byte-comparison fence — CI
-//! compiles this example, it never compares it against the README fence).
-//! The workspace build compiles every example target, so a README example
-//! that no longer compiles fails CI (see the `examples` job in
-//! .github/workflows/ci.yml).
+//! This file is the gate for the code fence in README.md's "快速开始"
+//! section: the CI `examples` job compares the README ```rust fence
+//! byte-for-byte against the runnable body below (after this //! header),
+//! so the snippet and the committed copy can never drift (wave-4 R6,
+//! 2026-08-15: kt-style fence gate — replaces the "manual sync, no
+//! byte-comparison fence" mechanism, R14). The workspace build also
+//! compiles every example target, so a README example that no longer
+//! compiles fails CI (see the `examples` job in .github/workflows/ci.yml).
 //!
 //! Run: `cargo run -p consema --example quickstart`
 use std::sync::Arc;

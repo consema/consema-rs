@@ -22,10 +22,11 @@ consema = "<当前版本>"  # 版本以「Workspace version:」行为准（crate
 ```
 
 把下面代码放进 `src/main.rs`（一个 JSON 文档走完 parse → query → edit → render 四条链；
-该示例主体与 [`consema/examples/quickstart.rs`](consema/examples/quickstart.rs)
-人工同步（无字节比对栅栏；示例文件是编译所依据的副本）；示例由 CI `examples` job
-编译（`cargo check -p consema --examples`，不运行、不比对），`cargo test --workspace`
-亦编译全部 example target）：
+该示例主体与 [`consema/examples/quickstart.rs`](consema/examples/quickstart.rs) **逐字节比对**
+（CI examples job 比对 README 栅栏代码体与副本——R6，波 4 裁决 2026-08-15：补齐 kt 式
+fence 比对门禁，旧机制「人工同步、无字节比对栅栏」已证漂移，R14 注记见 ci.yml
+examples job）；示例由 CI `examples` job 编译（`cargo check -p consema --examples`，
+不运行），`cargo test --workspace` 亦编译全部 example target）：
 
 ```rust
 use std::sync::Arc;

@@ -75,12 +75,13 @@ jobs:
       - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # cargo test --workspace compiles every example target of the
       # workspace (examples are built by `cargo test`, not executed), so
-      # the README quick-start gate (consema/examples/quickstart.rs, kept
-      # in sync with the README.md code fence by hand — R14: manual sync,
-      # no byte-comparison fence) and sdk_chain.rs are compile-gated on
-      # every OS leg in this step. Doctests run by default
-      # too, but the 15 crates currently declare no runnable doc examples
-      # (0 doctests), so crate-doc examples are not an active gate today.
+      # the README quick-start copy (consema/examples/quickstart.rs, the
+      # committed twin of the README.md quick-start fence — the examples
+      # job compares them byte-for-byte, wave-4 R6 2026-08-15) and
+      # sdk_chain.rs are compile-gated on every OS leg in this step.
+      # Doctests run by default too, but the 15 crates currently declare
+      # no runnable doc examples (0 doctests), so crate-doc examples are
+      # not an active gate today.
       - name: cargo test --workspace --locked
         run: cargo test --workspace --locked
 
@@ -542,11 +543,15 @@ jobs:
   # (parse -> native query -> best-exact projection -> semantic edit ->
   # canonical materialization -> TOML conversion; language-neutral contract
   # reference: consema repository docs/cookbook.md). quickstart.rs is the
-  # compile gate for the README.md quick-start code fence (kept in sync
-  # with it by hand; the example is the copy that is compiled). Both are
-  # pure SDK chains (no conformance data), so no provision step is needed.
+  # committed copy of the README.md quick-start code fence; CI compares
+  # the README fence code body byte-for-byte against it (wave-4 R6,
+  # 2026-08-15: kt-style fence gate — replaces the "manual sync, no
+  # byte-comparison fence" mechanism, R14, whose drift went silently
+  # unnoticed, and the "粘贴版与入库版必须保持一致" claim is now
+  # enforced, not asserted) and compiles the copy. Both are pure SDK
+  # chains (no conformance data), so no provision step is needed.
   examples:
-    name: examples (cargo check --examples)
+    name: examples (fence gate + cargo check --examples)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -559,6 +564,37 @@ jobs:
         with:
           toolchain: stable
       - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Knit-style doc-example gate (wave-4 R6, 2026-08-15; mirrors the
+      # consema-kt ci-kotlin.yml fence step): the README ```rust quick-start
+      # fence must equal the committed consema/examples/quickstart.rs code
+      # body (after the file's leading //! doc-comment header, which is
+      # prose, not code), so the snippet and the compiled copy can never
+      # drift. The fence is located by content, not by position — every
+      # ```rust fence in the README is compared against the file body and
+      # exactly one must match, so a new fence inserted earlier can never
+      # silently switch the comparison target.
+      - name: README quick-start fence must match consema/examples/quickstart.rs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $readme = Get-Content (Join-Path $env:GITHUB_WORKSPACE 'README.md') -Raw
+          $file = Get-Content (Join-Path $env:GITHUB_WORKSPACE 'consema/examples/quickstart.rs') -Raw
+          $normalized = ($file -replace "`r", '') -split '(?m)^(?://![^\r\n]*\r?\n)+', 2
+          if ($normalized.Count -ne 2) {
+            throw 'consema/examples/quickstart.rs must start with a //! doc-comment header'
+          }
+          $body = $normalized[1].Trim()
+          $matches = @()
+          foreach ($m in [regex]::Matches($readme, '(?s)```rust\r?\n(.*?)\r?\n```')) {
+            $fence = ($m.Groups[1].Value -replace "`r", '').Trim()
+            if ($fence -eq $body) {
+              $matches += $fence
+            }
+          }
+          if ($matches.Count -ne 1) {
+            throw "README.md must contain exactly one ```rust fence equal to consema/examples/quickstart.rs (after its //! header) — found $($matches.Count) matching fence(s)"
+          }
+          Write-Output 'README quick-start fence matches consema/examples/quickstart.rs (located by content)'
       - name: cargo check -p consema --examples --locked
         run: cargo check -p consema --examples --locked
 
