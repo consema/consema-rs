@@ -4,7 +4,7 @@
 
 Consema 将资源上限作为执行策略，不把截断包装成成功：
 
-- `ParseLimits` 限制 source、nesting、token/piece、node 和 diagnostic；
+- `ParseLimits` 限制 source、nesting、token/piece、node、number digits 和 diagnostic；
 - `DecodeLimits` 限制 PVCE bytes、depth、nodes、container、integer 和 blob；
 - `ProtocolLimits` 同时限制 canonical JSON/PVCE 的 transport bytes、depth、nodes、container、integer 和 blob；
 - `QueryLimits` 限制 step 与 result；
@@ -17,7 +17,7 @@ Consema 将资源上限作为执行策略，不把截断包装成成功：
 
 解析器和 decoder 禁止 `unsafe`，严格检查 UTF‑8、长度溢出、非最短 varint、非规范整数/Decimal、容器计数和嵌套深度。`consema-conformance` 包含 63 个恶意/边界对抗测试（hardening.rs 12 个、yaml_hardening.rs 5 个、line_formats_hardening.rs 6 个、xml_hardening.rs 10 个、xml_encoding_corpus.rs 7 个、plist_hardening.rs 7 个、hcl_hardening.rs 8 个、cli_hardening.rs 8 个）与 4 个 `proptest!` 属性块（property_graph.rs 2、property_plist.rs 1、property_protocol.rs 1）；如果发现 panic、无界分配或规范绕过，请附最小输入与触发的 capability contract 报告。
 
-canonical protocol JSON 拒绝空白、替代 escape、重排/未知字段和非最短数字表示；PVCE 继续拒绝非规范 varint 与整数。默认协议任意精度整数 magnitude 上限为 1 KiB，避免十进制转换的 CPU 放大；调用方提高上限时必须同时评估输入可信度和工作预算。任何 v1-v7 envelope payload 都会进入对应 typed decoder，不能只靠匹配 `schema` 绕过字段与交叉约束。v1-v7 registry 全部冻结（v7 增量为 additive；semantic-model v6 向量断言的是 v6 发布时点的 v1-v5 冻结历史快照）；JSON5 专属 diagnostic 从 semantic-model v4 起可外部化（92/132/166-code registry 均含对应代码）。
+canonical protocol JSON 拒绝空白、替代 escape、重排/未知字段和非最短数字表示；PVCE 继续拒绝非规范 varint 与整数。默认协议任意精度整数 magnitude 上限为 1 KiB，避免十进制转换的 CPU 放大；调用方提高上限时必须同时评估输入可信度和工作预算。JSON/JSON5 文档解析路径同样对单个数字 token 实施 magnitude 上限：`ParseLimits.max_number_digits` 默认 100_000，语义为单个数字 token 的位数字符总数（十进制数字的 mantissa 与 exponent 位数合计；JSON5 十六进制字面量按十六进制位数字符计，`±Infinity`/`±NaN` 不含数字不受限）。该检查发生在任何任意精度转换之前（拒绝路径只需一次线性扫描），超限返回 `core.parse.resource-limit@1` 冻结错误（`FatalFormationFailure`），不 panic、不截断；协议解码器经 `consema_json::parse` 的底层 JSON 文档面将数字 token 预算映射为其自身整数文本上限（默认 3,074 字符）。两上限独立生效：文档面为任意输入提供 per-token 位数预算，协议面为规范化交换提供更严格的 1 KiB magnitude 预算，目的相同——把单 token 十进制转换的 O(n²) 工作量限制在预算量级；提高任一上限都必须同时评估输入可信度和工作预算。任何 v1-v7 envelope payload 都会进入对应 typed decoder，不能只靠匹配 `schema` 绕过字段与交叉约束。v1-v7 registry 全部冻结（v7 增量为 additive；semantic-model v6 向量断言的是 v6 发布时点的 v1-v5 冻结历史快照）；JSON5 专属 diagnostic 从 semantic-model v4 起可外部化（92/132/166-code registry 均含对应代码）。
 
 `json5.standard@1` 只实现 Standard JSON5 数据文法，不求值 JavaScript，不执行表达式、import、getter、method、computed key、regex 或模板字符串，也不访问文件与网络。IdentifierStart/Continue 使用精确锁定的 `unicode-id-start 1.4.0` 表。有限数字进入任意精度 Integer/Decimal；只有 `±Infinity`/`±NaN` 进入四种固定 binary64 位模式，有限 binary64 和任意 NaN payload 不能通过 JSON5 文本伪造 exact round-trip。非法 escape/identifier/number/comment 进入 recovery 或 fatal failure，不暴露伪造 native 值。固定 JSON5 v2.2.3 gate 覆盖 43 valid、39 invalid 和一个完整真实夹具；逐字节 mutation、截断、depth/token/node/source 上限均验证无 panic、无 partial success。
 

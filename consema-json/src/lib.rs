@@ -794,4 +794,153 @@ mod tests {
                 .contains(&JsonSyntaxKind::Identifier)
         );
     }
+
+    #[test]
+    fn default_number_digit_budget_is_100_000() {
+        assert_eq!(ParseLimits::default().max_number_digits, 100_000);
+    }
+
+    #[test]
+    fn over_budget_significant_digits_are_a_fatal_resource_limit() {
+        // 100_001 significant digits: rejected before any arbitrary-precision
+        // conversion, so the huge token costs only a linear scan.
+        let mut digits = String::with_capacity(100_001);
+        digits.push('1');
+        for _ in 0..100_000 {
+            digits.push('0');
+        }
+        let failure = parse(
+            digits.as_bytes(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .expect_err("over-budget number must fail formation");
+        let diagnostic = &failure.diagnostics()[0];
+        assert_eq!(diagnostic.code, "core.parse.resource-limit@1");
+        assert_eq!(diagnostic.arguments["name"], "number-digits");
+        assert_eq!(diagnostic.arguments["observed"], "100001");
+        assert_eq!(diagnostic.arguments["limit"], "100000");
+    }
+
+    #[test]
+    fn over_budget_exponent_digits_are_a_fatal_resource_limit() {
+        // Mantissa and exponent digits share one budget: `1e` plus 100_000
+        // zeros is 100_001 digit characters.
+        let mut digits = String::with_capacity(100_003);
+        digits.push_str("1e");
+        for _ in 0..100_000 {
+            digits.push('0');
+        }
+        let failure = parse(
+            digits.as_bytes(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .expect_err("over-budget exponent must fail formation");
+        let diagnostic = &failure.diagnostics()[0];
+        assert_eq!(diagnostic.code, "core.parse.resource-limit@1");
+        assert_eq!(diagnostic.arguments["name"], "number-digits");
+        assert_eq!(diagnostic.arguments["observed"], "100001");
+    }
+
+    #[test]
+    fn over_budget_json5_hex_digits_are_a_fatal_resource_limit() {
+        // Hex letters count as digits: `0x` plus 100_001 hex digits is over
+        // the budget even though ASCII decimal digits alone would not be.
+        let mut digits = String::with_capacity(100_004);
+        digits.push_str("0x");
+        for _ in 0..100_001 {
+            digits.push('f');
+        }
+        let failure = parse(
+            digits.as_bytes(),
+            JsonProfile::Json5StandardV1,
+            ParseLimits::default(),
+        )
+        .expect_err("over-budget hex literal must fail formation");
+        let diagnostic = &failure.diagnostics()[0];
+        assert_eq!(diagnostic.code, "core.parse.resource-limit@1");
+        assert_eq!(diagnostic.arguments["observed"], "100001");
+    }
+
+    #[test]
+    fn exact_budget_number_parses_and_one_digit_more_is_fatal() {
+        let limits = ParseLimits {
+            max_number_digits: 5,
+            ..ParseLimits::default()
+        };
+        // Exactly at the budget parses with the exact value.
+        let document = parse(b"12345".as_slice(), JsonProfile::StrictV1, limits)
+            .expect("exact-budget number must parse");
+        assert_eq!(document.formation_status(), FormationStatus::Complete);
+        assert_eq!(
+            document.root().as_integer(),
+            SemanticAvailability::Available(Some(&BigInteger::from(12_345_i64)))
+        );
+        // One digit more is a fatal resource limit.
+        let failure = parse(b"123456".as_slice(), JsonProfile::StrictV1, limits)
+            .expect_err("one digit over budget must fail");
+        let diagnostic = &failure.diagnostics()[0];
+        assert_eq!(diagnostic.code, "core.parse.resource-limit@1");
+        assert_eq!(diagnostic.arguments["observed"], "6");
+        assert_eq!(diagnostic.arguments["limit"], "5");
+    }
+
+    #[test]
+    fn mantissa_and_exponent_digits_share_one_budget() {
+        let limits = ParseLimits {
+            max_number_digits: 5,
+            ..ParseLimits::default()
+        };
+        // `1e9999`: 1 mantissa + 4 exponent digits = 5, exactly at the budget.
+        let document = parse(b"1e9999".as_slice(), JsonProfile::StrictV1, limits)
+            .expect("exact-budget exponent must parse");
+        assert_eq!(document.formation_status(), FormationStatus::Complete);
+        assert!(parse(b"1e99999".as_slice(), JsonProfile::StrictV1, limits).is_err());
+        // `1.5e999`: 2 mantissa + 3 exponent digits = 5, exactly at the budget.
+        assert!(parse(b"1.5e999".as_slice(), JsonProfile::StrictV1, limits).is_ok());
+        assert!(parse(b"1.5e9999".as_slice(), JsonProfile::StrictV1, limits).is_err());
+    }
+
+    #[test]
+    fn json5_hex_and_non_finite_literals_under_a_tight_budget() {
+        let limits = ParseLimits {
+            max_number_digits: 5,
+            ..ParseLimits::default()
+        };
+        // `0x1234` is 4 hex digit characters: within the budget.
+        let document = parse(b"0x1234".as_slice(), JsonProfile::Json5StandardV1, limits)
+            .expect("within-budget hex literal must parse");
+        assert_eq!(document.formation_status(), FormationStatus::Complete);
+        assert!(parse(b"0x123456".as_slice(), JsonProfile::Json5StandardV1, limits).is_err());
+        // Infinity and NaN carry no digits and are never digit-limited.
+        for literal in ["Infinity", "+Infinity", "-Infinity", "NaN", "-NaN"] {
+            assert!(
+                parse(literal.as_bytes(), JsonProfile::Json5StandardV1, limits).is_ok(),
+                "{literal} must parse"
+            );
+        }
+    }
+
+    #[test]
+    fn large_number_inside_the_default_budget_parses_exactly() {
+        // 10_000 significant digits round-trip exactly under the default
+        // 100_000 digit budget.
+        let mut digits = String::with_capacity(10_001);
+        digits.push('9');
+        for _ in 1..10_000 {
+            digits.push('0');
+        }
+        let document = parse(
+            digits.as_bytes(),
+            JsonProfile::StrictV1,
+            ParseLimits::default(),
+        )
+        .expect("10_000-digit number must parse under the default budget");
+        let integer = match document.root().as_integer() {
+            SemanticAvailability::Available(Some(value)) => value,
+            other => panic!("unexpected integer: {other:?}"),
+        };
+        assert_eq!(integer.to_string(), digits);
+    }
 }

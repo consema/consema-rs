@@ -147,6 +147,7 @@ const fn parse_limits(limits: MaterializationLimits) -> ParseLimits {
         max_nesting_depth: limits.max_depth,
         max_token_count: limits.max_output_bytes,
         max_node_count: limits.max_input_nodes.saturating_mul(3),
+        max_number_digits: limits.max_output_bytes,
         max_diagnostics: limits.max_report_entries,
     }
 }

@@ -277,6 +277,7 @@ const fn parse_limits(limits: MaterializationLimits) -> PlistParseLimits {
             max_nesting_depth: limits.max_depth.saturating_add(2),
             max_token_count: limits.max_output_bytes,
             max_node_count: limits.max_input_nodes,
+            max_number_digits: limits.max_output_bytes,
             max_diagnostics: limits.max_report_entries,
         },
         max_decoded_utf8_bytes: limits.max_output_bytes.saturating_mul(3),

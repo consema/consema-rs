@@ -863,6 +863,14 @@ impl Parser<'_> {
             TokenKind::Number => {
                 self.position += 1;
                 let text = &self.source[token.start..token.end];
+                let digits = number_token_digits(text);
+                if digits > self.limits.max_number_digits {
+                    return Err(FatalFormationFailure::resource_limit(
+                        "number-digits",
+                        digits,
+                        self.limits.max_number_digits,
+                    ));
+                }
                 let kind = if self.profile.is_json5() {
                     parse_json5_number(text).expect("lexer validated JSON5 number")
                 } else if text.contains(['.', 'e', 'E']) {
@@ -1370,6 +1378,25 @@ fn decode_json5_identifier(literal: &str) -> Result<String, ()> {
         first = false;
     }
     if first { Err(()) } else { Ok(output) }
+}
+
+/// Total digit characters of one number token.
+///
+/// Decimal numbers count ASCII `0`-`9` across mantissa and exponent
+/// (JSON/JSON5 `max_number_digits` covers exactly the significant and
+/// exponent digits together); JSON5 hex literals count hex digit characters
+/// (`0`-`9`, `a`-`f`, `A`-`F`), which bound the per-digit hex conversion
+/// loop. `Infinity` and `NaN` contain no digits and yield zero.
+fn number_token_digits(text: &str) -> usize {
+    let unsigned = text.strip_prefix(['-', '+']).unwrap_or(text);
+    if let Some(hex) = unsigned
+        .strip_prefix("0x")
+        .or_else(|| unsigned.strip_prefix("0X"))
+    {
+        hex.bytes().filter(u8::is_ascii_hexdigit).count()
+    } else {
+        text.bytes().filter(u8::is_ascii_digit).count()
+    }
 }
 
 fn parse_json5_number(text: &str) -> Result<InternalValueKind, ()> {

@@ -32,6 +32,11 @@ pub fn decode_json(bytes: &[u8], limits: ProtocolLimits) -> Result<PortableValue
         max_nesting_depth: limits.max_depth.saturating_mul(4).saturating_add(8),
         max_token_count: limits.max_nodes.saturating_mul(32).saturating_add(64),
         max_node_count: limits.max_nodes.saturating_mul(16).saturating_add(32),
+        // A protocol integer text is capped at `max_integer_bytes × 3 + 2`
+        // characters (see `parse_integer`), so no valid payload number token
+        // exceeds this digit budget; it also bounds the JSON document parse
+        // underneath the protocol validation.
+        max_number_digits: limits.max_integer_bytes.saturating_mul(3).saturating_add(2),
         max_diagnostics: 1_000,
     };
     let document =

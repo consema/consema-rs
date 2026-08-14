@@ -622,6 +622,11 @@ pub struct ParseLimits {
     pub max_token_count: usize,
     /// Maximum format syntax nodes.
     pub max_node_count: usize,
+    /// Maximum digit characters of one number token (mantissa plus exponent
+    /// digits; JSON5 hex literals count hex digit characters). Checked before
+    /// any arbitrary-precision conversion, so the O(n²) decimal conversion of
+    /// one number is bounded by this budget.
+    pub max_number_digits: usize,
     /// Maximum diagnostics before an explicit truncation marker.
     pub max_diagnostics: usize,
 }
@@ -633,6 +638,7 @@ impl Default for ParseLimits {
             max_nesting_depth: 256,
             max_token_count: 2_000_000,
             max_node_count: 1_000_000,
+            max_number_digits: 100_000,
             max_diagnostics: 10_000,
         }
     }

@@ -128,6 +128,7 @@ const fn parse_limits(limits: MaterializationLimits) -> PropertiesParseLimits {
             max_nesting_depth: limits.max_depth,
             max_token_count: limits.max_output_bytes,
             max_node_count: limits.max_output_bytes.saturating_mul(2).saturating_add(1),
+            max_number_digits: limits.max_output_bytes,
             max_diagnostics: limits.max_report_entries,
         },
         max_decoded_utf8_bytes: limits.max_output_bytes.saturating_mul(3),

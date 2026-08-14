@@ -440,6 +440,7 @@ fn load_corpus() -> (consema_json::Document, usize) {
         max_nesting_depth: 64,
         max_token_count: 20_000_000,
         max_node_count: 10_000_000,
+        max_number_digits: 100_000,
         max_diagnostics: 10_000,
     };
     let document = parse(json.as_bytes(), JsonProfile::StrictV1, limits)

@@ -1656,6 +1656,7 @@ impl Document {
                 max_nesting_depth: 2,
                 max_token_count: 32,
                 max_node_count: 8,
+                max_number_digits: 32,
                 max_diagnostics: self.parse_limits.max_diagnostics,
             },
         )
