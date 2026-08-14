@@ -25,11 +25,15 @@
 # crates.io is skipped, so re-pushing a tag after a partial failure resumes
 # the remaining crates instead of failing on "already exists"; a final
 # crates.io verification step turns the job red until all 14 crates are
-# actually published. Release gates (G106): the tag must point at the main
-# branch HEAD, and the workspace test suite plus the artifact verification
-# (cargo package of the 14 publishable crates — consema-conformance is
-# publish = false and cannot verify from its packaged archive, so it is
-# excluded from the gate) must pass before anything is uploaded.
+# actually published. Release gates (G106): the tag commit must lie on the
+# main branch history — G071 implements this as a merge-base ancestor check
+# against the job-time main HEAD plus a 24 h recency window (see the
+# verify-tag step; "point at the main branch HEAD" would be the stricter
+# equality semantics that the ancestor check deliberately replaced) — and
+# the workspace test suite plus the artifact verification (cargo package of
+# the 14 publishable crates — consema-conformance is publish = false and
+# cannot verify from its packaged archive, so it is excluded from the gate)
+# must pass before anything is uploaded.
 name: Release to crates.io
 
 on:
@@ -103,9 +107,18 @@ jobs:
           fi
           echo "tag $GITHUB_REF_NAME points at the main branch history (tag=$tag_commit, main=$main_head, window ok)"
           echo "version=$manifest" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      # W3-30 (wave-3 adversarial audit, 2026-08-14): the release toolchain
+      # is pinned to 1.97.1 — the same version the four-language differential
+      # emitters pin (consema-go/ts/py/kt release & ci differential jobs,
+      # rustc 1.97.1 8bab26f4f 2026-07-14; see consema docs
+      # five-element-review-1.0.0.md "rustc 统一钉 1.97.1"), so a release
+      # build and the differential goldens are produced by the same compiler
+      # and can never disagree over toolchain behavior; independent of the
+      # runner's current stable (go release.yml 体例). The workspace MSRV
+      # stays 1.85 (ci.yml msrv job verifies it).
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # 1.97.1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
       # Release gates (G106): the same test suite and package-artifact
       # verification that CI enforces, run on the exact release commit
       # before anything is uploaded.
