@@ -76,8 +76,9 @@ jobs:
       # cargo test --workspace compiles every example target of the
       # workspace (examples are built by `cargo test`, not executed), so
       # the README quick-start gate (consema/examples/quickstart.rs, kept
-      # byte-identical to the README.md code fence) and sdk_chain.rs are
-      # compile-gated on every OS leg in this step. Doctests run by default
+      # in sync with the README.md code fence by hand — R14: manual sync,
+      # no byte-comparison fence) and sdk_chain.rs are compile-gated on
+      # every OS leg in this step. Doctests run by default
       # too, but the 15 crates currently declare no runnable doc examples
       # (0 doctests), so crate-doc examples are not an active gate today.
       - name: cargo test --workspace --locked
