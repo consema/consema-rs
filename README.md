@@ -92,7 +92,7 @@ fn main() {
 | convert | `consema::convert_json(&json::Document, &json::ProjectionRequest, &MaterializationRequest) -> ConversionResult`（另有 convert_toml / convert_yaml / convert_ini / convert_properties / convert_xml / convert_plist / convert_hcl） |
 | registry | `registry::format_families()` / `registry::profiles()` / `registry::query_domains()` / `registry::operation_registry(&ProfileId)`（8 家族 / 16 profiles / 21 查询域 / 16 操作注册表（按 profile 计）/ 56 操作） |
 
-## Workspace（15 crates）
+## Workspace（crate 数以 Cargo.toml workspace 声明为准）
 
 - `consema-core`：PortableValue、诊断、Capability 和类型化查询协议；
 - `consema-pvce`：PVCE/1 规范编码与严格解码；
@@ -135,7 +135,8 @@ MSRV 1.85（workspace `rust-version`；CI msrv job 真实验证）。
 
 `.github/workflows/ci.yml`：lint / test / coverage / msrv / conformance /
 deny / audit / semver / package / check-version-consistency / examples /
-release-build（release-profile 编译腿）十二个 job，外加 check 聚合门禁
+release-build（release-profile 编译腿）等门禁 job（job 数以最近 CI run
+为准，GitHub Actions），外加 check 聚合门禁
 （coverage 硬下限 + 趋势门禁；semver baseline 为拆分前的 v0.8.0
 crates/ 树，见 ci.yml 注释）。
 

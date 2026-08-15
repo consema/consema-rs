@@ -2,15 +2,15 @@
 # to crates.io, in dependency order (top-tier bar: 半自动发布,
 # pydantic precedent; crates.io trusted publishing GA 2025-07, RFC #3691).
 # The publishable set is derived from cargo metadata at runtime (publish ==
-# null members; currently 14 crates) — wave-4 R10: no hand-maintained
-# crate list, so a future 15th publishable crate is published automatically.
+# null members) — wave-4 R10: no hand-maintained crate list, so a future
+# new publishable crate is published automatically.
 #
 # Credentials, primary path — crates.io trusted publishing (OIDC):
 #   - The rust-lang/crates-io-auth-action exchanges the GitHub OIDC token
 #     for a short-lived crates.io token (30 min, auto-revoked).
 #   - Timing (wave-4 R31, documented honestly): the publish job has
 #     timeout-minutes 60, and the OIDC token lives 30 minutes. The publish
-#     loop runs zero-cache cold builds of up to 14 crates, each doing one
+#     loop runs zero-cache cold builds of the publishable crates, each doing one
 #     verification build inside `cargo publish`, so the loop can in
 #     principle exceed the token lifetime; a token that expires mid-loop
 #     fails the later crates with an auth error (set -euo pipefail aborts

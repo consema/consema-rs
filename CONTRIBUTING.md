@@ -1,6 +1,6 @@
 # Contributing to consema-rs（Consema Rust 参考实现）
 
-Consema 六仓拆分的 Rust 仓：本仓承载 Rust 参考实现（15 个 crate）与编译期
+Consema 六仓拆分的 Rust 仓：本仓承载 Rust 参考实现（workspace crate，数量以 Cargo.toml 声明为准）与编译期
 嵌入的 conformance 数据；规范权威（RFC / docs / 路线图 / conformance suites）
 在[规范仓](https://github.com/consema/consema)。
 
@@ -32,7 +32,7 @@ cargo doc --workspace --no-deps --locked   # CI 带 RUSTDOCFLAGS=-D warnings（c
 
 ## 贡献点
 
-- **Rust 实现**：15 个 crate（`consema-core` / `consema-pvce` / `consema-graph` /
+- **Rust 实现**：workspace crate（`consema-core` / `consema-pvce` / `consema-graph` /
   `consema-document` / 八格式族（json、toml、yaml、ini、properties、xml、
   plist、hcl）/ `consema-protocol` / `consema-conformance` / `consema` CLI
   facade）。
@@ -47,7 +47,8 @@ cargo doc --workspace --no-deps --locked   # CI 带 RUSTDOCFLAGS=-D warnings（c
 
 ## CI 门禁
 
-`.github/workflows/ci.yml` 十二个 job：lint（fmt + clippy + rustdoc，三 OS）/
+`.github/workflows/ci.yml` CI 门禁（job 数以最近 CI run 为准，GitHub
+Actions）：lint（fmt + clippy + rustdoc，三 OS）/
 test（三 OS）/ coverage（硬下限 + 趋势门禁）/ msrv / conformance / deny /
 audit / semver / package / check-version-consistency / examples /
 release-build（release-profile 编译腿），外加 check 聚合门禁（branch
@@ -58,6 +59,7 @@ PR 无 kind 标签时该检查红但不会阻断合并，标签见规范仓 .git
 
 ## 发布与安全
 
-- 发布：本仓 [RELEASING.md](RELEASING.md)（crates.io，14 个 crate，trusted
-  publishing；tag `v*` 触发 release workflow，不要手动发布）。
+- 发布：本仓 [RELEASING.md](RELEASING.md)（crates.io，发布 crate 数以
+  Cargo.toml workspace 声明为准，trusted publishing；tag `v*` 触发 release
+  workflow，不要手动发布）。
 - 安全：[SECURITY.md](SECURITY.md)；披露统一走规范仓 SECURITY.md 的渠道。

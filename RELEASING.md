@@ -70,7 +70,7 @@ crates.io **trusted publishing**（OIDC）于 2025-07 GA（RFC #3691），
 
 ### 2.1 首次发布（必须手动，一次即可）
 
-crates.io 要求 crate 先存在才能挂 trusted publisher，因此 14 个 crate 的
+crates.io 要求 crate 先存在才能挂 trusted publisher，因此各发布 crate 的
 **第一次**发布必须手动：
 
 ```bash
@@ -78,7 +78,7 @@ crates.io 要求 crate 先存在才能挂 trusted publisher，因此 14 个 crat
 cargo login
 # 按依赖序逐个发布（--locked 与 CI 一致）
 cargo publish --locked -p consema-core
-# …依序发布其余 13 个 crate
+# …依序发布其余发布 crate（crate 数以 workspace 声明为准）
 ```
 
 手动首发的替代方案：在 GitHub 仓库 Settings → Secrets and variables →
@@ -94,7 +94,7 @@ publishing。
    - **Workflow file name**：`release.yml`（必须与本文件精确一致；
      `pull_request_target` / `workflow_run` 触发不被支持）
    - Environment 留空（workflow 未声明 environment）
-2. 全部 14 个 crate 配置完后，可删除 `CARGO_REGISTRY_TOKEN` secret，
+2. 全部发布 crate 配置完后，可删除 `CARGO_REGISTRY_TOKEN` secret，
    并在 crate 设置启用 "Trusted Publishing Only"。
 3. 验证：推送 tag 后，workflow 的 OIDC 交换步骤应成功（不产生
    `continue-on-error` 警告），后续 `cargo publish` 步骤用
@@ -109,7 +109,7 @@ OIDC 交换未配置时自动回退到仓库 secret。两路凭证都缺失时�
 
 ## 3. 发布后核对
 
-1. crates.io 各 crate 页面确认版本可见（14 个 crate 逐个）。
+1. crates.io 各 crate 页面确认版本可见（发布 crate 逐个）。
 2. GitHub Actions 中 release workflow 全部步骤成功。
 3. docs.rs 构建（crates.io 自动触发）成功后，crate 页 documentation 链接
    生效（每个 crate 的 Cargo.toml 已声明

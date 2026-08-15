@@ -9,8 +9,8 @@
 # table.
 #
 # Driver location (2026-08-12 six-repo split): this driver now runs from the
-# consema-rs checkout (C:\Users\franck\Documents\consema-rs; 15 crates at the
-# repository root, no crates/ directory). The evidence ledger stays the
+# consema-rs checkout (C:\Users\franck\Documents\consema-rs; the workspace
+# crates at the repository root, no crates/ directory). The evidence ledger stays the
 # authoritative copy in the consema repository:
 #   C:\Users\franck\Documents\consema\docs\fuzz-evidence-0.13.0-logs\
 # (runs.csv, waves.log and the per-process .out.log/.err.log files, all
@@ -333,9 +333,10 @@ function Get-GitExe {
 
 function Get-TreeHash {
     # Only code inputs change what the fuzz binaries contain: the crate
-    # sources (all 15 crates at the consema-rs root, matched by the consema*
-    # pathspec, post-split), the lockfile, the conformance corpus and the test
-    # drivers. Docs and this evidence directory never trigger a rebuild.
+    # sources (all workspace crates at the consema-rs root, matched by the
+    # consema* pathspec, post-split), the lockfile, the conformance corpus and
+    # the test drivers. Docs and this evidence directory never trigger a
+    # rebuild.
     $git = Get-GitExe
     if (-not $git) {
         # No git anywhere: never silently degrade the code-state guard (a

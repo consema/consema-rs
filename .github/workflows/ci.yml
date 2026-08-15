@@ -79,9 +79,9 @@ jobs:
       # committed twin of the README.md quick-start fence — the examples
       # job compares them byte-for-byte, wave-4 R6 2026-08-15) and
       # sdk_chain.rs are compile-gated on every OS leg in this step.
-      # Doctests run by default too, but the 15 crates currently declare
-      # no runnable doc examples (0 doctests), so crate-doc examples are
-      # not an active gate today.
+      # Doctests run by default too, but the workspace crates currently
+      # declare no runnable doc examples (0 doctests), so crate-doc examples
+      # are not an active gate today.
       - name: cargo test --workspace --locked
         run: cargo test --workspace --locked
 
