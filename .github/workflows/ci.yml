@@ -191,10 +191,14 @@ jobs:
   # asserts the frozen counts AND the aggregate digest of the vendored
   # vectors (the digest value is read from the vendored conformance/DIGEST
   # file — wave-4 R10: the single sync point shared with release.yml; it
-  # is the same frozen value the go/ts/py/kt runners share), so a vector
-  # added or removed without updating the record, or a same-count byte
-  # drift that leaves the verdicts unchanged, fails CI. The suites are the
-  # vendored snapshot in conformance/ (authority: the consema repository).
+  # is the same frozen value the go/py/kt runners share and rs asserts —
+  # wave-5 P2 honest scoping: ts does not pin it, its runner only asserts
+  # the digest when a provisioned fc-manifest exists and ts CI deliberately
+  # does not provision that file, so the ts assertion is a permanent skip),
+  # so a vector added or removed without updating the record, or a
+  # same-count byte drift that leaves the verdicts unchanged, fails CI.
+  # The suites are the vendored snapshot in conformance/ (authority: the
+  # consema repository).
   conformance:
     name: conformance + hardening + fixtures (18 suites / 519 cases)
     runs-on: ubuntu-latest
@@ -519,13 +523,32 @@ jobs:
             exit 1
           fi
           # G116: exact token comparison — a substring grep would let the
-          # rc -> GA direction slip through (1.0.0 is a prefix of
-          # "1.0.0-rc.1", so a stale README still matches). The README line
-          # may carry a trailing annotation after the version, so extract
-          # the first whitespace/full-width-paren-delimited token.
-          readme_version=$(sed -n 's/^Workspace version: \([^ （]*\).*/\1/p' README.md | head -n 1)
-          if [ -z "$readme_version" ]; then
+          # rc -> GA direction slip through (the GA version string is a
+          # prefix of the rc version string, so a stale README still
+          # matches). The README line may carry a trailing annotation after
+          # the version, so extract the first
+          # whitespace/full-width-paren-delimited token.
+          # Wave-5 P2 fix: the extraction is anchored to a semantic
+          # position — the README must contain EXACTLY ONE 'Workspace
+          # version:' line, and that line's number is resolved explicitly.
+          # The old first-match `sed | head -n 1` silently switched the
+          # comparison target when a second such line was inserted earlier
+          # (e.g. in a header badge block), and the G073 stray scan below
+          # excluded every line containing the phrase instead of the one
+          # authoritative line.
+          authoritative_line=$(grep -n '^Workspace version: ' README.md | head -n 1 | cut -d: -f1 || true)
+          version_line_count=$(grep -c '^Workspace version: ' README.md || true)
+          if [ -z "$authoritative_line" ]; then
             echo "::error::README.md has no 'Workspace version:' line"
+            exit 1
+          fi
+          if [ "$version_line_count" -ne 1 ]; then
+            echo "::error::README.md must contain exactly one 'Workspace version:' line (found $version_line_count)"
+            exit 1
+          fi
+          readme_version=$(sed -n "${authoritative_line}s/^Workspace version: \([^ （]*\).*/\1/p" README.md)
+          if [ -z "$readme_version" ]; then
+            echo "::error::README.md 'Workspace version:' line has no version token"
             exit 1
           fi
           if [ "$readme_version" != "$version" ]; then
@@ -535,16 +558,24 @@ jobs:
           echo "README version consistent with Cargo.toml: $version"
           # G073: no stray hardcoded version outside the authoritative
           # Workspace version line (quick-start fence, bug-report template,
-          # prose): a bump that forgets one of these positions stays green
-          # only if the numbers are not in the files at all. The README's
-          # own Workspace version line is the one allowed occurrence.
-          stray=$(grep -F -n "$version" README.md .github/ISSUE_TEMPLATE/bug_report.yml 2>/dev/null | grep -v 'Workspace version:' || true)
+          # prose, vendored fixture docs): a bump that forgets one of these
+          # positions stays green only if the numbers are not in the files
+          # at all. The README's own Workspace version line is the one
+          # allowed occurrence — excluded by line number (the exact
+          # authoritative line resolved above), not by phrase, so a prose
+          # line that merely mentions "Workspace version:" while also
+          # carrying the literal is flagged. conformance/fixtures/toml/
+          # README.md is scanned since wave-5 P2 (its descriptive version
+          # literal was removed — the fixture Cargo.toml itself is kept in
+          # sync by the G163 byte-identity test and is deliberately not
+          # scanned, it always carries the version).
+          stray=$(grep -F -n "$version" README.md .github/ISSUE_TEMPLATE/bug_report.yml conformance/fixtures/toml/README.md 2>/dev/null | grep -v "^README.md:${authoritative_line}:" || true)
           if [ -n "$stray" ]; then
             echo "::error::hardcoded version '$version' outside the Workspace version line:"
             echo "$stray"
             exit 1
           fi
-          echo "no stray '$version' literals in README.md / bug_report.yml"
+          echo "no stray '$version' literals in README.md / bug_report.yml / conformance/fixtures/toml/README.md"
 
   # SDK examples gate: every example target under consema/examples/ must
   # stay compilable. The test job also compiles them (`cargo test
@@ -578,12 +609,13 @@ jobs:
       # Knit-style doc-example gate (wave-4 R6, 2026-08-15; mirrors the
       # consema-kt ci-kotlin.yml fence step): the README ```rust quick-start
       # fence must equal the committed consema/examples/quickstart.rs code
-      # body (after the file's leading //! doc-comment header, which is
-      # prose, not code), so the snippet and the compiled copy can never
-      # drift. The fence is located by content, not by position — every
-      # ```rust fence in the README is compared against the file body and
-      # exactly one must match, so a new fence inserted earlier can never
-      # silently switch the comparison target.
+      # body — byte-exact after the file's leading //! doc-comment header
+      # (prose, not code) and the one framing blank line after it, with no
+      # whitespace trimming (wave-5 P2) — so the snippet and the compiled
+      # copy can never drift. The fence is located by content, not by
+      # position — every ```rust fence in the README is compared against
+      # the file body and exactly one must match, so a new fence inserted
+      # earlier can never silently switch the comparison target.
       - name: README quick-start fence must match consema/examples/quickstart.rs
         shell: pwsh
         run: |
@@ -594,10 +626,18 @@ jobs:
           if ($normalized.Count -ne 2) {
             throw 'consema/examples/quickstart.rs must start with a //! doc-comment header'
           }
-          $body = $normalized[1].Trim()
+          # Wave-5 P2 fix: the comparison is byte-exact. Both sides are
+          # normalized by stripping ONLY the framing — the file body loses
+          # its leading blank line (the blank line after the //! doc-comment
+          # header) and one trailing newline — and nothing else. The old
+          # Trim() on both sides made leading/trailing blank-line and
+          # whitespace drift (e.g. an extra blank line before the closing
+          # ```, or a trailing blank line appended to quickstart.rs)
+          # invisible to the gate while the comments claimed byte-for-byte.
+          $body = $normalized[1] -replace '^\r?\n', '' -replace '\r?\n$', ''
           $matches = @()
           foreach ($m in [regex]::Matches($readme, '(?s)```rust\r?\n(.*?)\r?\n```')) {
-            $fence = ($m.Groups[1].Value -replace "`r", '').Trim()
+            $fence = $m.Groups[1].Value -replace "`r", ''
             if ($fence -eq $body) {
               $matches += $fence
             }
@@ -614,8 +654,13 @@ jobs:
   # are cfg(not(debug_assertions))-compiled out of release builds, and the
   # CLI help text / apply.rs docs promise that; every other CI job and the
   # release `cargo package` gate build the dev profile, so without this leg
-  # the release variant is never compiled anywhere. This leg proves the
-  # release variant really compiles (and the G045 claim with it).
+  # the release variant is never compiled anywhere. Wave-5 P2 honest
+  # scoping: this leg proves the release variant COMPILES; it does not by
+  # itself prove the seams are compiled out of release binaries — that
+  # property rests on the cfg(not(debug_assertions)) attributes at the
+  # CONSEMA_APPLY_* read sites (consema/src/bin/consema/apply.rs) and must
+  # be preserved in review, since a future removal of the cfg guard would
+  # leave this leg green while the documented promise turns false.
   release-build:
     name: cargo build --release --locked (G045 injection-compile-out leg)
     runs-on: ubuntu-latest

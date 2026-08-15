@@ -12,10 +12,13 @@ these files directly; this directory is the single authority.
 - `invalid-duplicate.toml` — `toml.parse.reject-invalid`.
 - `pyproject.toml` — `toml.corpus.pyproject`.
 - `Cargo.toml` — `toml.corpus.cargo-manifest`. This is the consema-rs
-  workspace root manifest (six-repo split assembly, version
-  1.0.0-rc.1), kept here because the workspace root of every other
-  repository no longer carries a Cargo.toml. The five language runners
-  read `conformance/fixtures/toml/Cargo.toml`; no provision step copies a
+  workspace root manifest (six-repo split assembly; version: the
+  `[workspace.package]` version of this file, kept byte-identical to the
+  consema-rs root manifest by the standing comparison test below — no
+  version literal is written here so the doc cannot drift on bump),
+  kept here because the workspace root of every other repository no
+  longer carries a Cargo.toml. The five language runners read
+  `conformance/fixtures/toml/Cargo.toml`; no provision step copies a
   Cargo.toml into any workspace root anymore. The content is
   byte-identical to the committed consema-rs root Cargo.toml.
 
