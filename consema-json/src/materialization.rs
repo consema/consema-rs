@@ -969,7 +969,10 @@ mod tests {
         assert!(integer.exceeds_decimal_digit_budget(ParseLimits::DEFAULT_MAX_NUMBER_DIGITS));
         let value = PortableValue::integer(integer);
         assert!(matches!(
-            materialize(&value, &request("json.canonical-compact", NewlinePolicy::Lf)),
+            materialize(
+                &value,
+                &request("json.canonical-compact", NewlinePolicy::Lf)
+            ),
             MaterializationResult::Failed(FailedMaterializationAttempt {
                 failure: MaterializationFailure::ResourceLimit("number-digits"),
                 ..
@@ -987,7 +990,10 @@ mod tests {
         let decimal = Decimal::new(huge, BigInteger::from(2));
         let value = PortableValue::decimal(decimal);
         assert!(matches!(
-            materialize(&value, &request("json.canonical-compact", NewlinePolicy::Lf)),
+            materialize(
+                &value,
+                &request("json.canonical-compact", NewlinePolicy::Lf)
+            ),
             MaterializationResult::Failed(FailedMaterializationAttempt {
                 failure: MaterializationFailure::ResourceLimit("number-digits"),
                 ..
@@ -999,7 +1005,10 @@ mod tests {
         let decimal = Decimal::new(BigInteger::from(1), exponent);
         let value = PortableValue::decimal(decimal);
         assert!(matches!(
-            materialize(&value, &request("json.canonical-compact", NewlinePolicy::Lf)),
+            materialize(
+                &value,
+                &request("json.canonical-compact", NewlinePolicy::Lf)
+            ),
             MaterializationResult::Failed(FailedMaterializationAttempt {
                 failure: MaterializationFailure::ResourceLimit("number-digits"),
                 ..

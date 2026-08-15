@@ -450,8 +450,7 @@ struct MutationCase {
 /// is neither registered in FIXTURES nor the special-cased
 /// `toml/Cargo.toml` mirror of the workspace root manifest.
 fn verify_fixture_tree_registered() {
-    let fixtures_root =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../conformance/fixtures");
+    let fixtures_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../conformance/fixtures");
     if !fixtures_root.is_dir() {
         panic!(
             "cannot verify the fixture tree: {} is not a directory",
@@ -466,10 +465,7 @@ fn verify_fixture_tree_registered() {
     while let Some(dir) = pending.pop() {
         let mut entries: Vec<_> = match std::fs::read_dir(&dir) {
             Ok(entries) => entries.filter_map(Result::ok).collect(),
-            Err(error) => panic!(
-                "cannot read fixture directory {}: {error}",
-                dir.display()
-            ),
+            Err(error) => panic!("cannot read fixture directory {}: {error}", dir.display()),
         };
         entries.sort_by_key(|entry| entry.file_name());
         for entry in entries {

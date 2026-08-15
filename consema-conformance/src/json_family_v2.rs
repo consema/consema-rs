@@ -152,8 +152,7 @@ pub fn run_json5_reference_corpus_json(json: &str) -> ConformanceReport {
     // fixture") pins the per-array composition, not just the total. A
     // valid/invalid swap that keeps the total at 83 previously went
     // green (the only assertion was `passed.len() == 83` in the test).
-    let Some(valid_cases) = object_field(root, "valid").and_then(PortableValue::as_sequence)
-    else {
+    let Some(valid_cases) = object_field(root, "valid").and_then(PortableValue::as_sequence) else {
         return failed_reference_suite("suite.schema", "corpus valid array is missing".to_owned());
     };
     let Some(invalid_cases) = object_field(root, "invalid").and_then(PortableValue::as_sequence)

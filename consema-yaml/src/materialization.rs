@@ -1895,9 +1895,8 @@ mod tests {
         // atomically with a linear check instead of running the O(n²)
         // base-10 conversion (BigInteger Display -> magnitude_to_decimal).
         let magnitude = vec![0xFF_u8; 50_000]; // ≈ 120k decimal digits
-        let integer =
-            consema_core::BigInteger::from_sign_and_magnitude(1, &magnitude)
-                .expect("canonical magnitude");
+        let integer = consema_core::BigInteger::from_sign_and_magnitude(1, &magnitude)
+            .expect("canonical magnitude");
         let value = PortableValue::integer(integer);
         assert!(matches!(
             materialize_value(&value, &request("yaml.canonical-block")),
@@ -1910,11 +1909,8 @@ mod tests {
 
     #[test]
     fn oversized_decimal_materialization_fails_with_number_digit_budget() {
-        let huge = consema_core::BigInteger::from_sign_and_magnitude(
-            1,
-            &vec![0xFF_u8; 50_000],
-        )
-        .expect("canonical magnitude");
+        let huge = consema_core::BigInteger::from_sign_and_magnitude(1, &vec![0xFF_u8; 50_000])
+            .expect("canonical magnitude");
         let decimal = consema_core::Decimal::new(huge, consema_core::BigInteger::from(2));
         let value = PortableValue::decimal(decimal);
         assert!(matches!(
