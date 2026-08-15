@@ -123,6 +123,16 @@ jobs:
             exit 1
           fi
           echo "tag $GITHUB_REF_NAME matches workspace version $manifest"
+          # Wave-5 P1: the tag-push checkout (even with fetch-depth: 0)
+          # carries the tag's own history, not the main branch history, so
+          # `git ls-remote` below can hand back a main HEAD SHA that is not
+          # in the local object store — `git merge-base --is-ancestor` would
+          # then die with "fatal: Not a valid commit name" and wrongly
+          # reject the release. Fetch main (and its history) first; the
+          # guard then compares against the main HEAD at job runtime, which
+          # is exactly the G071 semantics described above. A fetch failure
+          # aborts the step (fail closed — the guard must not guess).
+          git fetch origin main --no-tags
           tag_commit="$(git rev-parse HEAD)"
           main_head="$(git rev-parse origin/main 2>/dev/null || git ls-remote origin refs/heads/main | awk '{print $1}')"
           if [[ -z "$main_head" ]]; then
