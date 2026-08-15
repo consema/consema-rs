@@ -298,7 +298,7 @@ const fn parse_limits(limits: MaterializationLimits) -> HclParseLimits {
             max_nesting_depth: limits.max_depth.saturating_add(2),
             max_token_count: limits.max_output_bytes,
             max_node_count: limits.max_output_bytes,
-            max_number_digits: limits.max_output_bytes,
+            max_number_digits: ParseLimits::DEFAULT_MAX_NUMBER_DIGITS, // wave-5 P2: parse-side default (100_000 digits), not max_output_bytes
             max_diagnostics: limits.max_report_entries,
         },
         max_decoded_utf8_bytes: limits.max_output_bytes.saturating_mul(3),
@@ -312,7 +312,7 @@ const fn parse_limits(limits: MaterializationLimits) -> HclParseLimits {
         max_body_item_count: limits.max_input_nodes.saturating_mul(2),
         max_identifier_len: limits.max_output_bytes,
         max_string_len: limits.max_output_bytes,
-        max_number_digits: limits.max_output_bytes,
+        max_number_digits: ParseLimits::DEFAULT_MAX_NUMBER_DIGITS, // wave-5 P2: parse-side default (100_000 digits), not max_output_bytes
         max_template_len: limits.max_output_bytes,
         max_template_interpolations: limits.max_input_nodes,
         max_heredoc_lines: limits.max_output_bytes,
@@ -343,7 +343,7 @@ fn promised_expression_limits(text_len: usize, limits: MaterializationLimits) ->
             max_nesting_depth: limits.max_depth.saturating_add(2),
             max_token_count: source.saturating_mul(2),
             max_node_count: source.saturating_mul(2),
-            max_number_digits: limits.max_output_bytes,
+            max_number_digits: ParseLimits::DEFAULT_MAX_NUMBER_DIGITS, // wave-5 P2: parse-side default (100_000 digits), not max_output_bytes
             max_diagnostics: limits.max_report_entries,
         },
         max_decoded_utf8_bytes: source.saturating_mul(3),
@@ -357,7 +357,7 @@ fn promised_expression_limits(text_len: usize, limits: MaterializationLimits) ->
         max_body_item_count: 16,
         max_identifier_len: source,
         max_string_len: source,
-        max_number_digits: limits.max_output_bytes,
+        max_number_digits: ParseLimits::DEFAULT_MAX_NUMBER_DIGITS, // wave-5 P2: parse-side default (100_000 digits), not max_output_bytes
         max_template_len: source,
         max_template_interpolations: source,
         max_heredoc_lines: source,

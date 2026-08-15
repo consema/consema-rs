@@ -41,7 +41,12 @@ mod hcl_logic {
 
 /// Committed seeds (evidence: unseeded runs do not count). Each seed is a
 /// fixed constant; the engine derives one mutation per iteration from
-/// `seed ^ iteration`.
+/// `iteration_seed(seed, index) = seed ^ (index × 0x9E37_79B9_7F4A_7C15)`
+/// (wave-5 P2 fix: the docstring previously said `seed ^ iteration` — the
+/// implemented schedule multiplies the index by the constant first, so a
+/// reader rebuilding the mutation sequence from the documented formula got
+/// a different schedule; the authoritative formula lives in
+/// consema-conformance/src/fuzz.rs `iteration_seed`).
 const JSON_SEED: u64 = 0x6A73_6F6E_0000_0001; // "json"
 const TOML_SEED: u64 = 0x746F_6D6C_0000_0002; // "toml"
 const YAML_SEED: u64 = 0x7961_6D6C_0000_0003; // "yaml"

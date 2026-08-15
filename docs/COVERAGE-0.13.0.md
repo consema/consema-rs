@@ -109,8 +109,11 @@ coverage.crate consema-yaml regions=86.44 functions=88.96 lines=88.40
    跟踪；改动断言站点时必须同步更新本清单、本报告头部注记与
    `scripts/coverage.ps1` 内的模板文本）。完整清单（2026-08-15 复核）：
    - `consema-yaml/src/materialization.rs` 的 B-7/B-8 回归测试两处
-     （`elapsed < 8.0s`，debug 构建，2026-08-13 实测两条链路余量均在
-     20x 以上）；
+     （`elapsed < 8.0s`；按两处测试注释的修复后实测：B-7 约 0.2 s
+     release / 0.9 s debug——release 余量约 40x、debug 余量约 8-9x，
+     B-8 约 0.23 s release——余量约 20x+（注释自述 debug 亦约 20x）；
+     数字以测试注释为权威源，2026-08-13 实测。波 5 P2 校正：此前
+     「两条链路余量均在 20x 以上」对 B-7 的 debug 余量不成立）；
    - `consema-xml/src/parser.rs` `many_small_elements_formation_scales_linearly`
      一处（`elapsed.as_secs() < 20`，10k 元素 formation 线性回归守卫，
      2026-08-14 实测整测试 0.18s，余量远大于 20x）；
@@ -120,10 +123,11 @@ coverage.crate consema-yaml regions=86.44 functions=88.96 lines=88.40
      实测整测试 1.09s，余量约 4-5x）；
    - `consema/tests/cli_plan_apply.rs` 的
      `apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes`
-     一处（`Instant::now() + Duration::from_secs(30)` 的 30 秒 deadline，
-     两个轮询循环超时时 panic——pending manifest 未出现、或 SIGINT 后
-     apply 未退出；Linux/macOS CI 信号路径的确定性守卫，2026-08-15
-     波 4 补记）。
+     一处（两个独立 30 秒 deadline，每个轮询循环各一个，超时时 panic——
+     pending manifest 未出现、或 SIGINT 后 apply 未退出；Linux/macOS CI
+     信号路径的确定性守卫，2026-08-15 波 4 补记；波 5 P2 修正：此前两
+     循环共享同一 deadline，慢机/负载抖动下 pending-manifest 等待可耗尽
+     整个预算，使 SIGINT 等待只剩亚秒级而误红）。
    **风险**：墙钟断言环境耦合（慢机/负载抖动可能误红）。**缓解**：断言值
    针对修复前 O(n²) 实现的耗时（~30-60 s debug / ~6.7 s release）设上限，
    固定实现余量极宽（xml/source 两处亦为线性回归守卫，上限针对修复前

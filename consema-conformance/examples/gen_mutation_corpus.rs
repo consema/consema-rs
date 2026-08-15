@@ -440,7 +440,75 @@ struct MutationCase {
     byte: u8,
 }
 
+/// Wave-5 P2 fix: closes the fixture -> table direction of the
+/// "every fixture under conformance/fixtures/ is mutated" contract. The
+/// FIXTURES table is compile-time embedded (include_bytes!), so a new
+/// fixture file added to the tree without registering it here silently
+/// stayed out of the corpus with no gate noticing (the --check gate only
+/// compared table-derived output against the committed corpus). This scan
+/// walks the committed fixtures tree and fails on any non-README file that
+/// is neither registered in FIXTURES nor the special-cased
+/// `toml/Cargo.toml` mirror of the workspace root manifest.
+fn verify_fixture_tree_registered() {
+    let fixtures_root =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../conformance/fixtures");
+    if !fixtures_root.is_dir() {
+        panic!(
+            "cannot verify the fixture tree: {} is not a directory",
+            fixtures_root.display()
+        );
+    }
+    let registered: std::collections::HashSet<&'static str> =
+        FIXTURES.iter().map(|fixture| fixture.path).collect();
+    let special_case = "toml/Cargo.toml";
+    let mut unregistered = Vec::new();
+    let mut pending = vec![fixtures_root.clone()];
+    while let Some(dir) = pending.pop() {
+        let mut entries: Vec<_> = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries.filter_map(Result::ok).collect(),
+            Err(error) => panic!(
+                "cannot read fixture directory {}: {error}",
+                dir.display()
+            ),
+        };
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if name == "README.md" {
+                continue; // documentation, not a mutation fixture
+            }
+            let relative = path
+                .strip_prefix(&fixtures_root)
+                .expect("walk stays under the fixtures root")
+                .to_string_lossy()
+                .replace('\\', "/");
+            if !registered.contains(relative.as_str()) && relative != special_case {
+                unregistered.push(relative);
+            }
+        }
+    }
+    if !unregistered.is_empty() {
+        panic!(
+            "unregistered fixture file(s) under conformance/fixtures/ (not in the FIXTURES \
+             table of this generator, so the mutation corpus never mutates them): {} — \
+             register them in consema-conformance/examples/gen_mutation_corpus.rs (or, for \
+             the root-manifest mirror, name them toml/Cargo.toml)",
+            unregistered.join(", ")
+        );
+    }
+}
+
 fn main() {
+    // Wave-5 P2 fix: the fixture-registration scan runs in both modes —
+    // regeneration refuses to run against an unregistered fixture too.
+    verify_fixture_tree_registered();
     let check = std::env::args().any(|argument| argument == "--check");
     // G155: the corpus lives at the repository root
     // (`consema-rs/conformance/corpora/`); from the consema-conformance

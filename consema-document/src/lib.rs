@@ -631,6 +631,15 @@ pub struct ParseLimits {
     pub max_diagnostics: usize,
 }
 
+impl ParseLimits {
+    /// The default single-number-token decimal digit budget — also the
+    /// budget the materialization render paths enforce for one rendered
+    /// number (wave-5 P2 fix), so the O(n²) base-10 conversion
+    /// (`magnitude_to_decimal`) stays bounded on the parse side and on
+    /// the render side alike.
+    pub const DEFAULT_MAX_NUMBER_DIGITS: usize = 100_000;
+}
+
 impl Default for ParseLimits {
     fn default() -> Self {
         Self {
@@ -638,7 +647,7 @@ impl Default for ParseLimits {
             max_nesting_depth: 256,
             max_token_count: 2_000_000,
             max_node_count: 1_000_000,
-            max_number_digits: 100_000,
+            max_number_digits: Self::DEFAULT_MAX_NUMBER_DIGITS,
             max_diagnostics: 10_000,
         }
     }

@@ -752,13 +752,18 @@ fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
         "kill -INT failed: {}",
         String::from_utf8_lossy(&signaled.stderr)
     );
+    // Wave-5 P2 fix: the SIGINT-exit wait gets its own 30 s budget — the
+    // shared deadline let the pending-manifest wait consume the whole
+    // budget on a slow/loaded machine, leaving the exit wait a few seconds
+    // (or less) and panicking on a correct child.
+    let exit_deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     // Note: the local binding is not named `status` — the file-level helper
     // `status(&Output)` must stay reachable for the resume assertion below.
     let exit_status = loop {
         if let Some(exit_status) = child.try_wait().expect("wait") {
             break exit_status;
         }
-        if std::time::Instant::now() > deadline {
+        if std::time::Instant::now() > exit_deadline {
             let _ = child.kill();
             panic!("apply did not exit after SIGINT");
         }

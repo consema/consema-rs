@@ -37,6 +37,11 @@ Layout:
   deterministic: `cargo run -p consema-conformance --example
   gen_mutation_corpus` regenerates byte-identical output from the committed
   base seed; `-- --check` verifies the committed file is current.
+  Wave-5 P2: the generator additionally verifies the fixture -> table
+  direction — every non-README file under `conformance/fixtures/` must be
+  registered in the generator's `FIXTURES` table (or be the special-cased
+  `toml/Cargo.toml` mirror), so a new fixture that is not registered fails
+  `-- --check` instead of silently staying out of the corpus.
 * **Regressions** are exact minimal inputs from fuzz findings, stored as
   hex bytes with the production profile that reproduced them. The generator
   round-trips the committed `regressions` array verbatim, so regenerating

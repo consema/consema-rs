@@ -147,6 +147,32 @@ pub fn run_json5_reference_corpus_json(json: &str) -> ConformanceReport {
             "upstream provenance is not the frozen JSON5 reference".to_owned(),
         );
     }
+    // Wave-5 P2 fix: the gate wording (SECURITY.md / vendored
+    // conformance/README.md: "43 valid + 39 invalid + 1 full real
+    // fixture") pins the per-array composition, not just the total. A
+    // valid/invalid swap that keeps the total at 83 previously went
+    // green (the only assertion was `passed.len() == 83` in the test).
+    let Some(valid_cases) = object_field(root, "valid").and_then(PortableValue::as_sequence)
+    else {
+        return failed_reference_suite("suite.schema", "corpus valid array is missing".to_owned());
+    };
+    let Some(invalid_cases) = object_field(root, "invalid").and_then(PortableValue::as_sequence)
+    else {
+        return failed_reference_suite(
+            "suite.schema",
+            "corpus invalid array is missing".to_owned(),
+        );
+    };
+    if valid_cases.len() != 43 || invalid_cases.len() != 39 {
+        return failed_reference_suite(
+            "suite.schema",
+            format!(
+                "reference corpus composition drifted: expected 43 valid + 39 invalid, got {} + {}",
+                valid_cases.len(),
+                invalid_cases.len()
+            ),
+        );
+    }
 
     let mut report = ConformanceReport {
         suite: "consema.json5.reference-corpus@1".to_owned(),

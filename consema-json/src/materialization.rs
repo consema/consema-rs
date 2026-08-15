@@ -147,7 +147,13 @@ const fn parse_limits(limits: MaterializationLimits) -> ParseLimits {
         max_nesting_depth: limits.max_depth,
         max_token_count: limits.max_output_bytes,
         max_node_count: limits.max_input_nodes.saturating_mul(3),
-        max_number_digits: limits.max_output_bytes,
+        // Wave-5 P2 fix: the reparse budget for one number token is the
+        // parse-side default (100_000 digits), NOT max_output_bytes
+        // (64 MiB ≈ 67M digits) — the renderer rejects numbers over the
+        // budget (write_integer/write_decimal), so the reparse accepts
+        // exactly what the renderer can emit; the old mapping let a
+        // 65M-digit token through the reparse digit-count check.
+        max_number_digits: ParseLimits::DEFAULT_MAX_NUMBER_DIGITS,
         max_diagnostics: limits.max_report_entries,
     }
 }
@@ -251,6 +257,15 @@ impl<'a> JsonWriter<'a> {
         &mut self,
         value: &consema_core::BigInteger,
     ) -> Result<(), MaterializationFailure> {
+        // Wave-5 P2 fix: rendering goes through Display ->
+        // magnitude_to_decimal, the O(n²) base-10 conversion. A
+        // programmatically constructed huge magnitude must fail atomically
+        // here (linear check) instead of paying the conversion — the same
+        // single-number-token digit budget the parse side enforces
+        // (ParseLimits::DEFAULT_MAX_NUMBER_DIGITS).
+        if value.exceeds_decimal_digit_budget(ParseLimits::DEFAULT_MAX_NUMBER_DIGITS) {
+            return Err(MaterializationFailure::ResourceLimit("number-digits"));
+        }
         write!(&mut self.output, "{value}")
             .map_err(|_| MaterializationFailure::ResourceLimit("output-bytes"))
     }
@@ -259,6 +274,20 @@ impl<'a> JsonWriter<'a> {
         &mut self,
         value: &consema_core::Decimal,
     ) -> Result<(), MaterializationFailure> {
+        // Wave-5 P2 fix: same digit budget as write_integer, applied to
+        // the coefficient and the exponent separately (the exponent is a
+        // BigInteger too — a huge exponent alone would trigger the same
+        // O(n²) conversion). The rendered token's total digit characters
+        // (coefficient + exponent) stay within the budget on both.
+        if value
+            .coefficient()
+            .exceeds_decimal_digit_budget(ParseLimits::DEFAULT_MAX_NUMBER_DIGITS)
+            || value
+                .exponent()
+                .exceeds_decimal_digit_budget(ParseLimits::DEFAULT_MAX_NUMBER_DIGITS)
+        {
+            return Err(MaterializationFailure::ResourceLimit("number-digits"));
+        }
         write!(
             &mut self.output,
             "{}e{}",
@@ -922,6 +951,57 @@ mod tests {
             ),
             MaterializationResult::Failed(FailedMaterializationAttempt {
                 failure: MaterializationFailure::ResourceLimit("provenance-entries"),
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn oversized_integer_materialization_fails_with_number_digit_budget() {
+        // Wave-5 P2 fix: rendering a number whose decimal digit count
+        // exceeds the single-number-token budget
+        // (ParseLimits::DEFAULT_MAX_NUMBER_DIGITS = 100_000) must fail
+        // atomically with a linear check instead of running the O(n²)
+        // base-10 conversion (BigInteger Display -> magnitude_to_decimal).
+        let magnitude = vec![0xFF_u8; 50_000]; // ≈ 120k decimal digits
+        let integer =
+            BigInteger::from_sign_and_magnitude(1, &magnitude).expect("canonical magnitude");
+        assert!(integer.exceeds_decimal_digit_budget(ParseLimits::DEFAULT_MAX_NUMBER_DIGITS));
+        let value = PortableValue::integer(integer);
+        assert!(matches!(
+            materialize(&value, &request("json.canonical-compact", NewlinePolicy::Lf)),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::ResourceLimit("number-digits"),
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn oversized_decimal_materialization_fails_with_number_digit_budget() {
+        // Wave-5 P2 fix: the decimal render path checks the coefficient
+        // AND the exponent (a BigInteger too) before any Display
+        // conversion.
+        let huge = BigInteger::from_sign_and_magnitude(1, &vec![0xFF_u8; 50_000])
+            .expect("canonical magnitude");
+        let decimal = Decimal::new(huge, BigInteger::from(2));
+        let value = PortableValue::decimal(decimal);
+        assert!(matches!(
+            materialize(&value, &request("json.canonical-compact", NewlinePolicy::Lf)),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::ResourceLimit("number-digits"),
+                ..
+            })
+        ));
+        // The exponent alone can be the oversized part.
+        let exponent = BigInteger::from_sign_and_magnitude(1, &vec![0xFF_u8; 50_000])
+            .expect("canonical magnitude");
+        let decimal = Decimal::new(BigInteger::from(1), exponent);
+        let value = PortableValue::decimal(decimal);
+        assert!(matches!(
+            materialize(&value, &request("json.canonical-compact", NewlinePolicy::Lf)),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::ResourceLimit("number-digits"),
                 ..
             })
         ));

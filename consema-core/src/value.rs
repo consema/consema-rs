@@ -132,6 +132,40 @@ impl BigInteger {
         })
     }
 
+    /// Returns true when this number needs more than `budget` decimal
+    /// digits to render. Linear-time for all realistic magnitudes: the
+    /// decimal digit count is bounded by `N · log10(256) + 1` where N is
+    /// the magnitude byte length (2.4082399653… < 2.40824), so a byte
+    /// length at or below `floor(budget / 2.40824)` is certainly within
+    /// the budget; only the single byte length that can straddle the
+    /// boundary (exactly one value of N) runs the exact count — the same
+    /// O(n²) base-10 conversion the render was about to pay anyway.
+    /// Wave-5 P2 fix: the materialization render paths use this to bound
+    /// one rendered number by the same budget the parse side enforces
+    /// (`ParseLimits::max_number_digits`), so a programmatically
+    /// constructed huge magnitude cannot trigger the O(n²)
+    /// `magnitude_to_decimal` conversion.
+    #[must_use]
+    pub fn exceeds_decimal_digit_budget(&self, budget: usize) -> bool {
+        if self.sign == IntegerSign::Zero {
+            return 1 > budget;
+        }
+        const LOG10_256_UPPER_NUM: u128 = 2_408_240;
+        const LOG10_256_UPPER_DEN: u128 = 1_000_000;
+        let bytes = u128::try_from(self.magnitude.len()).expect("usize fits u128");
+        let budget = u128::try_from(budget).expect("usize fits u128");
+        let accept_bytes = (budget * LOG10_256_UPPER_DEN) / LOG10_256_UPPER_NUM;
+        if bytes <= accept_bytes {
+            return false;
+        }
+        if bytes == accept_bytes + 1 {
+            return u128::try_from(magnitude_to_decimal(&self.magnitude).len())
+                .expect("usize fits u128")
+                > budget;
+        }
+        true
+    }
+
     /// Multiplies by `10^exponent` exactly.
     #[must_use]
     pub fn mul_pow10(&self, exponent: usize) -> Self {

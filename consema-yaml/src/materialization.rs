@@ -285,7 +285,11 @@ const fn parse_limits(limits: MaterializationLimits) -> ParseLimits {
         max_nesting_depth: limits.max_depth,
         max_token_count: limits.max_output_bytes,
         max_node_count: limits.max_input_nodes.saturating_mul(4),
-        max_number_digits: limits.max_output_bytes,
+        // Wave-5 P2 fix: the reparse budget for one number token is the
+        // parse-side default (100_000 digits), NOT max_output_bytes — the
+        // renderer rejects numbers over the budget (define_value_node), so
+        // the reparse accepts exactly what the renderer can emit.
+        max_number_digits: ParseLimits::DEFAULT_MAX_NUMBER_DIGITS,
         max_diagnostics: limits.max_report_entries,
     }
 }
@@ -1380,16 +1384,32 @@ fn define_value_node(
                 .map_err(graph_build_failure)?;
         }
         PortableValueKind::Integer => {
+            // Wave-5 P2 fix: the render goes through BigInteger Display
+            // (magnitude_to_decimal, O(n²)); a programmatically
+            // constructed huge magnitude must fail atomically here
+            // (linear check) with the same single-number-token digit
+            // budget the parse side enforces.
+            let integer = value.as_integer().expect("kind agrees");
+            if integer.exceeds_decimal_digit_budget(ParseLimits::DEFAULT_MAX_NUMBER_DIGITS) {
+                return Err(MaterializationFailure::ResourceLimit("number-digits"));
+            }
             builder
-                .define_scalar(
-                    id,
-                    TAG_INT,
-                    value.as_integer().expect("kind agrees").to_string(),
-                )
+                .define_scalar(id, TAG_INT, integer.to_string())
                 .map_err(graph_build_failure)?;
         }
         PortableValueKind::Decimal => {
             let decimal = value.as_decimal().expect("kind agrees");
+            // Wave-5 P2 fix: same digit budget on the coefficient and the
+            // exponent (a BigInteger too) before any Display conversion.
+            if decimal
+                .coefficient()
+                .exceeds_decimal_digit_budget(ParseLimits::DEFAULT_MAX_NUMBER_DIGITS)
+                || decimal
+                    .exponent()
+                    .exceeds_decimal_digit_budget(ParseLimits::DEFAULT_MAX_NUMBER_DIGITS)
+            {
+                return Err(MaterializationFailure::ResourceLimit("number-digits"));
+            }
             let canonical = if decimal.exponent().signum() == 0 {
                 decimal.coefficient().to_string()
             } else {
@@ -1865,6 +1885,45 @@ mod tests {
                 panic!("value materialization failed: {failed:?}")
             }
         }
+    }
+
+    #[test]
+    fn oversized_integer_materialization_fails_with_number_digit_budget() {
+        // Wave-5 P2 fix: rendering a number whose decimal digit count
+        // exceeds the single-number-token budget
+        // (ParseLimits::DEFAULT_MAX_NUMBER_DIGITS = 100_000) must fail
+        // atomically with a linear check instead of running the O(n²)
+        // base-10 conversion (BigInteger Display -> magnitude_to_decimal).
+        let magnitude = vec![0xFF_u8; 50_000]; // ≈ 120k decimal digits
+        let integer =
+            consema_core::BigInteger::from_sign_and_magnitude(1, &magnitude)
+                .expect("canonical magnitude");
+        let value = PortableValue::integer(integer);
+        assert!(matches!(
+            materialize_value(&value, &request("yaml.canonical-block")),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::ResourceLimit("number-digits"),
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn oversized_decimal_materialization_fails_with_number_digit_budget() {
+        let huge = consema_core::BigInteger::from_sign_and_magnitude(
+            1,
+            &vec![0xFF_u8; 50_000],
+        )
+        .expect("canonical magnitude");
+        let decimal = consema_core::Decimal::new(huge, consema_core::BigInteger::from(2));
+        let value = PortableValue::decimal(decimal);
+        assert!(matches!(
+            materialize_value(&value, &request("yaml.canonical-block")),
+            MaterializationResult::Failed(FailedMaterializationAttempt {
+                failure: MaterializationFailure::ResourceLimit("number-digits"),
+                ..
+            })
+        ));
     }
 
     // Task #54 regression: JSON→YAML materialization was input-triggered
