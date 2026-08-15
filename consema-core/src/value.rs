@@ -147,11 +147,11 @@ impl BigInteger {
     /// `magnitude_to_decimal` conversion.
     #[must_use]
     pub fn exceeds_decimal_digit_budget(&self, budget: usize) -> bool {
+        const LOG10_256_UPPER_NUM: u128 = 2_408_240;
+        const LOG10_256_UPPER_DEN: u128 = 1_000_000;
         if self.sign == IntegerSign::Zero {
             return 1 > budget;
         }
-        const LOG10_256_UPPER_NUM: u128 = 2_408_240;
-        const LOG10_256_UPPER_DEN: u128 = 1_000_000;
         let bytes = u128::try_from(self.magnitude.len()).expect("usize fits u128");
         let budget = u128::try_from(budget).expect("usize fits u128");
         let accept_bytes = (budget * LOG10_256_UPPER_DEN) / LOG10_256_UPPER_NUM;

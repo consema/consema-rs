@@ -451,12 +451,11 @@ struct MutationCase {
 /// `toml/Cargo.toml` mirror of the workspace root manifest.
 fn verify_fixture_tree_registered() {
     let fixtures_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../conformance/fixtures");
-    if !fixtures_root.is_dir() {
-        panic!(
-            "cannot verify the fixture tree: {} is not a directory",
-            fixtures_root.display()
-        );
-    }
+    assert!(
+        fixtures_root.is_dir(),
+        "cannot verify the fixture tree: {} is not a directory",
+        fixtures_root.display()
+    );
     let registered: std::collections::HashSet<&'static str> =
         FIXTURES.iter().map(|fixture| fixture.path).collect();
     let special_case = "toml/Cargo.toml";
@@ -467,7 +466,7 @@ fn verify_fixture_tree_registered() {
             Ok(entries) => entries.filter_map(Result::ok).collect(),
             Err(error) => panic!("cannot read fixture directory {}: {error}", dir.display()),
         };
-        entries.sort_by_key(|entry| entry.file_name());
+        entries.sort_by_key(std::fs::DirEntry::file_name);
         for entry in entries {
             let path = entry.path();
             if path.is_dir() {
@@ -490,15 +489,14 @@ fn verify_fixture_tree_registered() {
             }
         }
     }
-    if !unregistered.is_empty() {
-        panic!(
-            "unregistered fixture file(s) under conformance/fixtures/ (not in the FIXTURES \
-             table of this generator, so the mutation corpus never mutates them): {} — \
-             register them in consema-conformance/examples/gen_mutation_corpus.rs (or, for \
-             the root-manifest mirror, name them toml/Cargo.toml)",
-            unregistered.join(", ")
-        );
-    }
+    assert!(
+        unregistered.is_empty(),
+        "unregistered fixture file(s) under conformance/fixtures/ (not in the FIXTURES \
+         table of this generator, so the mutation corpus never mutates them): {} — \
+         register them in consema-conformance/examples/gen_mutation_corpus.rs (or, for \
+         the root-manifest mirror, name them toml/Cargo.toml)",
+        unregistered.join(", ")
+    );
 }
 
 fn main() {
