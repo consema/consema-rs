@@ -348,6 +348,17 @@ jobs:
   #   - consema-core::MatchRole gained XmlErrorRegion/HclErrorRegion
   #   - consema-document::NodeRole gained XmlErrorRegion/HclErrorRegion
   #   - consema-json::EditFailure/ProjectionFailure gained RecoveredDocument
+  # The fifth allowlist entry is a struct-field addition, not a variant:
+  #   - consema-document::ParseLimits gained pub max_number_digits
+  #     (constructible_struct_adds_field = "allow"; wave-4 P1
+  #     digit-magnitude-DoS fix a9cfd08, 2026-08-15 — pre-1.0.0 intentional
+  #     API evolution approved under roadmap §12.1/§21.1 version policy;
+  #     #[non_exhaustive] hardening is scheduled at the 1.0.0 API freeze,
+  #     decision record docs/API-REVIEW-0.13.0.md:174). Reproduced locally
+  #     2026-08-15 with the exact action invocation (0.50.0, baseline-root
+  #     fbe98b5c tree, release-type patch): consema-document is the ONLY
+  #     crate this lint fires on — the consema facade's and consema-json's
+  #     ParseLimits re-exports do not trigger it.
   # The gate is green: every crate reports 222-223 checks with 0 failures
   # (the allowlist is read by the action, which runs the CLI in place at the
   # workspace root with --baseline-root; verified by reproducing the exact

@@ -25,4 +25,18 @@ workspace = true
 # allowlist（不存在 semver-checks.toml，仅支持 lint 级覆盖），故本 crate 的
 # enum_variant_added 整体豁免；今后本 crate 新增 variant 同样会被豁免，
 # 须在 API 审查中留意。
+#
+# reason: wave-4 P1 安全修复 a9cfd08（2026-08-15）给 ParseLimits 新增
+# pub max_number_digits（JSON/JSON5 数字 token 位数上限，防
+# digit-magnitude DoS，默认 100_000）。ParseLimits 全 pub 字段、可被外部
+# 穷尽构造，cargo-semver-checks 0.50.0 报 constructible_struct_adds_field
+# （major）。批准理由：1.0.0-rc.1 尚未发布，pre-1.0.0 加字段是有意的
+# API 演进（路线图 §12.1：0.x.0 是架构门，允许破坏性变更并记录；§21.1
+# 版本治理同口径），且 G5.5 API 稳定性审查已确认可接受；post-1.0.0 硬化
+# 项是 `#[non_exhaustive]`（采纳窗口 = 1.0.0 API 冻结，决策记录
+# docs/API-REVIEW-0.13.0.md:174），1.0.0 首发前 ParseLimits 不再加字段。
+# 本地复演 CI 门禁（cargo-semver-checks 0.50.0、baseline fbe98b5c 树、
+# release-type patch、11 包）：仅本 crate 触发该 lint（facade 与
+# consema-json 对 ParseLimits 的 re-export 未触发）。
 enum_variant_added = "allow"
+constructible_struct_adds_field = "allow"
