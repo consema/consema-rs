@@ -150,8 +150,13 @@ jobs:
             # code on a flaky answer).
             resume=0
             decided=0
+            # Wave-5 P1: crates.io rejects requests with a missing or
+            # tool-generated User-Agent with 403 (the API identifies the
+            # caller; observed live 2026-08-15: bare curl → 403, with
+            # `-A consema-release/<version>` → 200/404). The descriptive
+            # UA carries the release version being probed.
             for attempt in 1 2 3 4 5; do
-              code="$(curl -sS -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/consema-core/$manifest" 2>/dev/null || true)"
+              code="$(curl -sS -A "consema-release/$manifest" -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/consema-core/$manifest" 2>/dev/null || true)"
               if [[ "$code" == "200" ]]; then
                 resume=1
                 decided=1
@@ -321,11 +326,13 @@ jobs:
             # hit transient 5xx; only a real 404 decides "not published" —
             # a flaky 429/5xx must not skip an unpublished crate (it would
             # then fail the publish and abort the loop with "already
-            # exists").
+            # exists"). Wave-5 P1: the descriptive User-Agent
+            # (consema-release/<version>) is required — crates.io answers
+            # 403 to a bare curl and the skip-check would never decide.
             published=0
             decided=0
             for attempt in 1 2 3 4 5; do
-              code="$(curl -sS -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/$crate/$version" 2>/dev/null || true)"
+              code="$(curl -sS -A "consema-release/$version" -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/$crate/$version" 2>/dev/null || true)"
               if [[ "$code" == "200" ]]; then
                 published=1
                 decided=1
@@ -396,8 +403,11 @@ jobs:
           missing=0
           for crate in "${crates[@]}"; do
             ok=0
+            # Wave-5 P1: descriptive User-Agent required (crates.io 403s a
+            # bare curl; same UA form as the publish loop and the verify-tag
+            # resume probe).
             for attempt in 1 2 3 4 5; do
-              code="$(curl -sS -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/$crate/$version")"
+              code="$(curl -sS -A "consema-release/$version" -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/$crate/$version")"
               if [[ "$code" == "200" ]]; then
                 echo "published: $crate $version"
                 ok=1
