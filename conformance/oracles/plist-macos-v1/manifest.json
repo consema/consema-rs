@@ -226,7 +226,7 @@
     ],
     "policy": "a differential disagreement cannot be resolved by changing Consema behavior without an RFC, and no untracked allowlist exists (RFC 0013 §13; plan §6.3)"
   },
-  "skip_path": "when the runner is not macOS, the wrapper exits with code 3 and the manifest records the allowed skip (plan R-15, mirroring conformance/oracles/hcl-go-v1/manifest.json); the suite id remains consema.plist.macos-differential@1. The plistlib secondary runner runs wherever the pinned CPython exists; when the pinned CPython exists but the Windows build does not match the pin, run-plistlib-oracle.ps1 prints an explicit skip message and exits with code 3, mirroring scripts/run-hcl-go-oracle.ps1 (2026-08-14 波 3 audit: the previous wording denying this skip path was corrected, aligned with this directory's README)",
+  "skip_path": "when the runner is not macOS, the wrapper exits with code 3 and the manifest records the allowed skip (plan R-15, mirroring conformance/oracles/hcl-go-v1/manifest.json); the suite id remains consema.plist.macos-differential@1. The plistlib runner runs wherever the pinned CPython exists; when the pinned CPython exists but the Windows build does not match the pin, the wrapper prints an explicit skip message and exits with code 3 (2026-08-14 波 3 audit: the previous wording denying this skip path was corrected here, mirroring conformance/oracles/plist-macos-v1/README.md)",
   "cases": [
     {
       "id": "xml-info-plist",

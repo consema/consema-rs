@@ -44,8 +44,16 @@
           - 'deny.toml'
 
 'area: docs':
-  # '**/*.md' already covers every markdown file, so no separate 'docs/**'
-  # branch is needed (the two globs would overlap completely).
+  # Wave-5 P2 fix: '**/*.md' covers every markdown file, and the separate
+  # 'docs/**' branch covers non-markdown files under docs/ (e.g. future
+  # JSON/scripts/images) so the labeler's coverage matches the documented
+  # semantics in .github/LABELS.md ("Documentation: `*.md`, `docs/**`") —
+  # the old comment claimed the two globs "overlap completely", which is
+  # not true for non-md files under docs/ (the rs docs/ dir currently
+  # holds only COVERAGE-0.13.0.md, so the gap was latent).
   - changed-files:
       - any-glob-to-any-file:
           - '**/*.md'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'

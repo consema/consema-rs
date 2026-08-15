@@ -47,12 +47,14 @@ cargo doc --workspace --no-deps --locked   # CI 带 RUSTDOCFLAGS=-D warnings（c
 
 ## CI 门禁
 
-`.github/workflows/ci.yml` 十一个 job：lint（fmt + clippy + rustdoc，三 OS）/
+`.github/workflows/ci.yml` 十二个 job：lint（fmt + clippy + rustdoc，三 OS）/
 test（三 OS）/ coverage（硬下限 + 趋势门禁）/ msrv / conformance / deny /
-audit / semver / package / check-version-consistency / examples，外加
-check 聚合门禁（branch protection 只要求 `check (all gates green)` 这一个
-check，见 ci.yml）。push 到 main 或 PR 均触发；PR 另受 pr-labels.yml 的
-kind 标签门禁约束（标签见规范仓 .github/LABELS.md）。
+audit / semver / package / check-version-consistency / examples /
+release-build（release-profile 编译腿），外加 check 聚合门禁（branch
+protection 只要求 `check (all gates green)` 这一个 check，见 ci.yml）。
+push 到 main 或 PR 均触发；PR 另带 pr-labels.yml 的 kind 标签检查
+（如实注记（波 5 P2）：该检查不是分支保护必选——必选只有 check 聚合；
+PR 无 kind 标签时该检查红但不会阻断合并，标签见规范仓 .github/LABELS.md）。
 
 ## 发布与安全
 

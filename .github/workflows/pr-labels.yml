@@ -1,14 +1,18 @@
-# PR label gate (viper checks.yaml pattern): every pull request must carry
-# at least one `kind:` label (kind: bug / kind: feature / kind: docs / kind:
-# chore / kind: release — the taxonomy is documented in .github/LABELS.md)
-# before it can be merged. The workflow re-evaluates on every label change
-# and on new commits, so adding a label flips the check green without a
-# rebase. Only the automatic GITHUB_TOKEN is used; pull-requests: read is
-# enough to read the PR labels (no comment posting).
+# PR label check (viper checks.yaml pattern): every pull request should
+# carry at least one `kind:` label (kind: bug / kind: feature / kind: docs /
+# kind: chore / kind: release — the taxonomy is documented in
+# .github/LABELS.md). The workflow re-evaluates on every label change and
+# on new commits, so adding a label flips the check green without a rebase.
+# Honest scope (wave-5 P2): this check is NOT among the branch-protection
+# required checks — the only required status is `check (all gates green)`
+# (verified via gh api 2026-08-15; no rulesets). A PR without a kind label
+# shows this check red but can still be merged; the alls-green aggregate
+# gate is the actual merge gate. Only the automatic GITHUB_TOKEN is used;
+# pull-requests: read is enough to read the PR labels (no comment posting).
 # Dependabot PRs are exempt: their kind is chore by construction (the
 # exemption is enforced by the actor check on the job; labeler applies only
-# the three area labels in .github/labeler.yml and no dependency-class
-# labels) and the alls-green aggregate gate still guards merges.
+# the area labels in .github/labeler.yml and no dependency-class labels)
+# and the alls-green aggregate gate still guards merges.
 name: PR Labels
 
 on:

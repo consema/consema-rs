@@ -1,15 +1,17 @@
 /target/
 /semver-checks/
-*.pyc
-__pycache__/
-.venv/
+/*.pyc
+/__pycache__/
+/.venv/
 
 # IDE / OS artifacts
 .idea/
 .vscode/
-*.swp
+/*.swp
 .DS_Store
 Thumbs.db
 
-# scratch outputs from local CLI runs
-cap_out.json
+# scratch outputs from local CLI runs (repo-root only: an unanchored
+# pattern would silently ignore a committable file named cap_out.json
+# anywhere in the tree, e.g. a conformance fixture or test baseline)
+/cap_out.json
