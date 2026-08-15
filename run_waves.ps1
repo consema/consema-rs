@@ -24,6 +24,15 @@
 # PATH or resolve to the wrong toolchain, CONSEMA_CARGO / CONSEMA_GIT_EXE
 # (see below).
 #
+# Encoding note (wave-5 P2 fix): the committed authoritative waves.log
+# starts with a UTF-8 BOM (EF BB BF) — it was created by a PS 5.1
+# `Add-Content -Encoding utf8` before this driver switched to BOM-less
+# appends. The ledger is append-only evidence, so the BOM is not stripped;
+# byte-level consumers that anchor on the line start (grep/awk/python
+# `^[...` patterns) must skip a leading BOM on the first line, or read the
+# file through an encoding-aware reader. Files created from now on are
+# BOM-less (see Add-LedgerLine).
+#
 # Frozen-protocol evidence (wave-4 R34, honest record): the consema
 # repository's docs/fuzz-evidence-0.13.0-logs/run_waves.ps1 is the
 # preserved pre-split driver kept as evidence of the frozen protocol. It
@@ -210,7 +219,7 @@ $opsTargets = @(
     @{ n = 'hcl-ops';            t = 'hcl_operation_fuzz_long_run';           file = 'operation_fuzz.rs';   bc = 'HCL_BASES' }
 )
 $protocolTargets = @(
-    @{ n = 'protocol-decode';    t = 'protocol_decode_fuzz_long_run';         file = 'protocol_fuzz.rs';    bc = 'DECODE_BASES'; seeds = 2 }
+    @{ n = 'protocol-decode';    t = 'protocol_decode_fuzz_long_run';         file = 'protocol_fuzz.rs';    bc = 'DECODE_BASES'; seedFile = 'protocol_fuzz.rs' }
 )
 $targets = $parseTargets + $opsTargets + $protocolTargets
 
@@ -223,10 +232,27 @@ $targets = $parseTargets + $opsTargets + $protocolTargets
 # parse failure throws before any wave runs, so the column can never
 # silently drift from the code.
 $script:iterationsFor = @{}
+function Get-SeedFactor([string]$file) {
+    # Wave-5 P2 fix (G038): the protocol-decode per-base seed count was a
+    # hand-copied literal (`seeds = 2`); it is now derived from the
+    # committed test source like the iteration count itself — the seed
+    # factor is the number of `fuzz::run(` invocations in the target file
+    # (protocol_fuzz.rs `run_target` loops PROTOCOL_SEED and
+    # PROTOCOL_SEED ^ 0xA5 — two calls today). Any change to the seed loop
+    # changes the derived factor with it; the count must equal the per-base
+    # seed loop inside `run_target` (no unrelated `fuzz::run` calls
+    # elsewhere in the file).
+    $src = Get-Content -LiteralPath (Join-Path $testDir $file) -Raw
+    $count = @([regex]::Matches($src, '\bfuzz::run\(')).Count
+    if ($count -lt 1) {
+        throw "cannot derive the seed factor from ${file}: no fuzz::run( calls found"
+    }
+    return $count
+}
 function Update-IterationsFor {
     $script:iterationsFor = @{}
     foreach ($t in $targets) {
-        $seedFactor = if ($t.ContainsKey('seeds')) { $t.seeds } else { 1 }
+        $seedFactor = if ($t.ContainsKey('seedFile')) { Get-SeedFactor $t.seedFile } else { 1 }
         $script:iterationsFor[$t.n] = Get-TargetIterations $t.file $t.bc $seedFactor
     }
 }
@@ -251,22 +277,27 @@ function Get-LatestExe([string]$pattern) {
 }
 
 function Get-CargoExe {
-    # Resolves a working cargo: PATH first, then the $env:CONSEMA_CARGO
-    # override (wave-4 R10 — the mirror of the CONSEMA_GIT_EXE override
-    # below: lets operators point at their own pinned cargo without editing
-    # this script; the machine git was removed 2026-08-11 with the hermes
-    # bundle and cargo can be absent from PATH the same way), then the
-    # rustup default toolchain's bin directories. Re-probes every call so a
-    # cargo appearing or disappearing mid-session is noticed. Returns ''
-    # when no cargo exists anywhere.
+    # Resolves a working cargo: the $env:CONSEMA_CARGO override first, then
+    # PATH, then the rustup default toolchain's bin directories (wave-5 P2
+    # fix: the override now wins over a PATH cargo, matching the resolution
+    # order of scripts/coverage.ps1, scripts/release-sbom.ps1 and
+    # scripts/verify-package-archives.ps1 — the previous PATH-first order
+    # silently ignored the override whenever a PATH cargo existed, exactly
+    # the host form the override exists for; the mirror of the
+    # CONSEMA_GIT_EXE override lets operators point at their own pinned
+    # cargo without editing this script; the machine git was removed
+    # 2026-08-11 with the hermes bundle and cargo can be absent from PATH
+    # the same way). Re-probes every call so a cargo appearing or
+    # disappearing mid-session is noticed. Returns '' when no cargo exists
+    # anywhere.
     if ($script:cargoExe -and -not (Test-Path -LiteralPath $script:cargoExe)) {
         $script:cargoExe = $null  # cached path vanished (e.g. runtime deleted)
     }
     if ($null -eq $script:cargoExe) {
         $rustupBin = if ($env:RUSTUP_HOME) { Join-Path $env:RUSTUP_HOME 'bin' } else { $null }
         $script:cargoExe = @(
-            (Get-Command cargo -ErrorAction SilentlyContinue).Source,
             $env:CONSEMA_CARGO,
+            (Get-Command cargo -ErrorAction SilentlyContinue).Source,
             (Join-Path (Join-Path $env:USERPROFILE '.cargo') 'bin\cargo.exe'),
             $rustupBin
         ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
@@ -351,7 +382,19 @@ $script:ledgerMutex = New-Object System.Threading.Mutex($false, 'consema-run_wav
 function Add-LedgerLine([string]$path, [string]$value) {
     try { [void]$script:ledgerMutex.WaitOne() } catch { }
     try {
-        Add-Content -Path $path -Value $value -Encoding utf8
+        # Wave-5 P2 fix: PS 5.1's `Add-Content -Encoding utf8` writes a
+        # UTF-8 BOM when it CREATES the file, corrupting the first line for
+        # byte-level ^-anchored consumers (the committed authoritative
+        # waves.log starts with EF BB BF, so `grep '^\[2026'` cannot see its
+        # first line). BOM-less UTF-8 append keeps every file this driver
+        # creates or extends first-line-anchored. The already-committed
+        # waves.log keeps its BOM (the ledger is append-only evidence;
+        # readers must strip a leading BOM — see the header note).
+        [System.IO.File]::AppendAllText(
+            $path,
+            ($value -replace "`r", '') + "`n",
+            [System.Text.UTF8Encoding]::new($false)
+        )
     } finally {
         try { [void]$script:ledgerMutex.ReleaseMutex() } catch { }
     }
@@ -390,6 +433,15 @@ for ($try = 0; $try -lt 30; $try++) {
 }
 try {
     $sessionNum = 1
+    # Wave-5 P2 fix: the session number is max(existing)+1 over BOTH the
+    # waves.log session-start lines AND the runs.csv session keys. The
+    # waves.log-only max survives bottom-trimming of the log, but trimming
+    # the TOP (deleting early waves, including the line with the largest
+    # session number) makes max+1 reuse a session key that runs.csv still
+    # holds — exactly the "distinct code states under one session key"
+    # merge the R10 comment warns about (the ledger's two files have
+    # already proven asymmetrical trimming: waves.log keeps sessions 1-6
+    # start lines while runs.csv has no rows before session 7).
     if (Test-Path $wavesLog) {
         $sessionLineRe = '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[^]]*\] session start: session=([0-9]+)'
         $sessionNums = @(
@@ -400,6 +452,20 @@ try {
         )
         if ($sessionNums.Count -gt 0) {
             $sessionNum = (($sessionNums | Measure-Object -Maximum).Maximum) + 1
+        }
+    }
+    if (Test-Path $runsCsv) {
+        $csvSessionNums = @(
+            Import-Csv $runsCsv -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                    if ($_.session -match '^\d+$') { [int]$_.session }
+                }
+        )
+        if ($csvSessionNums.Count -gt 0) {
+            $csvMax = ($csvSessionNums | Measure-Object -Maximum).Maximum
+            if ($csvMax -ge $sessionNum) {
+                $sessionNum = $csvMax + 1
+            }
         }
     }
     if (-not (Test-Path $runsCsv)) {
@@ -423,7 +489,28 @@ try {
             $headVal = '(unresolved)'
         }
     }
-    Write-Log "toolchain: $(rustc --version) | HEAD=$headVal"
+    # Wave-5 P2 fix: the toolchain evidence line must describe the
+    # toolchain that actually builds the fuzz binaries (Get-CargoExe, whose
+    # override is CONSEMA_CARGO-first). rustc resolves as the sibling of
+    # the effective cargo (rustup proxies and toolchain-bin cargos both sit
+    # next to their rustc), falling back to PATH rustc; the old bare
+    # `rustc --version` recorded the PATH toolchain — wrong toolchain when
+    # the override points elsewhere, or an empty string when rustc was not
+    # on PATH at all.
+    $sessionCargoExe = Get-CargoExe
+    $toolchainLine = ''
+    if ($sessionCargoExe) {
+        $rustcExe = Join-Path (Split-Path -Parent $sessionCargoExe) 'rustc.exe'
+        if (-not (Test-Path -LiteralPath $rustcExe)) {
+            $rustcExe = (Get-Command rustc -ErrorAction SilentlyContinue).Source
+        }
+        if ($rustcExe) {
+            $toolchainLine = (& $rustcExe --version 2>$null | Select-Object -First 1)
+            if ($LASTEXITCODE -ne 0) { $toolchainLine = '' }
+        }
+    }
+    if (-not $toolchainLine) { $toolchainLine = '(rustc version unresolved)' }
+    Write-Log "toolchain: $toolchainLine | HEAD=$headVal"
 }
 finally {
     if ($lockStream) { $lockStream.Dispose() }
