@@ -310,7 +310,13 @@ impl Composer<'_> {
                         .decoded_text()
                         .expect("YAML source is always decoded text"),
                 );
-                let (tag, scalar) = resolve_scalar(&decoded, style, tag.as_ref(), self.profile)?;
+                let (tag, scalar) = resolve_scalar(
+                    &decoded,
+                    style,
+                    tag.as_ref(),
+                    self.profile,
+                    self.limits.max_number_digits,
+                )?;
                 let span = self.raw_span(event.span)?;
                 self.nodes[index] = Some(NativeNode {
                     tag: Arc::from(tag),
@@ -567,6 +573,7 @@ fn resolve_scalar(
     style: BackendScalarStyle,
     explicit: Option<&BackendTag>,
     profile: YamlProfile,
+    max_number_digits: usize,
 ) -> Result<(String, NativeScalar), FatalFormationFailure> {
     let public_style = public_style(style);
     if let Some(explicit) = explicit {
@@ -587,6 +594,7 @@ fn resolve_scalar(
                 TAG_NULL,
                 YamlScalarKind::Null,
                 profile,
+                max_number_digits,
             );
         }
         if tag == TAG_BOOL {
@@ -596,6 +604,7 @@ fn resolve_scalar(
                 TAG_BOOL,
                 YamlScalarKind::Boolean,
                 profile,
+                max_number_digits,
             );
         }
         if tag == TAG_INT {
@@ -605,6 +614,7 @@ fn resolve_scalar(
                 TAG_INT,
                 YamlScalarKind::Integer,
                 profile,
+                max_number_digits,
             );
         }
         if tag == TAG_FLOAT {
@@ -614,6 +624,7 @@ fn resolve_scalar(
                 TAG_FLOAT,
                 YamlScalarKind::Float,
                 profile,
+                max_number_digits,
             );
         }
         if tag == TAG_TIMESTAMP {
@@ -649,7 +660,7 @@ fn resolve_scalar(
             scalar(decoded, decoded, YamlScalarKind::String, public_style),
         ));
     }
-    Ok(resolve_implicit(decoded, public_style, profile))
+    resolve_implicit(decoded, public_style, profile, max_number_digits)
 }
 
 fn resolve_explicit(
@@ -658,12 +669,13 @@ fn resolve_explicit(
     tag: &'static str,
     kind: YamlScalarKind,
     profile: YamlProfile,
+    max_number_digits: usize,
 ) -> Result<(String, NativeScalar), FatalFormationFailure> {
     let canonical = match kind {
         YamlScalarKind::Null => parse_null(decoded).map(str::to_owned),
         YamlScalarKind::Boolean => parse_bool(decoded, profile).map(str::to_owned),
-        YamlScalarKind::Integer => parse_integer(decoded, profile),
-        YamlScalarKind::Float => parse_float(decoded, profile),
+        YamlScalarKind::Integer => parse_integer(decoded, profile, max_number_digits)?,
+        YamlScalarKind::Float => parse_float(decoded, profile, max_number_digits)?,
         _ => unreachable!(
             "remaining scalar kinds are handled by the caller before explicit-tag formation"
         ),
@@ -676,43 +688,44 @@ fn resolve_implicit(
     decoded: &str,
     style: YamlScalarStyle,
     profile: YamlProfile,
-) -> (String, NativeScalar) {
+    max_number_digits: usize,
+) -> Result<(String, NativeScalar), FatalFormationFailure> {
     if let Some(value) = parse_null(decoded) {
-        return (
+        return Ok((
             TAG_NULL.to_owned(),
             scalar(decoded, value, YamlScalarKind::Null, style),
-        );
+        ));
     }
     if let Some(value) = parse_bool(decoded, profile) {
-        return (
+        return Ok((
             TAG_BOOL.to_owned(),
             scalar(decoded, value, YamlScalarKind::Boolean, style),
-        );
+        ));
     }
-    if let Some(value) = parse_integer(decoded, profile) {
-        return (
+    if let Some(value) = parse_integer(decoded, profile, max_number_digits)? {
+        return Ok((
             TAG_INT.to_owned(),
             scalar(decoded, &value, YamlScalarKind::Integer, style),
-        );
+        ));
     }
-    if let Some(value) = parse_float(decoded, profile) {
-        return (
+    if let Some(value) = parse_float(decoded, profile, max_number_digits)? {
+        return Ok((
             TAG_FLOAT.to_owned(),
             scalar(decoded, &value, YamlScalarKind::Float, style),
-        );
+        ));
     }
     if profile == YamlProfile::Yaml11CompatV1 {
         if let Some(value) = parse_timestamp(decoded) {
-            return (
+            return Ok((
                 TAG_TIMESTAMP.to_owned(),
                 scalar(decoded, &value, YamlScalarKind::Timestamp, style),
-            );
+            ));
         }
     }
-    (
+    Ok((
         TAG_STR.to_owned(),
         scalar(decoded, decoded, YamlScalarKind::String, style),
-    )
+    ))
 }
 
 fn scalar(
@@ -765,13 +778,22 @@ fn parse_bool(value: &str, profile: YamlProfile) -> Option<&'static str> {
     }
 }
 
-fn parse_integer(value: &str, profile: YamlProfile) -> Option<String> {
-    let (sign, unsigned) = split_sign(value)?;
+fn parse_integer(
+    value: &str,
+    profile: YamlProfile,
+    max_number_digits: usize,
+) -> Result<Option<String>, FatalFormationFailure> {
+    let Some((sign, unsigned)) = split_sign(value) else {
+        return Ok(None);
+    };
     let allow_underscores = profile == YamlProfile::Yaml11CompatV1;
     let cleaned = if allow_underscores {
-        valid_underscored(unsigned)?.replace('_', "")
+        match valid_underscored(unsigned) {
+            Some(cleaned) => cleaned.replace('_', ""),
+            None => return Ok(None),
+        }
     } else if unsigned.contains('_') {
-        return None;
+        return Ok(None);
     } else {
         unsigned.to_owned()
     };
@@ -779,7 +801,7 @@ fn parse_integer(value: &str, profile: YamlProfile) -> Option<String> {
         (2, digits)
     } else if let Some(digits) = cleaned.strip_prefix("0o") {
         if profile == YamlProfile::Yaml11CompatV1 {
-            return None;
+            return Ok(None);
         }
         (8, digits)
     } else if let Some(digits) = cleaned.strip_prefix("0x") {
@@ -790,42 +812,53 @@ fn parse_integer(value: &str, profile: YamlProfile) -> Option<String> {
     {
         (8, cleaned.as_str())
     } else if profile == YamlProfile::Yaml11CompatV1 && cleaned.contains(':') {
-        return parse_sexagesimal_integer(sign, &cleaned);
+        return parse_sexagesimal_integer(sign, &cleaned, max_number_digits);
     } else {
         (10, cleaned.as_str())
     };
-    let magnitude = parse_base_magnitude(digits, base)?;
-    BigInteger::from_sign_and_magnitude(sign, &magnitude)
+    check_number_digits(count_number_digits(digits, base), max_number_digits)?;
+    let Some(magnitude) = parse_base_magnitude(digits, base) else {
+        return Ok(None);
+    };
+    Ok(BigInteger::from_sign_and_magnitude(sign, &magnitude)
         .ok()
-        .map(|value| value.to_string())
+        .map(|value| value.to_string()))
 }
 
-fn parse_float(value: &str, profile: YamlProfile) -> Option<String> {
+fn parse_float(
+    value: &str,
+    profile: YamlProfile,
+    max_number_digits: usize,
+) -> Result<Option<String>, FatalFormationFailure> {
     match value {
         ".inf" | ".Inf" | ".INF" | "+.inf" | "+.Inf" | "+.INF" => {
-            return Some(".inf".to_owned());
+            return Ok(Some(".inf".to_owned()));
         }
-        "-.inf" | "-.Inf" | "-.INF" => return Some("-.inf".to_owned()),
-        ".nan" | ".NaN" | ".NAN" => return Some(".nan".to_owned()),
+        "-.inf" | "-.Inf" | "-.INF" => return Ok(Some("-.inf".to_owned())),
+        ".nan" | ".NaN" | ".NAN" => return Ok(Some(".nan".to_owned())),
         _ => {}
     }
     let cleaned = if profile == YamlProfile::Yaml11CompatV1 {
-        valid_underscored(value)?.replace('_', "")
+        match valid_underscored(value) {
+            Some(cleaned) => cleaned.replace('_', ""),
+            None => return Ok(None),
+        }
     } else if value.contains('_') {
-        return None;
+        return Ok(None);
     } else {
         value.to_owned()
     };
     if profile == YamlProfile::Yaml11CompatV1 && cleaned.contains(':') {
-        return parse_sexagesimal_float(&cleaned);
+        return parse_sexagesimal_float(&cleaned, max_number_digits);
     }
     if !cleaned.contains(['.', 'e', 'E']) {
-        return None;
+        return Ok(None);
     }
     let normalized = normalize_decimal_lexeme(&cleaned);
-    Decimal::parse_json_number(&normalized)
+    check_number_digits(count_number_digits(&normalized, 10), max_number_digits)?;
+    Ok(Decimal::parse_json_number(&normalized)
         .ok()
-        .map(|value| decimal_canonical(&value))
+        .map(|value| decimal_canonical(&value)))
 }
 
 fn normalize_decimal_lexeme(value: &str) -> String {
@@ -845,70 +878,142 @@ fn normalize_decimal_lexeme(value: &str) -> String {
     value
 }
 
-fn parse_sexagesimal_integer(sign: i8, value: &str) -> Option<String> {
+fn parse_sexagesimal_integer(
+    sign: i8,
+    value: &str,
+    max_number_digits: usize,
+) -> Result<Option<String>, FatalFormationFailure> {
     let mut parts = value.split(':');
-    let first = parts.next()?;
+    let Some(first) = parts.next() else {
+        return Ok(None);
+    };
     if first.is_empty() || !first.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
+        return Ok(None);
     }
-    let mut magnitude = parse_base_magnitude(first, 10)?;
+    check_number_digits(count_number_digits(value, 10), max_number_digits)?;
+    let Some(mut magnitude) = parse_base_magnitude(first, 10) else {
+        return Ok(None);
+    };
     let mut count = 0usize;
     for part in parts {
-        let component = part.parse::<u8>().ok()?;
+        let Some(component) = part.parse::<u8>().ok() else {
+            return Ok(None);
+        };
         if component > 59 || part.is_empty() || part.len() > 2 {
-            return None;
+            return Ok(None);
         }
         multiply_add(&mut magnitude, 60, component);
         count += 1;
     }
     if count == 0 {
-        return None;
+        return Ok(None);
     }
-    BigInteger::from_sign_and_magnitude(sign, &magnitude)
+    Ok(BigInteger::from_sign_and_magnitude(sign, &magnitude)
         .ok()
-        .map(|value| value.to_string())
+        .map(|value| value.to_string()))
 }
 
-fn parse_sexagesimal_float(value: &str) -> Option<String> {
-    let (sign, unsigned) = split_sign(value)?;
+fn parse_sexagesimal_float(
+    value: &str,
+    max_number_digits: usize,
+) -> Result<Option<String>, FatalFormationFailure> {
+    let Some((sign, unsigned)) = split_sign(value) else {
+        return Ok(None);
+    };
     let mut parts = unsigned.split(':').collect::<Vec<_>>();
-    let last = parts.pop()?;
-    let (whole, fraction) = last.split_once('.')?;
+    let Some(last) = parts.pop() else {
+        return Ok(None);
+    };
+    let Some((whole, fraction)) = last.split_once('.') else {
+        return Ok(None);
+    };
     if fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
+        return Ok(None);
     }
+    check_number_digits(count_number_digits(unsigned, 10), max_number_digits)?;
     let mut magnitude = Vec::new();
     for (index, part) in parts.iter().enumerate() {
-        let component = part.parse::<u64>().ok()?;
+        let Some(component) = part.parse::<u64>().ok() else {
+            return Ok(None);
+        };
         if index > 0 && component > 59 {
-            return None;
+            return Ok(None);
         }
         if index == 0 {
-            magnitude = parse_base_magnitude(part, 10)?;
+            let Some(base) = parse_base_magnitude(part, 10) else {
+                return Ok(None);
+            };
+            magnitude = base;
         } else {
-            multiply_add(&mut magnitude, 60, u8::try_from(component).ok()?);
+            let Some(component) = u8::try_from(component).ok() else {
+                return Ok(None);
+            };
+            multiply_add(&mut magnitude, 60, component);
         }
     }
     if parts.is_empty() {
-        return None;
+        return Ok(None);
     }
-    let whole = whole.parse::<u8>().ok()?;
+    let Some(whole) = whole.parse::<u8>().ok() else {
+        return Ok(None);
+    };
     if whole > 59 {
-        return None;
+        return Ok(None);
     }
     multiply_add(&mut magnitude, 60, whole);
-    let whole = BigInteger::from_sign_and_magnitude(1, &magnitude)
-        .ok()?
-        .to_string();
-    let coefficient = BigInteger::parse_decimal(&format!(
+    let Some(whole) = BigInteger::from_sign_and_magnitude(1, &magnitude).ok() else {
+        return Ok(None);
+    };
+    let whole = whole.to_string();
+    let Some(coefficient) = BigInteger::parse_decimal(&format!(
         "{}{whole}{fraction}",
         if sign < 0 { "-" } else { "" }
     ))
-    .ok()?;
-    Some(decimal_canonical(&Decimal::new(
+    .ok() else {
+        return Ok(None);
+    };
+    Ok(Some(decimal_canonical(&Decimal::new(
         coefficient,
         BigInteger::from(-(fraction.len() as i64)),
-    )))
+    ))))
+}
+
+/// One number lexeme's base-valid digit characters (hex counts hex digit
+/// characters; binary/octal count only their own digit ranges). The JSON
+/// `number_token_digits` budget counts the same semantics, and
+/// `ParseLimits::max_number_digits` bounds the arbitrary-precision
+/// conversion of one number with it.
+pub(crate) fn count_number_digits(value: &str, base: u8) -> usize {
+    match base {
+        16 => value.bytes().filter(u8::is_ascii_hexdigit).count(),
+        8 => value
+            .bytes()
+            .filter(|byte| (b'0'..=b'7').contains(byte))
+            .count(),
+        2 => value
+            .bytes()
+            .filter(|byte| matches!(byte, b'0' | b'1'))
+            .count(),
+        // Decimal is the fallback for any other base.
+        _ => value.bytes().filter(u8::is_ascii_digit).count(),
+    }
+}
+
+/// Bounds one number's digit budget before any arbitrary-precision
+/// conversion; over the budget the frozen resource-limit failure forms
+/// (`core.parse.resource-limit@1`, name `number-digits`).
+fn check_number_digits(
+    observed: usize,
+    max_number_digits: usize,
+) -> Result<(), FatalFormationFailure> {
+    if observed > max_number_digits {
+        return Err(FatalFormationFailure::resource_limit(
+            "number-digits",
+            observed,
+            max_number_digits,
+        ));
+    }
+    Ok(())
 }
 
 fn decimal_canonical(value: &Decimal) -> String {
@@ -1167,30 +1272,113 @@ mod tests {
 
     #[test]
     fn scalar_profiles_are_intentionally_different() {
+        let max = ParseLimits::default().max_number_digits;
         assert_eq!(
-            resolve_implicit("yes", YamlScalarStyle::Plain, YamlProfile::Yaml12CoreV1).0,
+            resolve_implicit(
+                "yes",
+                YamlScalarStyle::Plain,
+                YamlProfile::Yaml12CoreV1,
+                max
+            )
+            .unwrap()
+            .0,
             TAG_STR
         );
         assert_eq!(
-            resolve_implicit("yes", YamlScalarStyle::Plain, YamlProfile::Yaml11CompatV1)
-                .1
-                .canonical
-                .as_ref(),
+            resolve_implicit(
+                "yes",
+                YamlScalarStyle::Plain,
+                YamlProfile::Yaml11CompatV1,
+                max
+            )
+            .unwrap()
+            .1
+            .canonical
+            .as_ref(),
             "true"
         );
         assert_eq!(
-            parse_integer("0o17", YamlProfile::Yaml12CoreV1).as_deref(),
+            parse_integer("0o17", YamlProfile::Yaml12CoreV1, max)
+                .unwrap()
+                .as_deref(),
             Some("15")
         );
         assert_eq!(
-            parse_integer("017", YamlProfile::Yaml11CompatV1).as_deref(),
+            parse_integer("017", YamlProfile::Yaml11CompatV1, max)
+                .unwrap()
+                .as_deref(),
             Some("15")
         );
         assert_eq!(
-            parse_integer("1:02:03", YamlProfile::Yaml11CompatV1).as_deref(),
+            parse_integer("1:02:03", YamlProfile::Yaml11CompatV1, max)
+                .unwrap()
+                .as_deref(),
             Some("3723")
         );
-        assert_eq!(parse_float("-.nan", YamlProfile::Yaml12CoreV1), None);
+        assert_eq!(
+            parse_float("-.nan", YamlProfile::Yaml12CoreV1, max).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn over_budget_numbers_fail_before_arbitrary_precision_conversion() {
+        let default = ParseLimits::default().max_number_digits;
+        let over = default + 1;
+        let cases: [(&str, &str, YamlProfile); 5] = [
+            // Decimal integer: 100_001 digit characters.
+            (
+                &"9".repeat(over),
+                "decimal-integer",
+                YamlProfile::Yaml12CoreV1,
+            ),
+            // Float: mantissa and exponent digits share one budget (`1e`
+            // plus 100_000 zeros is 100_001 digit characters).
+            (
+                &format!("1e{}", "9".repeat(default)),
+                "decimal-float",
+                YamlProfile::Yaml12CoreV1,
+            ),
+            // Hex: hex letter characters count as digits.
+            (
+                &format!("0x{}", "f".repeat(over)),
+                "hex-integer",
+                YamlProfile::Yaml12CoreV1,
+            ),
+            // Sexagesimal integer: every component's digit characters count.
+            (
+                &format!("{}:59", "9".repeat(over)),
+                "sexagesimal-integer",
+                YamlProfile::Yaml11CompatV1,
+            ),
+            // Sexagesimal float: fraction digit characters count too.
+            (
+                &format!("{}:59.9", "9".repeat(over)),
+                "sexagesimal-float",
+                YamlProfile::Yaml11CompatV1,
+            ),
+        ];
+        for (value, name, profile) in cases {
+            let failure = match name {
+                "decimal-float" | "sexagesimal-float" => {
+                    parse_float(value, profile, default).unwrap_err()
+                }
+                _ => parse_integer(value, profile, default).unwrap_err(),
+            };
+            let diagnostic = &failure.diagnostics()[0];
+            assert_eq!(diagnostic.code, "core.parse.resource-limit@1", "{name}");
+            assert_eq!(diagnostic.arguments["name"], "number-digits", "{name}");
+            assert_eq!(
+                diagnostic.arguments["observed"],
+                if name == "sexagesimal-integer" || name == "sexagesimal-float" {
+                    (over + 2 + usize::from(name == "sexagesimal-float")).to_string()
+                } else {
+                    over.to_string()
+                },
+                "{name}"
+            );
+            assert_eq!(diagnostic.arguments["limit"], default.to_string(), "{name}");
+        }
     }
 
     #[test]

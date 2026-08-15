@@ -10,7 +10,7 @@ use consema_graph::{GraphBuildError, GraphLimits, GraphNodeId, PortableGraph};
 
 use crate::native::{
     NativeContent, NativeScalar, TAG_BINARY, TAG_BOOL, TAG_FLOAT, TAG_INT, TAG_MAP, TAG_NULL,
-    TAG_SEQ, TAG_STR, TAG_TIMESTAMP,
+    TAG_SEQ, TAG_STR, TAG_TIMESTAMP, count_number_digits,
 };
 use crate::{Document, GraphProjectionError, YamlScalarKind};
 
@@ -569,6 +569,11 @@ impl Document {
         let mut context = ValueContext {
             document: self,
             request,
+            // The parse-time digit budget carries into projection: the
+            // canonical decimal of a bounded input can still exceed the
+            // budget (hex/sexagesimal expand roughly 1.2-1.8x in decimal),
+            // so the same check runs before the projection conversions.
+            max_number_digits: self.parse_limits.max_number_digits,
             seen: HashSet::new(),
             stack: HashSet::new(),
             visits: 0,
@@ -756,6 +761,7 @@ impl GraphProvenanceBuilder<'_> {
 struct ValueContext<'a> {
     document: &'a Document,
     request: ValueProjectionRequest,
+    max_number_digits: usize,
     seen: HashSet<usize>,
     stack: HashSet<usize>,
     visits: usize,
@@ -988,9 +994,14 @@ impl ValueContext<'_> {
                 "false" => Ok(PortableValue::boolean(false)),
                 _ => Err(invalid()),
             },
-            YamlScalarKind::Integer => BigInteger::parse_decimal(&scalar.canonical)
-                .map(PortableValue::integer)
-                .map_err(|_| invalid()),
+            YamlScalarKind::Integer => {
+                if count_number_digits(&scalar.canonical, 10) > self.max_number_digits {
+                    return Err(ValueProjectionFailure::ResourceLimit("number-digits"));
+                }
+                BigInteger::parse_decimal(&scalar.canonical)
+                    .map(PortableValue::integer)
+                    .map_err(|_| invalid())
+            }
             YamlScalarKind::Float => match scalar.canonical.as_ref() {
                 ".inf" => Ok(PortableValue::binary_float64(BinaryFloat64::from_bits(
                     0x7ff0_0000_0000_0000,
@@ -1001,9 +1012,14 @@ impl ValueContext<'_> {
                 ".nan" => Ok(PortableValue::binary_float64(BinaryFloat64::from_bits(
                     0x7ff8_0000_0000_0000,
                 ))),
-                value => Decimal::parse_json_number(value)
-                    .map(PortableValue::decimal)
-                    .map_err(|_| invalid()),
+                value => {
+                    if count_number_digits(value, 10) > self.max_number_digits {
+                        return Err(ValueProjectionFailure::ResourceLimit("number-digits"));
+                    }
+                    Decimal::parse_json_number(value)
+                        .map(PortableValue::decimal)
+                        .map_err(|_| invalid())
+                }
             },
             YamlScalarKind::String => Ok(PortableValue::string(scalar.canonical.clone())),
             YamlScalarKind::Binary => decode_base64(&scalar.canonical)

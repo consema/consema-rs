@@ -860,6 +860,7 @@ fn backend_failure(error: BackendError, source: &SourceSnapshot) -> FatalFormati
 #[cfg(test)]
 mod tests {
     use super::*;
+    use consema_core::{BigInteger, Decimal};
 
     #[test]
     fn exact_multidocument_stream_is_profile_bound() {
@@ -965,6 +966,152 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(limited.diagnostics()[0].code, "core.parse.resource-limit@1");
+    }
+
+    #[test]
+    fn yaml_default_number_digit_budget_is_100_000() {
+        assert_eq!(ParseLimits::default().max_number_digits, 100_000);
+    }
+
+    #[test]
+    fn yaml_over_budget_number_digits_are_a_fatal_resource_limit() {
+        let default = ParseLimits::default().max_number_digits;
+        // Decimal integer: 100_001 digit characters, rejected before any
+        // arbitrary-precision conversion (linear scan only).
+        let integer = format!("a: {}\n", "9".repeat(default + 1));
+        let failure = parse(
+            integer.as_bytes(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .expect_err("over-budget integer must fail formation");
+        let diagnostic = &failure.diagnostics()[0];
+        assert_eq!(diagnostic.code, "core.parse.resource-limit@1");
+        assert_eq!(diagnostic.arguments["name"], "number-digits");
+        assert_eq!(diagnostic.arguments["observed"], "100001");
+        assert_eq!(diagnostic.arguments["limit"], "100000");
+
+        // Float: mantissa and exponent digits share one budget (`1e` plus
+        // 100_000 zeros is 100_001 digit characters).
+        let float = format!("a: 1e{}\n", "9".repeat(default));
+        let failure = parse(
+            float.as_bytes(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .expect_err("over-budget float must fail formation");
+        let diagnostic = &failure.diagnostics()[0];
+        assert_eq!(diagnostic.code, "core.parse.resource-limit@1");
+        assert_eq!(diagnostic.arguments["observed"], "100001");
+
+        // Hex: hex letter characters count as digits.
+        let hex = format!("a: 0x{}\n", "f".repeat(default + 1));
+        let failure = parse(
+            hex.as_bytes(),
+            YamlProfile::Yaml12CoreV1,
+            ParseLimits::default(),
+        )
+        .expect_err("over-budget hex literal must fail formation");
+        assert_eq!(failure.diagnostics()[0].arguments["observed"], "100001");
+
+        // Sexagesimal (YAML 1.1): every component's digit characters count.
+        let sexagesimal = format!("a: {}:59\n", "9".repeat(default + 1));
+        let failure = parse(
+            sexagesimal.as_bytes(),
+            YamlProfile::Yaml11CompatV1,
+            ParseLimits::default(),
+        )
+        .expect_err("over-budget sexagesimal literal must fail formation");
+        assert_eq!(failure.diagnostics()[0].arguments["observed"], "100003");
+    }
+
+    #[test]
+    fn yaml_exact_budget_number_parses_and_one_digit_more_is_fatal() {
+        let limits = ParseLimits {
+            max_number_digits: 5,
+            ..ParseLimits::default()
+        };
+        // Exactly at the budget parses with the exact value.
+        let document = parse(b"12345\n".as_slice(), YamlProfile::Yaml12CoreV1, limits)
+            .expect("exact-budget integer must parse");
+        let ValueProjectionResult::Complete(projection) =
+            document.project_value(ValueProjectionRequest::best_exact_v1())
+        else {
+            panic!("exact-budget projection must complete");
+        };
+        assert_eq!(
+            projection.value.as_integer(),
+            Some(&BigInteger::from(12_345_i64))
+        );
+        // One digit more is a fatal resource limit.
+        let failure = parse(b"123456\n".as_slice(), YamlProfile::Yaml12CoreV1, limits)
+            .expect_err("one digit over budget must fail");
+        let diagnostic = &failure.diagnostics()[0];
+        assert_eq!(diagnostic.code, "core.parse.resource-limit@1");
+        assert_eq!(diagnostic.arguments["observed"], "6");
+        assert_eq!(diagnostic.arguments["limit"], "5");
+
+        // Mantissa and exponent digits share one budget (`1e9999` is
+        // exactly 5 digit characters; `1e99999` is one over).
+        let document = parse(b"1e9999\n".as_slice(), YamlProfile::Yaml12CoreV1, limits)
+            .expect("exact-budget float must parse");
+        let ValueProjectionResult::Complete(projection) =
+            document.project_value(ValueProjectionRequest::best_exact_v1())
+        else {
+            panic!("exact-budget float projection must complete");
+        };
+        assert_eq!(
+            projection.value.as_decimal(),
+            Some(&Decimal::new(
+                BigInteger::from(1_i64),
+                BigInteger::from(9_999_i64),
+            ))
+        );
+        assert!(parse(b"1e99999\n".as_slice(), YamlProfile::Yaml12CoreV1, limits).is_err());
+    }
+
+    #[test]
+    fn yaml_projection_rechecks_the_canonical_decimal_digit_budget() {
+        // The parse-time budget counts input digit characters; the
+        // canonical decimal of a bounded hex literal can still exceed the
+        // budget (each hex digit expands ~1.2x in decimal), so projection
+        // re-checks the canonical before its own BigInteger conversion.
+        let limits = ParseLimits {
+            max_number_digits: 10,
+            ..ParseLimits::default()
+        };
+        let document = parse(
+            b"0xffffffffff\n".as_slice(),
+            YamlProfile::Yaml12CoreV1,
+            limits,
+        )
+        .expect("ten hex digits are exactly at the parse budget");
+        let ValueProjectionResult::Failed(failure) =
+            document.project_value(ValueProjectionRequest::best_exact_v1())
+        else {
+            panic!("over-budget canonical must fail projection");
+        };
+        assert_eq!(
+            value_projection_failure_code(&failure),
+            "yaml.projection.resource-limit@1"
+        );
+        assert!(matches!(
+            failure,
+            ValueProjectionFailure::ResourceLimit("number-digits")
+        ));
+
+        // A canonical within the budget projects normally.
+        let within = parse(b"0xfffff\n".as_slice(), YamlProfile::Yaml12CoreV1, limits)
+            .expect("five hex digits must parse");
+        let ValueProjectionResult::Complete(projection) =
+            within.project_value(ValueProjectionRequest::best_exact_v1())
+        else {
+            panic!("within-budget canonical must project");
+        };
+        assert_eq!(
+            projection.value.as_integer(),
+            Some(&BigInteger::from(1_048_575_i64))
+        );
     }
 
     #[test]

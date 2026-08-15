@@ -95,6 +95,13 @@ fn yaml_parse_limits_reject_before_publishing_a_document() {
                 ..ParseLimits::default()
             },
         ),
+        (
+            b"123456\n".as_slice(),
+            ParseLimits {
+                max_number_digits: 5,
+                ..ParseLimits::default()
+            },
+        ),
     ];
     for (source, limits) in cases {
         let error = parse(source, YamlProfile::Yaml12CoreV1, limits)
