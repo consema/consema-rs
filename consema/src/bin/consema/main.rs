@@ -80,11 +80,15 @@ static APPLY_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Installs the real OS signal handler (SIGINT/SIGTERM on Unix, Ctrl+C on
 /// Windows) through the `ctrlc` crate — the RFC 0015 §5.4 graceful-shutdown
 /// contract, now honored with real signals instead of the std-only claim
-/// (audit P1). The `ctrlc` handler runs on a dedicated thread, so the stderr
-/// write and `process::exit` in the handler are safe. A failed installation
-/// (e.g. the embedding process already set a handler) leaves the default OS
-/// action; the documented `CONSEMA_APPLY_INTERRUPT_AFTER` injection seam
-/// stays as the deterministic fallback for tests and embedded callers.
+/// (audit P1). The `ctrlc` handler runs on a dedicated thread; its stderr
+/// write stays deadlock-free because [`main`] never holds the stderr lock
+/// across the run (every stderr write locks per call), so the handler's
+/// single diagnostic line can always acquire the mutex, and
+/// `process::exit` then terminates the process without needing any lock.
+/// A failed installation (e.g. the embedding process already set a handler)
+/// leaves the default OS action; the documented
+/// `CONSEMA_APPLY_INTERRUPT_AFTER` injection seam stays as the
+/// deterministic fallback for tests and embedded callers.
 fn install_signal_handler() {
     let _ = ctrlc::set_handler(|| {
         INTERRUPT_REQUESTED.store(true, Ordering::SeqCst);
@@ -94,13 +98,21 @@ fn install_signal_handler() {
             // owns the graceful shutdown; every other command exits 4
             // immediately. Cross-repo reference by symbol, not by line
             // number — line numbers drift (wave-4 R10).
-            let _ = writeln!(
-                std::io::stderr(),
-                "consema: error: interrupted by SIGINT/SIGTERM (code {INTERRUPTED_CODE})"
-            );
+            let _ = write_interrupt_diagnostic(&mut std::io::stderr());
             std::process::exit(i32::from(classify_error_code(INTERRUPTED_CODE).exit_code()));
         }
     });
+}
+
+/// The one deterministic stderr diagnostic line of the non-apply interrupt
+/// path (RFC 0015 §5.4: interruption never produces an envelope, only this
+/// stderr line and exit 4). Written by the handler thread; unit-tested
+/// byte for byte.
+fn write_interrupt_diagnostic(stderr: &mut dyn Write) -> std::io::Result<()> {
+    writeln!(
+        stderr,
+        "consema: error: interrupted by SIGINT/SIGTERM (code {INTERRUPTED_CODE})"
+    )
 }
 
 /// Whether a signal was requested at the interruption code point (RFC 0015
@@ -136,7 +148,14 @@ impl Drop for ApplyActiveGuard {
 fn main() {
     install_signal_handler();
     let mut stdout = std::io::stdout().lock();
-    let mut stderr = std::io::stderr().lock();
+    // The stderr handle is deliberately NOT locked across the run: the
+    // ctrlc handler thread writes its interrupt diagnostic to stderr and
+    // must be able to acquire the (per-write) stderr mutex at any moment —
+    // holding the lock until `process::exit` below would deadlock the
+    // handler on a signal (wave-5 P1). `Stderr` locks per write call
+    // instead, which is sufficient: the handler's single line can always
+    // get the mutex, waiting at most for one in-flight write.
+    let mut stderr = std::io::stderr();
     let exit_code = match collect_args(std::env::args_os().skip(1)) {
         Ok(args) => run_with_io(&args, &mut stdout, &mut stderr),
         Err(error) => {
@@ -431,5 +450,21 @@ mod tests {
         write_usage_error(&error, &mut stderr).expect("Vec writer");
         assert_eq!(usage_exit_code(&error), 1);
         assert!(stderr_text(&stderr).contains("not valid UTF-8"));
+    }
+
+    #[test]
+    fn interrupt_diagnostic_line_is_the_frozen_rfc_0015_54_bytes() {
+        // The exact byte string the signal handler writes on the non-apply
+        // path (wave-5 P1): the handler's stderr write must stay
+        // lock-compatible with main()'s per-write stderr locking, and the
+        // line itself is part of the RFC 0015 §5.4 contract — pinned here
+        // so the process-level signal test and this unit test agree.
+        let mut bytes = Vec::new();
+        write_interrupt_diagnostic(&mut bytes).expect("Vec writer");
+        assert_eq!(
+            bytes,
+            format!("consema: error: interrupted by SIGINT/SIGTERM (code {INTERRUPTED_CODE})\n")
+                .as_bytes()
+        );
     }
 }

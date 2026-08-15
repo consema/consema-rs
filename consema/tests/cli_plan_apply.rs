@@ -813,6 +813,93 @@ fn apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes() {
 }
 
 #[test]
+#[cfg(unix)]
+fn non_apply_real_sigint_writes_the_handler_diagnostic_and_exits_four() {
+    // Wave-5 P1: the handler's direct diagnostic path — the branch taken
+    // while no apply state machine runs — writes one
+    // `cli.interrupted.signal@1` stderr line and exits 4 from the ctrlc
+    // handler thread. That write must never block on the stderr mutex:
+    // main() must not hold the stderr lock across the run. `consema query
+    // --profile ini.portable` with an open piped stdin blocks in
+    // read_request_bytes after install_signal_handler ran (the first
+    // statement of main()), giving a deterministic mid-command window with
+    // APPLY_ACTIVE == false and zero stdout bytes. Windows is out for the
+    // same reason as the apply real-signal test above (no std-only Ctrl+C
+    // delivery to a child process); the Windows build is verified by
+    // compilation and the portable unit test of main.rs that pins the
+    // diagnostic bytes.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_consema"))
+        .args(["query", "--profile", "ini.portable"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn query on open stdin");
+    // The child is blocked on the stdin read only after the handler is
+    // installed; a settle window removes the spawn-to-install race, and a
+    // pre-signal liveness check turns an unexpected early exit into a clear
+    // panic instead of a misleading wait.
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    if child.try_wait().expect("wait").is_some() {
+        let _ = child.kill();
+        panic!("query exited before SIGINT (no stdin block?)");
+    }
+    let pid = child.id();
+    let signaled = Command::new("sh")
+        .args(["-c", &format!("kill -INT {pid}")])
+        .output()
+        .expect("run kill -INT");
+    assert!(
+        signaled.status.success(),
+        "kill -INT failed: {}",
+        String::from_utf8_lossy(&signaled.stderr)
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let exit_status = loop {
+        if let Some(exit_status) = child.try_wait().expect("wait") {
+            break exit_status;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            panic!(
+                "query did not exit after SIGINT: the handler's stderr write is stuck on a held lock"
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    assert_eq!(
+        exit_status.code(),
+        Some(4),
+        "SIGINT on a non-apply command must exit 4 (cli.interrupted.signal@1), \
+         not the default signal action"
+    );
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout")
+        .read_to_string(&mut stdout)
+        .expect("read stdout");
+    child
+        .stderr
+        .take()
+        .expect("stderr")
+        .read_to_string(&mut stderr)
+        .expect("read stderr");
+    assert!(
+        stdout.is_empty(),
+        "interruption writes no stdout bytes: {stdout}"
+    );
+    assert!(
+        stderr.contains(
+            "consema: error: interrupted by SIGINT/SIGTERM (code cli.interrupted.signal@1)"
+        ),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn apply_rerun_skips_completed_files_and_redoes_pending() {
     // The skip is proven by the write-failure injection: the re-run's first
     // atomic write is file 1's — if file 0 were rewritten, the injection
