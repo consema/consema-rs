@@ -29,10 +29,12 @@
 #      at HEAD and a regression beyond the frozen gate fails. A failed gate
 #      still writes the report (evidence for the disposition) and exits 1.
 #
-# Exit codes: 0 = success (report written, gates green); 1 = coverage gate
-# failure (hard floor or -Trend regression); 2 = precondition failure (missing
-# tool, no Cargo.lock, not a git work tree); 3 = cargo/llvm-cov execution
-# failure.
+# Exit codes: 0 = success (report written, gates green); 1 = gate failure
+# (hard floor, -Trend regression, or a measurement run that failed —
+# test/tool failure — but still produced the summary; the report then
+# records the failing evidence with the honest classification); 2 =
+# precondition failure (missing tool, no Cargo.lock, not a git work tree);
+# 3 = cargo/llvm-cov execution failure.
 #
 # The report file is generated in full by this script (policy text included),
 # so the committed doc and the script can never drift apart — with one
@@ -178,9 +180,27 @@ if ($LASTEXITCODE -ne 0 -or -not $commitLong) {
 $commit = $commitLong.Substring(0, [math]::Min(7, $commitLong.Length))
 $dirtyEntries = @(& git -C $workspaceRoot status --porcelain)
 $dirtyCount = @($dirtyEntries).Count
-$rustcVersion = (& rustc --version).Trim()
+# Wave-5 P2 fix: the toolchain evidence lines must describe the toolchain
+# that actually ran the measurement. With $env:CONSEMA_CARGO set, the
+# measurement cargo is the override; rustc resolves as the sibling of that
+# cargo (rustup proxies and toolchain-bin cargos both sit next to their
+# rustc), falling back to PATH rustc; llvm-cov runs through $cargo too
+# (the old bare `cargo llvm-cov --version` could report a different
+# toolchain than the one measuring, or an empty string when cargo was not
+# on PATH).
+$rustcExe = if ($env:CONSEMA_CARGO) {
+    $siblingRustc = Join-Path (Split-Path -Parent $env:CONSEMA_CARGO) 'rustc.exe'
+    if (Test-Path -LiteralPath $siblingRustc) {
+        $siblingRustc
+    } else {
+        (Get-Command rustc -ErrorAction SilentlyContinue).Source
+    }
+} else {
+    (Get-Command rustc -ErrorAction SilentlyContinue).Source
+}
+$rustcVersion = if ($rustcExe) { (& $rustcExe --version).Trim() } else { '(rustc not found)' }
 $cargoVersion = (& $cargo --version).Trim()
-$llvmCovVersion = (& cargo llvm-cov --version).Trim()
+$llvmCovVersion = (& $cargo llvm-cov --version).Trim()
 $hostName = $env:COMPUTERNAME
 # $IsWindows is a PowerShell Core 6+ automatic variable; the script header
 # promises Windows PowerShell 5.1 (`powershell -File scripts/coverage.ps1`),
@@ -234,12 +254,14 @@ if ($measureExit -ne 0) {
     if (-not (Test-Path -LiteralPath $summaryJsonPath -PathType Leaf)) {
         throw "cargo llvm-cov failed (exit $measureExit) and produced no summary at $summaryJsonPath; the coverage run could not complete"
     }
-    $gateMessages += (
-        "hard floor: at least one workspace total fell below the frozen floors " +
-        "(regions $hardFloorRegions% / functions $hardFloorFunctions% / " +
-        "lines $hardFloorLines%, §18.3 policy); the report records the failing numbers"
-    )
-    Write-Output "note: cargo llvm-cov exited $measureExit -- hard floor gate failed, but the summary was produced; the report below records the failing numbers as evidence."
+    # Wave-5 P2 fix: a non-zero exit with a produced summary is NOT
+    # necessarily a hard-floor failure — cargo llvm-cov runs the whole
+    # instrumented test suite, so a test failure (exit 101) or a tool
+    # crash after the summary was written lands here too. The gate
+    # classification (hard floor vs. test/tool failure) is decided after
+    # the totals are aggregated below, where the floor comparison is
+    # possible; this note only records the raw fact.
+    Write-Output "note: cargo llvm-cov exited $measureExit -- the summary was produced, so the report below records the measured numbers as evidence; the gate classification follows the floor comparison (see the report's GATE banner)."
 }
 if (-not (Test-Path -LiteralPath $summaryJsonPath -PathType Leaf)) {
     throw "llvm-cov summary not produced at $summaryJsonPath"
@@ -323,6 +345,36 @@ foreach ($metric in @('regions', 'functions', 'lines')) {
     $toolCovered = [long]$jsonTotals.PSObject.Properties[$metric].Value.PSObject.Properties['covered'].Value
     if ($toolCount -ne $totals[$metric].Total -or $toolCovered -ne $totals[$metric].Covered) {
         throw "aggregation mismatch for '$metric': script sees $($totals[$metric].Covered)/$($totals[$metric].Total), llvm-cov totals row says $toolCovered/$toolCount"
+    }
+}
+
+# Wave-5 P2 fix: classify a non-zero measurement exit honestly. A floor
+# violation is decided by comparing the aggregated totals against the
+# frozen floors; a non-zero exit without a floor violation is a test or
+# tool failure (cargo llvm-cov exit 101 = test failure), which the report
+# must not mislabel as "at least one workspace total fell below the
+# frozen floors" — the old message was self-contradictory evidence when
+# the percentages stayed above the floors.
+$floorFalls = $false
+if ($measureExit -ne 0) {
+    $floorFalls = (
+        (Get-Percent $totals['regions'].Covered $totals['regions'].Total) -lt $hardFloorRegions -or
+        (Get-Percent $totals['functions'].Covered $totals['functions'].Total) -lt $hardFloorFunctions -or
+        (Get-Percent $totals['lines'].Covered $totals['lines'].Total) -lt $hardFloorLines
+    )
+    if ($floorFalls) {
+        $gateMessages += (
+            "hard floor: at least one workspace total fell below the frozen floors " +
+            "(regions $hardFloorRegions% / functions $hardFloorFunctions% / " +
+            "lines $hardFloorLines%, §18.3 policy); the report records the failing numbers"
+        )
+    } else {
+        $gateMessages += (
+            "coverage run failed (cargo llvm-cov exit $measureExit) without any workspace " +
+            "total below the frozen floors -- a test failure or tool failure, not a " +
+            "hard-floor violation; the report records the measured numbers as evidence " +
+            "(see the run output above for the actual failure)"
+        )
     }
 }
 
@@ -435,7 +487,9 @@ foreach ($row in $crateRows) {
 }
 
 $gateMarkers = @()
-if ($measureExit -ne 0) { $gateMarkers += 'coverage.gate=hard-floor-failed' }
+if ($measureExit -ne 0) {
+    $gateMarkers += if ($floorFalls) { 'coverage.gate=hard-floor-failed' } else { 'coverage.gate=run-failed' }
+}
 if ($gateMessages.Count -gt 0 -and $measureExit -eq 0) {
     $gateMarkers += 'coverage.gate=trend-failed'
 }
@@ -479,7 +533,11 @@ if ($otherFiles.Count -gt 0) {
 }
 
 if ($measureExit -ne 0) {
-    $gateBanner = '> GATE FAILED: hard floor -- at least one workspace total fell below the frozen floors (see policy item 2). The numbers below are the failing evidence; the next green run replaces this report.'
+    if ($floorFalls) {
+        $gateBanner = '> GATE FAILED: hard floor -- at least one workspace total fell below the frozen floors (see policy item 2). The numbers below are the failing evidence; the next green run replaces this report.'
+    } else {
+        $gateBanner = '> GATE FAILED: the coverage run failed (cargo llvm-cov non-zero exit) without a hard-floor violation -- test or tool failure (see the run output above). The numbers below are the failing evidence; the next green run replaces this report.'
+    }
 } else {
     $gateBanner = ''
 }
@@ -517,7 +575,7 @@ $(if ($dirtyCount -gt 0) { "- 工作树状态：测量时工作树有 $dirtyCoun
 - 测量命令（与脚本执行等价的重现命令）：
 
 ``````text
-cargo llvm-cov --workspace --all-targets --locked --no-clean --json --summary-only --output-path target/coverage/summary.json --fail-under-regions $hardFloorRegions --fail-under-functions $hardFloorFunctions --fail-under-lines $hardFloorLines
+$cargo llvm-cov --workspace --all-targets --locked --no-clean --json --summary-only --output-path target/coverage/summary.json --fail-under-regions $hardFloorRegions --fail-under-functions $hardFloorFunctions --fail-under-lines $hardFloorLines
 ``````
 
 重跑：``powershell -File scripts/coverage.ps1``；发布里程碑用
@@ -566,8 +624,11 @@ $($otherNote -join "`n")## 方法与范围
    跟踪；改动断言站点时必须同步更新本清单、本报告头部注记与
    ``scripts/coverage.ps1`` 内的模板文本）。完整清单（2026-08-15 复核）：
    - ``consema-yaml/src/materialization.rs`` 的 B-7/B-8 回归测试两处
-     （``elapsed < 8.0s``，debug 构建，2026-08-13 实测两条链路余量均在
-     20x 以上）；
+     （``elapsed < 8.0s``；按两处测试注释的修复后实测：B-7 约 0.2 s
+     release / 0.9 s debug——release 余量约 40x、debug 余量约 8-9x，
+     B-8 约 0.23 s release——余量约 20x+（注释自述 debug 亦约 20x）；
+     数字以测试注释为权威源，2026-08-13 实测。波 5 P2 校正：此前
+     「两条链路余量均在 20x 以上」对 B-7 的 debug 余量不成立）；
    - ``consema-xml/src/parser.rs``
      ``many_small_elements_formation_scales_linearly`` 一处
      （``elapsed.as_secs() < 20``，10k 元素 formation 线性回归守卫，
@@ -578,10 +639,11 @@ $($otherNote -join "`n")## 方法与范围
      2026-08-14 实测整测试 1.09s，余量约 4-5x）；
    - ``consema/tests/cli_plan_apply.rs`` 的
      ``apply_real_sigint_exits_four_preserves_pending_and_rerun_resumes``
-     一处（``Instant::now() + Duration::from_secs(30)`` 的 30 秒 deadline，
-     两个轮询循环超时时 panic——pending manifest 未出现、或 SIGINT 后
-     apply 未退出；Linux/macOS CI 信号路径的确定性守卫，2026-08-15
-     波 4 补记）。
+     一处（两个独立 30 秒 deadline，每个轮询循环各一个，超时时 panic——
+     pending manifest 未出现、或 SIGINT 后 apply 未退出；Linux/macOS CI
+     信号路径的确定性守卫，2026-08-15 波 4 补记；波 5 P2 修正：此前两
+     循环共享同一 deadline，慢机/负载抖动下 pending-manifest 等待可耗尽
+     整个预算，使 SIGINT 等待只剩亚秒级而误红）。
    **风险**：墙钟断言环境耦合（慢机/负载抖动可能误红）。**缓解**：断言值
    针对修复前 O(n²) 实现的耗时（~30-60 s debug / ~6.7 s release）设上限，
    固定实现余量极宽（xml/source 两处亦为线性回归守卫，上限针对修复前

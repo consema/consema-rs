@@ -8,8 +8,8 @@
 #       exists is never re-signed (tags are content-addressed; a re-sign
 #       would mint a new tag object and orphan the old one).
 #       （如实注记（2026-08-14 波 3，裁决 R2）：示例随当前发布线为
-#       v1.0.0-rc.1（release-process-0.13.0.md §4.2 与检查单第 6 项
-#       同口径）。-SignTag 校验正则自波 3 起放宽为
+#       v1.0.0-rc.1（consema 仓库（母仓）的 docs/release-process-0.13.0.md
+#       §4.2 与检查单第 6 项同口径）。-SignTag 校验正则自波 3 起放宽为
 #       `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`（G105 行锚定
 #       保留）：支持 SemVer 预发布后缀（v1.0.0-rc.1 通过），行锚定
 #       仍拒绝非法后缀（v0.13.0evil 仍 exit 2）。2026-08-14 本地
@@ -20,11 +20,13 @@
 #       Write the checksum manifest and sign it. The manifest reuses the
 #       sha256 output format of scripts/verify-package-archives.ps1
 #       ("<64 lowercase hex>  <name>.crate"), computed over the same
-#       publishable-crate set (workspace members with publish == null —
-#       cargo metadata semantics: the publish field defaults to null for
-#       publishable crates, [] means never publishable; wave-4 R10
-#       corrected the header, the implementation below always used the
-#       `-eq $null` predicate — sorted by name), so the artifact the
+#       publishable-crate set (wave-5 P2 fix: the predicate is now
+#       identical to verify-package-archives.ps1's — `publish` is null
+#       for publishable-everywhere crates, an empty list for never
+#       publishable, and a non-empty list for registry-pinned publishable
+#       crates, so publishable = `null -or non-empty list`; the old
+#       `-eq $null` predicate misclassified `publish = ["registry"]`
+#       crates as repository-only — sorted by name), so the artifact the
 #       release record ships and the checksums the package gate printed
 #       are byte-identical. The manifest file is then signed twice, both
 #       standard forms:
@@ -519,11 +521,18 @@ if ($mode -eq 'verify') {
 # (the verify mode above ran without it; see Get-RequiredSigningKey).
 $signingKey = Get-RequiredSigningKey
 
-$metadataJson = Invoke-NativeCapture 'cargo' @('metadata', '--locked', '--offline', '--no-deps', '--format-version', '1')
+# Wave-5 P2 fix: the metadata call honors the $env:CONSEMA_CARGO override
+# (the convention of verify-package-archives.ps1 / release-sbom.ps1 /
+# coverage.ps1 for hosts where cargo is not on PATH) and is anchored to
+# the -RepoRoot workspace with --manifest-path, so a run from a different
+# cwd cannot resolve the wrong workspace's version / publishable set.
+$cargo = if ($env:CONSEMA_CARGO) { $env:CONSEMA_CARGO } else { 'cargo' }
+$metadataJson = Invoke-NativeCapture $cargo @('metadata', '--locked', '--offline', '--no-deps', '--format-version', '1', '--manifest-path', (Join-Path $RepoRoot 'Cargo.toml'))
 if ($LASTEXITCODE -ne 0) {
     Write-Output 'error: cargo metadata failed; -SignArtifacts resolves the'
     Write-Output '  publishable crate set and workspace version from it.'
-    Write-Output '  (Run inside the workspace; cargo must be on PATH.)'
+    Write-Output '  (cargo is resolved via $env:CONSEMA_CARGO or PATH; run inside the'
+    Write-Output '   workspace or pass -RepoRoot.)'
     exit 3
 }
 $metadata = ($metadataJson -join "`n") | ConvertFrom-Json
@@ -533,7 +542,10 @@ foreach ($id in $metadata.workspace_members) {
 }
 $publishablePackages = @(
     $metadata.packages |
-        Where-Object { $workspaceMembers.ContainsKey($_.id) -and $null -eq $_.publish } |
+        Where-Object {
+            $workspaceMembers.ContainsKey($_.id) -and
+            ($null -eq $_.publish -or $_.publish.Count -gt 0)
+        } |
         Sort-Object name
 )
 if ($publishablePackages.Count -eq 0) {

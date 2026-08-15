@@ -1,5 +1,6 @@
 # Consema 0.13.0 gate M7: SBOM generation (gate plan §4 M7, roadmap §19.4
-# "SBOM"; selection record in docs/release-process-0.13.0.md "SBOM 选型").
+# "SBOM"; selection record in the consema repository's
+# docs/release-process-0.13.0.md "SBOM 选型").
 #
 # Tool selection (recorded, with the rejected alternative):
 #   chosen:       cargo-sbom 0.10.0  (crates.io, MIT, psastras/sbom-rs)
@@ -123,7 +124,8 @@ if ($LASTEXITCODE -ne 0) {
     Write-Output "    cargo install cargo-sbom --version $pinnedSbomVersion --locked"
     Write-Output '  The pin keeps the SBOM reproducible: the document content is'
     Write-Output '  a function of Cargo.lock and the tool version (selection'
-    Write-Output '  rationale: docs/release-process-0.13.0.md, SBOM selection).'
+    Write-Output '  rationale: the consema repository docs/release-process-0.13.0.md,'
+    Write-Output '  SBOM selection).'
     exit 2
 }
 $sbomVersion = ($sbomVersionOutput | Select-Object -First 1).Trim()
@@ -163,7 +165,13 @@ if ($LASTEXITCODE -ne 0 -or $commitLines.Count -eq 0) {
 $commitLong = $commitLines[0].Trim()
 $runDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
 
-$metadataJson = Invoke-NativeCapture $cargo @('metadata', '--locked', '--offline', '--no-deps', '--format-version', '1')
+# Wave-5 P2 fix: the version-resolving metadata call is anchored to the
+# workspace under -RepoRoot exactly like the git and cargo-sbom calls below
+# (-C / --project-directory). Without --manifest-path the call resolved the
+# caller's cwd workspace, so a run from the main checkout with -RepoRoot
+# pointing at a scratch worktree (a documented drill shape) derived the
+# version from the wrong workspace.
+$metadataJson = Invoke-NativeCapture $cargo @('metadata', '--locked', '--offline', '--no-deps', '--format-version', '1', '--manifest-path', (Join-Path $RepoRoot 'Cargo.toml'))
 if ($LASTEXITCODE -ne 0) {
     Write-Output 'error: cargo metadata failed; the output file name derives'
     Write-Output '  from the workspace version.'

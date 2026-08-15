@@ -254,7 +254,7 @@ try {
         foreach ($entry in $entries) {
             if (
                 -not $entry.StartsWith($rootPrefix, [StringComparison]::Ordinal) -or
-                $entry.Split('/') -contains '..'
+                ($entry -split '[\\/]') -contains '..'
             ) {
                 throw "unsafe or unexpected archive entry '$entry' in $($artifact.Archive)"
             }
@@ -335,11 +335,49 @@ try {
         if (-not $exactMsrvToolchain) {
             throw "MSRV toolchain '$msrvToolchain' is not installed (no rustup toolchain matching the declared rust-version; 'rustup toolchain list' must show an installed $msrvToolchain.x). The 0.13.0 package gate requires the MSRV build; install it with 'rustup toolchain install $msrvToolchain', or pass -SkipMsrv to skip the MSRV leg for local runs."
         }
+        # Wave-5 P2 fix: `cargo +<toolchain>` is rustup-proxy syntax — a
+        # direct cargo binary (the $env:CONSEMA_CARGO host form this script
+        # documents for machines without cargo on PATH) treats `+1.85.0` as
+        # an unexpected positional argument and fails even when the exact
+        # MSRV toolchain is installed. Probe the effective cargo once
+        # (offline: the exact toolchain is already installed, so rustup
+        # syncs nothing; the probe follows the Get-DirtyEntries EAP pattern
+        # so a stderr line cannot become a terminating NativeCommandError
+        # on Windows PowerShell 5.1). When the effective cargo is not a
+        # rustup proxy, run the MSRV leg through `rustup run <toolchain>
+        # cargo`, which resolves the same installed toolchain the
+        # Get-InstalledMsrvToolchain probe listed.
+        $previousPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $isRustupProxyCargo = $false
+        try {
+            & $cargo "+$exactMsrvToolchain" --version 2>$null | Out-Null
+            $isRustupProxyCargo = ($LASTEXITCODE -eq 0)
+        } finally {
+            $ErrorActionPreference = $previousPreference
+        }
+        $rustupCommand = Get-Command rustup -ErrorAction SilentlyContinue
+        if (-not $isRustupProxyCargo -and $null -eq $rustupCommand) {
+            throw "the resolved cargo ($cargo) is not a rustup proxy and rustup is not on PATH; the MSRV leg needs rustup (the '+<toolchain>' syntax only works with the rustup cargo proxy). Install rustup, or pass -SkipMsrv to skip the MSRV leg for local runs."
+        }
         foreach ($artifact in $artifacts) {
             $manifestPath = Join-Path $temporaryRoot "$($artifact.Root)\Cargo.toml"
-            $msrvArguments = @("+$exactMsrvToolchain") +
-                (Get-CrateVerifyArguments 'build' $manifestPath $artifact)
-            Invoke-Cargo $msrvArguments
+            if ($isRustupProxyCargo) {
+                $msrvArguments = @("+$exactMsrvToolchain") +
+                    (Get-CrateVerifyArguments 'build' $manifestPath $artifact)
+                Invoke-Cargo $msrvArguments
+            } else {
+                # The effective cargo is a direct binary: run the MSRV
+                # build through `rustup run <toolchain> cargo ...` (the
+                # toolchain's own cargo), which honors the same
+                # --manifest-path/--offline/--config arguments.
+                $msrvArguments = @('run', $exactMsrvToolchain, 'cargo') +
+                    (Get-CrateVerifyArguments 'build' $manifestPath $artifact)
+                & $rustupCommand.Source @msrvArguments
+                if ($LASTEXITCODE -ne 0) {
+                    throw "rustup run $exactMsrvToolchain cargo failed with exit code $LASTEXITCODE ($($msrvArguments -join ' '))"
+                }
+            }
         }
         Write-Output "MSRV build leg: rustc $exactMsrvToolchain for all $($artifacts.Count) crates"
     }
