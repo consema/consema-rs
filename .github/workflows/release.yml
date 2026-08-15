@@ -32,9 +32,14 @@
 # workflow falls back to the CARGO_REGISTRY_TOKEN repository secret
 # (set it in Settings → Secrets and variables → Actions; see RELEASING.md).
 # Either path ends in plain `cargo publish --locked -p <crate>`; the
-# publish order is the topological dependency order
-# (core → document → graph → pvce → json → toml → yaml → ini → properties
-# → xml → plist → hcl → protocol → consema). Publishing is idempotent and
+# publish order is the dependency-topological order computed at runtime
+# from the cargo metadata dependency graph (scripts/publish-order.jq,
+# Kahn's algorithm with an alphabetical tie-break; the current 14-crate
+# result is core → document → graph → hcl → ini → json → plist →
+# properties → pvce → protocol → toml → xml → yaml → consema), so every
+# crate publishes after its intra-workspace dependencies and a future
+# 15th publishable crate is inserted automatically. Publishing is
+# idempotent and
 # resumable (G042): a crate whose {crate}@{version} already exists on
 # crates.io is skipped, so re-pushing a tag after a partial failure resumes
 # the remaining crates instead of failing on "already exists"; a final
@@ -282,13 +287,29 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.verify-tag.outputs.version }}"
-          # Wave-4 R10: the publishable crate set is derived from cargo
-          # metadata (publish == null members, sorted by name — the same
-          # predicate release-sign.ps1 and verify-package-archives.ps1 use),
-          # not a hand-maintained list: a future 15th publishable crate
-          # must be published automatically instead of passing every gate
-          # and silently missing the loop.
-          mapfile -t crates < <(cargo metadata --no-deps --format-version 1 --locked | jq -r '.packages[] | select(.publish == null) | .name' | sort)
+          # Wave-4 R10 + wave-5 P0: the publishable crate set is derived
+          # from cargo metadata (publish == null members — the same
+          # predicate release-sign.ps1 and verify-package-archives.ps1 use,
+          # where order is irrelevant because they never publish), not a
+          # hand-maintained list: a future 15th publishable crate must be
+          # published automatically instead of passing every gate and
+          # silently missing the loop. The ORDER comes from
+          # scripts/publish-order.jq: a dependency-topological order over
+          # the intra-workspace edges (alphabetical tie-break among ready
+          # crates), so every crate publishes after its workspace
+          # dependencies — an alphabetical sort would put the consema
+          # facade (it depends on all 13 sibling crates) first and fail
+          # its very first publish. jq aborts (zero output, non-zero exit)
+          # on a dependency cycle or an edge to a crate outside the
+          # publishable set, and the command substitutions below propagate
+          # that failure to this step (set -e) — the loop must never guess
+          # an order.
+          metadata="$(cargo metadata --no-deps --format-version 1 --locked)"
+          order="$(jq -r -f scripts/publish-order.jq <<<"$metadata")"
+          mapfile -t crates <<<"$order"
+          if [[ "${#crates[@]}" -eq 1 && -z "${crates[0]}" ]]; then
+            crates=()
+          fi
           echo "publishable crates (from cargo metadata, ${#crates[@]}): ${crates[*]}"
           if [[ "${#crates[@]}" -lt 1 ]]; then
             echo "::error::cargo metadata reports no publishable crates"
@@ -362,9 +383,15 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.verify-tag.outputs.version }}"
-          # Same cargo-metadata derivation as the publish step (wave-4 R10):
-          # the verification must cover the same set the loop publishes.
-          mapfile -t crates < <(cargo metadata --no-deps --format-version 1 --locked | jq -r '.packages[] | select(.publish == null) | .name' | sort)
+          # Same cargo-metadata derivation as the publish step (wave-4 R10
+          # + wave-5 P0): the verification must cover the same set — and the
+          # same dependency-topological order — the loop publishes.
+          metadata="$(cargo metadata --no-deps --format-version 1 --locked)"
+          order="$(jq -r -f scripts/publish-order.jq <<<"$metadata")"
+          mapfile -t crates <<<"$order"
+          if [[ "${#crates[@]}" -eq 1 && -z "${crates[0]}" ]]; then
+            crates=()
+          fi
           echo "verifying ${#crates[@]} publishable crates: ${crates[*]}"
           missing=0
           for crate in "${crates[@]}"; do

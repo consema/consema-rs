@@ -12,8 +12,13 @@ consema 仓库 `docs/release-process-0.13.0.md`）。发布是**半自动**的�
   `consema-protocol` `consema`（`consema-conformance` 为 `publish = false`，
   只进仓库不打进发布归档，与 verify-package-archives.ps1 及 release.yml 的
   package 门禁（`--exclude consema-conformance`）语义一致）。
-- 发布顺序即依赖拓扑序（core → document → graph → pvce → json → toml →
-  yaml → ini → properties → xml → plist → hcl → protocol → consema），
+- 发布顺序即依赖拓扑序，由 workflow 运行时用 `scripts/publish-order.jq`
+  从 `cargo metadata` 的依赖图计算（Kahn 算法，就绪 crate 间按字母序决胜，
+  确定性可复现）：每个 crate 的仓内依赖必先于它发布，facade `consema`
+  依赖全部 13 个兄弟 crate，故恒为最后、`consema-core` 恒为第一（唯一
+  无仓内依赖的 crate；verify-tag 的 resume 探测依赖这一点）。当前 14 个
+  crate 的计算结果依次为 core → document → graph → hcl → ini → json →
+  plist → properties → pvce → protocol → toml → xml → yaml → consema。
   workflow 中任一 crate 失败即中止，人工处置后重推 tag（或手动补发剩余 crate）。
 
 ## 1. 发布步骤（人执行的部分）
